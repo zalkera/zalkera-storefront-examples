@@ -1,6 +1,6 @@
 import {NextResponse} from "next/server";
 import {zalkera} from "@/lib/zalkera";
-import {errorResponse, invalidBody, readJsonBody} from "@/lib/http";
+import {assertJsonContentType, assertSameOrigin, errorResponse, invalidBody, readJsonBody} from "@/lib/http";
 import {isPreview} from "@/lib/preview";
 
 /**
@@ -12,6 +12,10 @@ import {isPreview} from "@/lib/preview";
  * `x-forwarded-for` 에서 뽑아 넘긴다 — IP 민감 호출(inquiry·lead·조회수)은 전부 이 관용구를 복제하라.
  */
 export async function POST(req: Request) {
+    const blocked = assertSameOrigin(req);
+    if (blocked) return blocked;
+    const badType = assertJsonContentType(req);
+    if (badType) return badType;
     if (isPreview()) {
         return NextResponse.json({message: "프리뷰 모드에서는 문의가 비활성화됩니다."}, {status: 403});
     }

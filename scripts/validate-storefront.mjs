@@ -997,6 +997,71 @@ function checkStyleWiring() {
     }
 }
 
+// ── X1: 교차사이트 위조 가드 (memo118) ─────────────────────────────
+//
+// 변이 메서드(POST·PUT·PATCH·DELETE)를 export 하는 API 라우트는 **같은 파일 안에서**
+// `assertSameOrigin` 을 불러야 한다. 경로 목록이 아니라 **메서드**로 판정하는 이유는,
+// 사람이 관리하는 위험 라우트 목록이 반드시 드리프트하기 때문이다 — 새 라우트가 자동 합류한다.
+//
+// 면제는 파일 상단 마커 한 줄로만 가능하고, **면제 목록을 항상 출력**한다(조용히 늘지 않게).
+//     // zalkera-allow-cross-origin: 이유
+//
+// ⚠ 이 규칙은 "가드를 불렀는가"만 본다. 가드가 **올바른가**는 `src/lib/crossOrigin.ts` 의
+// 단위 테스트가 지킨다 — 특히 `Sec-Fetch-Site` 를 `!== "cross-site"` 로 쓰면 플랫폼 존에서
+// 형제 테넌트가 통과한다.
+function checkCrossOriginGuards() {
+    const routes = [];
+    const collect = (dir) => {
+        let entries;
+        try {
+            entries = readdirSync(dir, {withFileTypes: true});
+        } catch {
+            return;
+        }
+        for (const e of entries) {
+            const full = join(dir, e.name);
+            if (e.isDirectory()) collect(full);
+            else if (e.name === "route.ts" || e.name === "route.tsx") routes.push(full);
+        }
+    };
+    collect(join(root, "src", "app", "api"));
+    collect(join(root, "app", "api"));
+
+    const exempted = [];
+    for (const file of routes) {
+        const code = readFileSync(file, "utf8");
+        if (!/export\s+(async\s+)?function\s+(POST|PUT|PATCH|DELETE)\s*\(/.test(code)) continue;
+        const rel = relative(root, file);
+        const marker = code.match(/\/\/\s*zalkera-allow-cross-origin:\s*(.+)/);
+        if (marker) {
+            exempted.push(`${rel} — ${marker[1].trim()}`);
+            continue;
+        }
+        if (!/assertSameOrigin\s*\(/.test(code)) {
+            errors.push(
+                `[X1] ${rel} 가 변이 메서드를 export 하는데 assertSameOrigin 호출이 없습니다 — ` +
+                    `교차사이트 위조가 열립니다(memo118). 정당한 예외면 파일 상단에 ` +
+                    `\`// zalkera-allow-cross-origin: 이유\` 를 다세요.`,
+            );
+        }
+    }
+    if (exempted.length) {
+        console.log(`교차사이트 가드 면제 ${exempted.length}건:`);
+        for (const e of exempted) console.log(`  · ${e}`);
+    }
+
+    // X2 — 읽기 GET 면제는 "CORS 헤더가 없다"에 의존한다. 그 전제가 깨지면 면제도 깨진다.
+    for (const file of routes) {
+        const code = readFileSync(file, "utf8");
+        if (/Access-Control-Allow-Origin/i.test(code)) {
+            errors.push(
+                `[X2] ${relative(root, file)} 가 CORS 헤더를 답니다 — 읽기 GET 을 가드에서 빼는 근거가` +
+                    ` "교차 오리진 JS 가 응답을 못 읽는다"인데, 그 전제가 무너집니다(memo118 §7-2).`,
+            );
+        }
+    }
+}
+
 try {
     statSync(root);
 } catch {
@@ -1011,6 +1076,7 @@ checkThemeWiring(); // S8 — L1 배선(declared 전용).
 checkSectionCoverage();
 checkContentContract(); // N1~N5 — 콘텐츠 파일 계약(선언 조건화).
 checkDocCoordinates(); // D1·D2 — 문서 좌표가 실물을 가리키는가.
+checkCrossOriginGuards(); // X1·X2 — 교차사이트 위조 가드(memo118).
 
 if (!singletonFound) warnings.push(`[W1] createZalkeraClient 싱글턴을 찾지 못했습니다 — 서버 사이드 호출 패턴이 있는지 확인하세요.`);
 

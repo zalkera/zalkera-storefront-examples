@@ -1,6 +1,6 @@
 import {NextResponse} from "next/server";
 import {zalkera} from "@/lib/zalkera";
-import {errorResponse} from "@/lib/http";
+import {assertSameOrigin, errorResponse} from "@/lib/http";
 import {isPreview} from "@/lib/preview";
 
 /**
@@ -11,6 +11,8 @@ import {isPreview} from "@/lib/preview";
  * 모든 조회가 1건으로 접힌다). 프리뷰에서는 세지 않는다(초안 열람이 조회로 잡히면 안 됨).
  */
 export async function POST(req: Request, {params}: {params: Promise<{slug: string}>}) {
+    const blocked = assertSameOrigin(req);
+    if (blocked) return blocked;
     if (isPreview()) {
         return NextResponse.json({counted: false}, {status: 403});
     }

@@ -1,6 +1,6 @@
 import {NextResponse} from "next/server";
 import {zalkera} from "@/lib/zalkera";
-import {errorResponse, invalidBody, readJsonBody} from "@/lib/http";
+import {assertJsonContentType, assertSameOrigin, errorResponse, invalidBody, readJsonBody} from "@/lib/http";
 import {isPreview} from "@/lib/preview";
 
 /**
@@ -14,6 +14,10 @@ import {isPreview} from "@/lib/preview";
  * 성공은 201 을 관통시킨다(inquiry 는 200 으로 뭉갠다) — 리드 생성은 새 리소스라 201 이 맞다.
  */
 export async function POST(req: Request) {
+    const blocked = assertSameOrigin(req);
+    if (blocked) return blocked;
+    const badType = assertJsonContentType(req);
+    if (badType) return badType;
     if (isPreview()) {
         return NextResponse.json({message: "프리뷰 모드에서는 리드 접수가 비활성화됩니다."}, {status: 403});
     }

@@ -1,6 +1,6 @@
 import {NextResponse} from "next/server";
 import {zalkera} from "@/lib/zalkera";
-import {errorResponse, invalidBody, readJsonBody} from "@/lib/http";
+import {assertJsonContentType, assertSameOrigin, errorResponse, invalidBody, readJsonBody} from "@/lib/http";
 import {getAccessToken} from "@/lib/session";
 import {isPreview} from "@/lib/preview";
 import {setAuthHint} from "@/lib/authHint";
@@ -15,6 +15,10 @@ import {setAuthHint} from "@/lib/authHint";
  * 무료 예약은 orderNo=null 이고 이미 `CONFIRMED` 라 결제 단계가 없다.
  */
 export async function POST(req: Request) {
+    const blocked = assertSameOrigin(req);
+    if (blocked) return blocked;
+    const badType = assertJsonContentType(req);
+    if (badType) return badType;
     // 프리뷰 모드(memo29 §3)는 읽기전용 — 실제 예약·결제 생성을 차단한다.
     if (isPreview()) {
         return NextResponse.json({message: "프리뷰 모드에서는 예약이 비활성화됩니다."}, {status: 403});

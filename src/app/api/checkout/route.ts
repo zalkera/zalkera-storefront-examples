@@ -1,6 +1,6 @@
 import {NextResponse} from "next/server";
 import {zalkera} from "@/lib/zalkera";
-import {errorResponse, invalidBody, readJsonBody} from "@/lib/http";
+import {assertJsonContentType, assertSameOrigin, errorResponse, invalidBody, readJsonBody} from "@/lib/http";
 import {getShopSession, rotateCartSessionKey} from "@/lib/session";
 import {isPreview} from "@/lib/preview";
 import {setAuthHint} from "@/lib/authHint";
@@ -12,6 +12,10 @@ import {setAuthHint} from "@/lib/authHint";
  * 리다이렉트형이라 `paymentUrl` 로 보내면 끝이다. 어느 쪽이든 **결제 확정은 백엔드**가 한다.
  */
 export async function POST(req: Request) {
+    const blocked = assertSameOrigin(req);
+    if (blocked) return blocked;
+    const badType = assertJsonContentType(req);
+    if (badType) return badType;
     // 프리뷰 모드(memo29 §3)는 읽기전용 — 실제 주문·결제 생성을 차단한다.
     if (isPreview()) {
         return NextResponse.json({message: "프리뷰 모드에서는 주문·결제가 비활성화됩니다."}, {status: 403});

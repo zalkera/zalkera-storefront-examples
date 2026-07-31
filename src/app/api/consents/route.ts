@@ -1,6 +1,6 @@
 import {NextResponse} from "next/server";
 import {zalkera} from "@/lib/zalkera";
-import {errorResponse} from "@/lib/http";
+import {assertSameOrigin, errorResponse} from "@/lib/http";
 import {getAccessToken} from "@/lib/session";
 
 /**
@@ -19,6 +19,8 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+    const blocked = assertSameOrigin(req);
+    if (blocked) return blocked;
     const accessToken = await getAccessToken();
     if (!accessToken) return NextResponse.json({message: "로그인이 필요합니다."}, {status: 401});
     const {consents} = await req.json();

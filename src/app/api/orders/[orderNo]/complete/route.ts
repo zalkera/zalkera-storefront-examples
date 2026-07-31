@@ -1,6 +1,6 @@
 import {NextResponse} from "next/server";
 import {zalkera} from "@/lib/zalkera";
-import {errorResponse, readJsonBody} from "@/lib/http";
+import {assertJsonContentType, assertSameOrigin, errorResponse, readJsonBody} from "@/lib/http";
 import {getAccessToken} from "@/lib/session";
 import {isPreview} from "@/lib/preview";
 import {setAuthHint} from "@/lib/authHint";
@@ -13,6 +13,10 @@ import {setAuthHint} from "@/lib/authHint";
  * readJsonBody 가 null 이어도 400 을 내지 않는다(phone 없으면 undefined → 토큰 경로).
  */
 export async function POST(req: Request, {params}: {params: Promise<{orderNo: string}>}) {
+    const blocked = assertSameOrigin(req);
+    if (blocked) return blocked;
+    const badType = assertJsonContentType(req);
+    if (badType) return badType;
     if (isPreview()) {
         return NextResponse.json({message: "프리뷰 모드에서는 구매 확정이 비활성화됩니다."}, {status: 403});
     }

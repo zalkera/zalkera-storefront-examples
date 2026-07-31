@@ -35,7 +35,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Install
@@ -46,6 +46,12 @@ jobs:
 
       - name: Typecheck (tsc --noEmit)
         run: npm run typecheck
+
+      - name: Test (교차사이트 가드 회귀 픽스처)
+        # memo118 §8 — 판정 규칙은 한 줄만 흔들려도 조용히 열린다. Node 기본 러너 + 타입 스트리핑이라
+        # devDependency 추가가 0이다(node 22 필요). 검사기 X1 은 "가드를 불렀는가"만 보므로
+        # **가드가 옳은가**는 이 스텝에서만 잠긴다.
+        run: npm test
 
       - name: Build (next build)
         run: npm run build

@@ -1,6 +1,6 @@
 import {NextResponse} from "next/server";
 import {zalkera} from "@/lib/zalkera";
-import {errorResponse} from "@/lib/http";
+import {assertSameOrigin, errorResponse} from "@/lib/http";
 import {setCustomerTokens} from "@/lib/session";
 import {setAuthHint} from "@/lib/authHint";
 
@@ -9,6 +9,8 @@ import {setAuthHint} from "@/lib/authHint";
  * 받은 토큰은 httpOnly 쿠키에 저장한다(브라우저 JS 에 노출하지 않는다).
  */
 export async function POST(req: Request) {
+    const blocked = assertSameOrigin(req);
+    if (blocked) return blocked;
     const {provider, code, redirectUri, consents} = await req.json();
     try {
         // consents 는 신규 가입 시 백엔드가 필수 동의를 검증하는 데 쓴다(미충족 시 400 CONSENT_REQUIRED).

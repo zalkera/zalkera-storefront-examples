@@ -1,5 +1,6 @@
 import {NextResponse} from "next/server";
 import {ZalkeraError} from "@zalkera/client";
+import {isJsonContentType, isSameOriginRequest} from "@/lib/crossOrigin";
 
 /**
  * ZalkeraError → JSON 응답. 네트워크 오류(status 0)는 502 로.
@@ -28,4 +29,37 @@ export async function readJsonBody(req: Request): Promise<any | null> {
 /** readJsonBody 가 null 일 때의 표준 400. INVALID_BODY 는 신규 코드 — 기존 분기와 충돌 없음. */
 export function invalidBody(): NextResponse {
     return NextResponse.json({message: "잘못된 요청 본문입니다.", code: "INVALID_BODY"}, {status: 400});
+}
+
+/**
+ * 교차사이트 위조 가드 — **변이 메서드를 export 하는 모든 BFF 라우트의 첫 줄**(memo118).
+ *
+ * ```ts
+ * export async function POST(req: Request) {
+ *     const blocked = assertSameOrigin(req);
+ *     if (blocked) return blocked;
+ *     ...
+ * }
+ * ```
+ *
+ * 판정 규칙과 그 근거는 `@/lib/crossOrigin` 의 [isSameOriginRequest] 에 있다. 여기는 전송만 맡는다.
+ *
+ * 차단 응답에는 **어떤 `Set-Cookie` 도 실리지 않아야 한다** — 세션을 만들기 전에 끝내는 것이 요점이라,
+ * 뒤에 쿠키를 심는 코드가 실행되면 방어가 무의미해진다. 가드는 반드시 **첫 줄**이다.
+ */
+export function assertSameOrigin(req: Request): NextResponse | null {
+    if (isSameOriginRequest(req)) return null;
+    return NextResponse.json(
+        {message: "허용되지 않은 요청 출처입니다.", code: "CROSS_ORIGIN_BLOCKED"},
+        {status: 403},
+    );
+}
+
+/** 본문 필수 라우트의 `Content-Type` 강제 — [assertSameOrigin] 다음 줄. 근거는 [isJsonContentType]. */
+export function assertJsonContentType(req: Request): NextResponse | null {
+    if (isJsonContentType(req)) return null;
+    return NextResponse.json(
+        {message: "요청 본문 형식이 올바르지 않습니다.", code: "UNSUPPORTED_MEDIA_TYPE"},
+        {status: 415},
+    );
 }

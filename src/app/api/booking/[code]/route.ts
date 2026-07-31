@@ -1,6 +1,6 @@
 import {NextResponse} from "next/server";
 import {zalkera} from "@/lib/zalkera";
-import {errorResponse} from "@/lib/http";
+import {assertSameOrigin, errorResponse} from "@/lib/http";
 import {getAccessToken} from "@/lib/session";
 import {isPreview} from "@/lib/preview";
 import {setAuthHint} from "@/lib/authHint";
@@ -16,6 +16,8 @@ import {setAuthHint} from "@/lib/authHint";
  * 클라이언트는 그 코드를 받으면 "매장에 문의" 안내를 띄운다.
  */
 export async function DELETE(req: Request, {params}: {params: Promise<{code: string}>}) {
+    const blocked = assertSameOrigin(req);
+    if (blocked) return blocked;
     if (isPreview()) {
         return NextResponse.json({message: "프리뷰 모드에서는 예약 취소가 비활성화됩니다."}, {status: 403});
     }

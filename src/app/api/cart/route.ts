@@ -1,6 +1,6 @@
 import {NextResponse} from "next/server";
 import {zalkera} from "@/lib/zalkera";
-import {errorResponse} from "@/lib/http";
+import {assertSameOrigin, errorResponse} from "@/lib/http";
 import {getShopSession} from "@/lib/session";
 
 const EMPTY = {items: [], subtotal: 0, currency: "KRW"};
@@ -17,7 +17,9 @@ export async function GET() {
 }
 
 /** 장바구니 비우기. */
-export async function DELETE() {
+export async function DELETE(req: Request) {
+    const blocked = assertSameOrigin(req);
+    if (blocked) return blocked;
     const session = await getShopSession();
     if (!session.accessToken && !session.cartSessionKey) return NextResponse.json(EMPTY);
     try {

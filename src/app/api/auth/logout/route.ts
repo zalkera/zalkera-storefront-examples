@@ -1,10 +1,13 @@
 import {NextResponse} from "next/server";
+import {assertSameOrigin} from "@/lib/http";
 import {zalkera} from "@/lib/zalkera";
 import {clearCustomerTokens, getAccessToken} from "@/lib/session";
 import {setAuthHint} from "@/lib/authHint";
 
 /** 로그아웃 — 백엔드 세션 폐기 + 쿠키 삭제. */
-export async function POST() {
+export async function POST(req: Request) {
+    const blocked = assertSameOrigin(req);
+    if (blocked) return blocked;
     const accessToken = await getAccessToken();
     if (accessToken) {
         await zalkera.logout(accessToken).catch(() => undefined);

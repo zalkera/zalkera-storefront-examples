@@ -1,10 +1,12 @@
 import {NextResponse} from "next/server";
 import {zalkera} from "@/lib/zalkera";
-import {errorResponse} from "@/lib/http";
+import {assertSameOrigin, errorResponse} from "@/lib/http";
 import {getShopSession} from "@/lib/session";
 
 /** 수량 변경. */
 export async function PATCH(req: Request, {params}: {params: Promise<{variantId: string}>}) {
+    const blocked = assertSameOrigin(req);
+    if (blocked) return blocked;
     const {variantId} = await params;
     const {quantity} = await req.json();
     try {
@@ -17,7 +19,9 @@ export async function PATCH(req: Request, {params}: {params: Promise<{variantId:
 }
 
 /** 항목 삭제. */
-export async function DELETE(_req: Request, {params}: {params: Promise<{variantId: string}>}) {
+export async function DELETE(req: Request, {params}: {params: Promise<{variantId: string}>}) {
+    const blocked = assertSameOrigin(req);
+    if (blocked) return blocked;
     const {variantId} = await params;
     try {
         return NextResponse.json(await zalkera.removeFromCart(Number(variantId), await getShopSession()));
