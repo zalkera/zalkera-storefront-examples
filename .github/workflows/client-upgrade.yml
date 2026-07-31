@@ -1,0 +1,37 @@
+# @zalkera/client vendored 업그레이드 — lockfile 재생성 워크플로.
+#
+# 백엔드(Git Data API)가 oneque/client-upgrade-* 브랜치에 새 타르볼 + 치환 package.json 을 한 커밋으로 올리면,
+# 이 워크플로가 npm install 로 package-lock.json 을 재생성(백엔드는 npm 을 못 돌린다) + validate/typecheck/build
+# 로 검증 + lockfile 을 같은 브랜치에 커밋한다. 백엔드는 이 CI green 을 확인한 뒤 PR 을 squash merge 한다.
+name: client-upgrade
+
+on:
+  push:
+    branches: ["oneque/client-upgrade-*"]
+
+permissions:
+  contents: write
+
+jobs:
+  regen:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: "${{ github.ref_name }}"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - run: npm install          # lockfile 재생성 + 설치
+
+      - run: npm run validate && npm run typecheck && npm run build
+
+      - name: commit lockfile
+        run: |
+          git config user.name "zalkera-bot"
+          git config user.email "bot@zalkera.com"
+          git add package-lock.json
+          git commit -m "chore: regenerate lockfile for @zalkera/client upgrade" || echo "no lockfile change"
+          git push origin HEAD:"${{ github.ref_name }}"

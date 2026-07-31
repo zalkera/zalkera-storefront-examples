@@ -1,0 +1,51 @@
+# 잘커라(Zalkera) 스토어프론트 Tier2 게이팅 CI.
+#
+# 백엔드 BuildGate 가 GitHub Checks API 로 이 워크플로의 성공을 확인한 뒤에만
+# Tier2(코드 배포) 를 진행한다. 세 단계는 27-real-codegen-deploy-pipeline.md §7.1·§9.3(T0)
+# 의 정본:
+#   1) validate     — 키트 validator(scripts/validate-storefront.mjs, llms.txt §5 규약)
+#   2) tsc --noEmit  — 타입 정합
+#   3) next build    — 실제 빌드 성공
+name: storefront-ci
+
+on:
+  push:
+    # main 배포 + codegen 작업 브랜치(oneque/change-*) — 게이트가 브랜치 CI 결론을 읽으려면 브랜치 push 에도 돌아야 함.
+    # oneque/client-upgrade-* 는 client-upgrade.yml 이 전담(lockfile 재생성 전 SHA 에서 npm ci 가 헛도는 red 방지).
+    branches: [main, "oneque/change-*"]
+  pull_request:
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    env:
+      # 빌드 시점에 백엔드 접속이 필요 없도록 안전한 기본값만 주입(SSR fetch 는 런타임에 일어남).
+      # ZALKERA_TENANT 는 실재하지 않아도 된다 — 러너에 백엔드가 없어 어차피 fetch 가 실패하고,
+      # 코드가 폴백 없이 require 하므로 값 자체는 있어야 한다.
+      # 이름은 서빙 인프라가 주입하는 것과 **반드시 같아야 한다**(백엔드 SandboxBuildGate.CI_ENV 패리티) —
+      # 구 `ONEQUE_*` 로 두면 폴백이 제거된 지금 `env.ts` 가 던져 빌드가 죽는다(memo101 컷오버 실사고).
+      ZALKERA_API_BASE: http://localhost:8100
+      ZALKERA_TENANT: ci-placeholder
+      # 이 러너에는 백엔드가 **없다**고 선언한다(src/lib/buildEnv.ts). 홈이 시드 페이지를 집어 오는 경로가
+      # 불통을 그냥 던지면 여기서 빌드가 죽는다 — 반대로 테넌트 서빙 빌드는 던져야 맞으므로, 구분은
+      # 상태값이 아니라 이 플래그로 한다(기본값은 fail-fast).
+      ZALKERA_OFFLINE_BUILD: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Validate (키트 validator)
+        run: npm run validate
+
+      - name: Typecheck (tsc --noEmit)
+        run: npm run typecheck
+
+      - name: Build (next build)
+        run: npm run build

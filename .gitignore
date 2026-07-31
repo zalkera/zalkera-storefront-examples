@@ -1,0 +1,28 @@
+node_modules
+.next
+*.tsbuildinfo
+next-env.d.ts
+
+# 환경파일 — **커밋 금지**(2026-07-26 감사 C2).
+# 이 레포는 공개이고 테넌트별로 복제된다. `.env.local` 만 무시하던 탓에 `.env`·`.env.production` 이
+# 추적 가능했고, `.env.example` 은 여기에 ZALKERA_STOREFRONT_KEY 를 넣으라고 안내한다 —
+# 즉 안내를 따른 사용자가 그대로 커밋할 수 있었다. git 이력은 되돌릴 수 없다.
+# 예시 파일(`.env.example`)은 시크릿이 아니므로 되살린다.
+.env
+.env.*
+!.env.example
+
+# 키·인증서
+*.pem
+*.key
+*.p12
+
+# 프리셋 팩 산출물(scripts/pack-preset.mjs) — 커밋하지 않는다. 적재는 S3, 정본 기록은 설정의 sha256.
+dist-presets
+
+# 미리보기 스냅샷 산출물(scripts/snapshot-preview.mjs) — 재생성 가능한 사진이라 원장이 아니다.
+# 거처는 S3+CDN 의 버전 고정 프리픽스다(memo116 §3).
+dist-preview
+
+# 에이전트 격리 워크트리 — 팩 게이트의 DIRTY_TREE 를 유발하고 git add -A 로 gitlink 가 섞인다
+.claude-wt/

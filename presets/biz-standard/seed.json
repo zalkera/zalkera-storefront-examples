@@ -1,0 +1,11 @@
+{
+  "themeColors": {
+    "primary": "#1d4ed8",
+    "secondary": "#0f172a",
+    "background": "#ffffff",
+    "text": "#0f172a",
+    "font": "pretendard",
+    "radius": "soft",
+    "density": "cozy"
+  }
+}

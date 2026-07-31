@@ -1,0 +1,157 @@
+{
+  "title": "홈",
+  "sections": [
+    {
+      "type": "HERO",
+      "config": {
+        "eyebrow": "예약제 · 1인 전담",
+        "title": "손끝이 정돈되면 하루가 달라집니다",
+        "subtitle": "한 분씩만 받습니다. 서두르지 않고, 손 상태부터 보고 시작합니다.",
+        "ctaLabel": "예약 문의하기",
+        "ctaHref": "#lead",
+        "asset": "/images/hero.png"
+      }
+    },
+    {
+      "type": "FEATURE_GRID",
+      "config": {
+        "title": "이렇게 합니다",
+        "items": [
+          {
+            "icon": "calendar-check",
+            "title": "완전 예약제",
+            "body": "겹치는 예약을 받지 않습니다. 오신 시간에 바로 시작합니다."
+          },
+          {
+            "icon": "sparkles",
+            "title": "1인 1도구",
+            "body": "파일·푸셔는 손님마다 따로 씁니다. 소독 과정을 보여드립니다."
+          },
+          {
+            "icon": "heart-handshake",
+            "title": "손 상태부터",
+            "body": "원하시는 디자인이 지금 손 상태에 무리면 솔직하게 말씀드립니다."
+          }
+        ]
+      }
+    },
+    {
+      "type": "SERVICE_MENU",
+      "config": {
+        "products": [
+          "care-basic",
+          "gel-onecolor",
+          "gel-art",
+          "gel-extension",
+          "gel-removal"
+        ]
+      }
+    },
+    {
+      "type": "BOOKING_CTA",
+      "config": {
+        "label": "시술 예약하기",
+        "product": "gel-onecolor"
+      }
+    },
+    {
+      "type": "BEFORE_AFTER_GALLERY",
+      "config": {
+        "items": [
+          {
+            "beforeAsset": "/images/care-01-before.png",
+            "afterAsset": "/images/care-01-after.png",
+            "caption": "케어 + 원컬러"
+          },
+          {
+            "beforeAsset": "/images/care-02-before.png",
+            "afterAsset": "/images/care-02-after.png",
+            "caption": "연장 후 정리"
+          },
+          {
+            "beforeAsset": "/images/care-03-before.png",
+            "afterAsset": "/images/care-03-after.png",
+            "caption": "딥프렌치"
+          }
+        ]
+      }
+    },
+    {
+      "type": "DOCTOR_INTRO",
+      "config": {
+        "name": "윤○○",
+        "title": "원장 · 네일 12년",
+        "photoAsset": "/images/doctor.png",
+        "bio": "손톱이 얇아 오래 못 가던 분들을 오래 봐 왔습니다.\n예뻐 보이는 것보다 다음 달에도 괜찮은 손이 먼저라고 생각합니다.\n\n· 국가기술자격 미용사(네일)\n· 젤 연장 · 케어 전문\n· 오전 시간대 1:1 케어 상담"
+      }
+    },
+    {
+      "type": "TEXT_MEDIA",
+      "config": {
+        "title": "조용한 자리에서",
+        "body": "좌석이 하나입니다. 뒤에 기다리는 분이 없으니 중간에 손을 빼실 일도 없습니다.\n\n환기와 소독은 손님이 바뀔 때마다 합니다. 사용하는 제품은 요청하시면 성분표를 그대로 보여드립니다.",
+        "asset": "/images/salon.png",
+        "mediaSide": "right",
+        "ctaLabel": "매장 더 보기",
+        "ctaHref": "/about"
+      }
+    },
+    {
+      "type": "TESTIMONIALS",
+      "config": {
+        "title": "다녀가신 분들",
+        "items": [
+          {
+            "quote": "손톱이 얇아서 늘 들뜨다가, 여기서 케어 받고 3주를 버텼습니다.",
+            "author": "문○○",
+            "role": "직장인",
+            "asset": "/images/avatar-01.png"
+          },
+          {
+            "quote": "하고 싶은 디자인이 지금은 무리라고 먼저 말해 주셔서 오히려 믿음이 갔습니다.",
+            "author": "신○○",
+            "role": "단골",
+            "asset": "/images/avatar-02.png"
+          }
+        ]
+      }
+    },
+    {
+      "type": "FAQ_LIST",
+      "config": {
+        "title": "자주 묻는 것",
+        "items": [
+          {
+            "question": "예약 없이 가도 되나요?",
+            "answer": "좌석이 하나라 예약 없이는 받기 어렵습니다. 당일 빈자리는 예약 문의로 물어봐 주세요."
+          },
+          {
+            "question": "시간은 얼마나 걸리나요?",
+            "answer": "케어만 하면 40분, 원컬러는 1시간, 연장은 2시간 안팎입니다. 손 상태에 따라 달라집니다."
+          },
+          {
+            "question": "타 매장에서 한 것도 제거해 주시나요?",
+            "answer": "가능합니다. 제거만 따로 요청하셔도 됩니다."
+          },
+          {
+            "question": "예약을 못 지키게 되면요?",
+            "answer": "하루 전까지 알려 주시면 괜찮습니다. 당일 취소가 반복되면 다음 예약이 어려울 수 있습니다."
+          },
+          {
+            "question": "주차 되나요?",
+            "answer": "건물 주차장을 쓰실 수 있고 1시간 무료입니다. 만차일 때는 근처 공영주차장을 안내드립니다."
+          }
+        ]
+      }
+    },
+    {
+      "type": "LEAD_CTA",
+      "config": {
+        "title": "예약 문의",
+        "body": "원하시는 날짜와 시술을 남겨 주시면 가능한 시간을 알려드립니다.",
+        "interest": "예약 문의",
+        "quick": true
+      }
+    }
+  ]
+}
