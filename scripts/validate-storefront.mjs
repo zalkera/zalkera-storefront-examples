@@ -234,7 +234,7 @@ function docsSink() {
 /**
  * D1 — 레포 루트 `AGENTS.md` 의 좌표 실재.
  * D2 — 설치된 `@zalkera/client` 의 `llms.txt` 가 지목한 **본보기 좌표**의 실재. 이 레포가 그 본보기라
- *      (`@zalkera/storefront-template`) 여기서만 돈다 — 남의 레포에 우리 레시피의 경로를 들이대면
+ *      (`@zalkera/storefront-examples`) 여기서만 돈다 — 남의 레포에 우리 레시피의 경로를 들이대면
  *      전부 오탐이다. `src/app|components|lib/` 로 좁히는 것은 llms.txt 가 client 자신의 소스
  *      (`sections.ts` 등)도 언급하기 때문이고, 그 셋이 템플릿 형상의 서브트리다.
  */
@@ -257,7 +257,7 @@ function checkDocCoordinates() {
     // D2 — 본보기 레포 전용.
     let isExemplar = false;
     try {
-        isExemplar = JSON.parse(readFileSync(join(repoRoot, "package.json"), "utf8")).name === "@zalkera/storefront-template";
+        isExemplar = JSON.parse(readFileSync(join(repoRoot, "package.json"), "utf8")).name === "@zalkera/storefront-examples";
     } catch {
         isExemplar = false;
     }
@@ -1024,7 +1024,13 @@ function checkCrossOriginGuards() {
             else if (e.name === "route.ts" || e.name === "route.tsx") routes.push(full);
         }
     };
-    collect(join(root, "src", "app", "api"));
+    // ⚠ `root` 는 **레포 루트가 아니라 소스 루트**(`./src`)다(82행). 그래서 여기서 붙일 것은
+    // `app/api` 하나다 — 초판은 `src/app/api` 도 함께 걸었는데 그건 `./src/src/app/api` 라
+    // 존재하지 않는 죽은 경로였고, 실제로 도는 것은 아래 한 줄이었다.
+    //
+    // 앱 루트를 `src/app` 하나로 못박는 것은 의도다(업로드 zip 명세 §4). Next 는 `app/` 도
+    // 허용하지만 이 잣대의 기본 루트가 `./src` 라 규칙마다 분기를 만들지 않는다 —
+    // 여기서 시작하는 사람은 **새로 짓는** 사람이라 골격을 우리가 정해도 된다.
     collect(join(root, "app", "api"));
 
     const exempted = [];

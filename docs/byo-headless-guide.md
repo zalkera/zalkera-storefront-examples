@@ -77,7 +77,7 @@ export const zalkera = createZalkeraClient({
 배선·`theme.ts`)을 유지한 스토어프론트에서만 반영됩니다. 당신이 그 배선 없이 프론트를 직접
 만들면, **콘솔의 테마/폰트 설정은 당신 사이트에 반영되지 않습니다**(L1 미보장). 이건 숨기지 않고
 분명히 말합니다 — 당신 코드는 당신 것이고, 대신 그 편의 하나를 포기하는 것뿐입니다. 계약을
-유지하고 싶으면 이 템플릿(`storefront-template`)을 포크해서 시작하세요.
+유지하고 싶으면 이 예제(`zalkera-storefront-examples`)를 받아서 시작하세요.
 
 ---
 
