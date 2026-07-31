@@ -45,10 +45,10 @@ export function CallbackHandler({
                 setError("인가 코드(code)가 없습니다.");
                 return;
             }
-            // CSRF: authorize 시 심은 state 와 대조한다. **값이 없으면 거부한다**(fail-closed).
-            // 정상 흐름은 SocialLoginButtons 가 crypto.randomUUID() 로 반드시 둘 다 만들므로,
-            // 한쪽이라도 비었다는 것은 이 창에서 시작하지 않은 콜백이라는 뜻이다 — 공격자가 자기
-            // code 를 담은 링크를 피해자에게 열게 하면 피해자 브라우저에 **공격자 계정 세션**이 심긴다.
+            // ⚠ **이건 방어가 아니라 UX 다.** 진짜 방어는 서버가 httpOnly 쿠키의 state 와 대조하는
+            // 것이고(memo118 ②층 · `consumeOAuthState`), 그것은 이 파일을 통째로 지워도 산다.
+            // 여기 남겨 둔 이유는 하나 — 서버까지 가기 전에 사용자에게 더 이른 안내를 주기 때문이다.
+            // 그러니 이 블록을 지우거나 AI 가 다시 써도 보안은 그대로다. **그 반대로 읽지 말 것.**
             const saved = sessionStorage.getItem(STATE_STORAGE_KEY);
             sessionStorage.removeItem(STATE_STORAGE_KEY);
             if (!saved || !state || saved !== state) {
@@ -59,11 +59,13 @@ export function CallbackHandler({
             // 로그인 시작 때 심은 약관 동의(consents)를 꺼내 백엔드로 함께 전달한다.
             const consents = readConsents();
 
-            const redirectUri = `${window.location.origin}${window.location.pathname}`;
+            // `redirectUri` 는 **안 보낸다** — 서버가 요청 오리진에서 파생한다(열린 리다이렉터 차단).
+            // `state` 는 보낸다: 서버가 httpOnly 쿠키의 값과 대조한다(memo118 ②층). 아래 sessionStorage
+            // 대조는 그보다 이른 UX 피드백일 뿐 **방어가 아니다**.
             const res = await fetch("/api/auth/social", {
                 method: "POST",
                 headers: {"Content-Type": "application/json"},
-                body: JSON.stringify({provider, code, redirectUri, consents}),
+                body: JSON.stringify({provider, code, state, consents}),
             });
             if (!res.ok) {
                 const data = await res.json().catch(() => ({}));
