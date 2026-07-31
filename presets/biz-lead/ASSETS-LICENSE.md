@@ -13,6 +13,7 @@
 | `hero.png` | 자체 생성 — `scripts/gen-preset-assets.mjs` (동심 궤도 추상 도형·테마 토큰 색) | Credium | 자체 저작 · 재배포/수정/상업 사용 허용 | 2026-07-26 |
 | `avatar-01.png` | 자체 생성 — 모노그램 원형 타일 | Credium | 자체 저작 · 재배포/수정/상업 사용 허용 | 2026-07-26 |
 | `avatar-02.png` | 자체 생성 — 모노그램 원형 타일 | Credium | 자체 저작 · 재배포/수정/상업 사용 허용 | 2026-07-26 |
+| `thumbnail.png` | 자체 생성 — `scripts/gen-preset-assets.mjs` (콘솔 테마 카드 썸네일) | Credium | 자체 저작 · 재배포/수정/상업 사용 허용 | 2026-07-26 |
 
 ## 확인 사항
 
