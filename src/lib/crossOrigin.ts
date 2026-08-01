@@ -37,9 +37,19 @@
  */
 export function isSameOriginRequest(req: Request): boolean {
     const origin = req.headers.get("origin");
+    // ⚠ `origin === "null"` 은 **오늘 동치 가드다**(실측: 그 절만 지워도 27/27 통과). 아래
+    // `new URL("null")` 이 throw 해서 `catch → false` 로 같은 답이 나오기 때문이다. 그래도 남기는
+    // 이유는 **의도를 드러내기 위해서다** — 샌드박스 iframe 의 `Origin: null` 을 막는 것이 판정
+    // 규칙의 일부이고, 파싱 실패에 얹혀 우연히 참인 상태로 두면 URL 파서 동작이 바뀌는 날 조용히
+    // 열린다. `oauthState.ts` 의 동치 가드와 같은 계열이다.
     if (!origin || origin === "null") return false;
 
     // 프록시 뒤에서는 `host` 가 내부 호스트다 — Next 자신의 Server Action 판정과 같은 우선순위를 쓴다.
+    //
+    // ⚠ **콤마 목록을 풀지 않는다.** 관리형 서빙은 오케스트레이터가 이 헤더를 **덮어쓰므로**
+    // 값이 항상 호스트 하나다. 그러나 값을 **덧붙이는** 프록시(BYO 자체 인프라) 뒤에 놓이면
+    // `"a.com, b.com" !== originHost` 라 **모든 변이가 403** 이 된다 — fail-closed 라 안전하지만
+    // 진단이 어려운 장애다. 첫 항목만 취하는 완화는 그 항목이 신뢰할 수 없는 값이라 안 한다.
     const expected = req.headers.get("x-forwarded-host") ?? req.headers.get("host");
     if (!expected) return false;
 

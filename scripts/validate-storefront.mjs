@@ -997,18 +997,248 @@ function checkStyleWiring() {
     }
 }
 
+/**
+ * 주석과 문자열 리터럴을 **공백으로 치환**한다(길이·줄바꿈 보존 → 인덱스가 원문과 일치).
+ *
+ * ⚠ 이게 없으면 **주석 한 줄이 코드 행세를 한다.** 실측으로 확인된 우회 셋:
+ * ⒜ 가드를 주석 처리하고 그 아래에서 쿠키를 쓰기 ⒝ 관용구를 문자열 리터럴에 넣어 두기
+ * ⒞ 호출되지 않는 중첩 함수 안에 가드를 두기. 셋 다 "가드가 0인데 통과"였다.
+ * 정규식으로 소스를 재는 검사기는 **먼저 리터럴을 지우고** 재야 한다.
+ *
+ * ⚠ **정규식 리터럴을 반드시 함께 처리해야 한다**(초판이 빠뜨려 차단이 됐다). `const RE = /["']/;`
+ * 한 줄이면 그 안의 따옴표가 문자열 시작으로 오인돼 **뒤가 통째로 공백**이 되고, 아래에 있던
+ * `export async function POST` 이 스캐너 눈에서 **소멸**한다 → X1 이 "변이 핸들러 0건"으로 판정해
+ * **가드가 없어도 통과**한다(실측). 반대 방향도 났다 — 정상 핸들러 본문에 그런 정규식이 있으면
+ * 중괄호 짝이 어긋나 멀쩡한 코드가 error 가 됐다.
+ *
+ * ⚠ **리터럴을 지운 소스로 리터럴 "값"을 재려 하지 마라.** 여기를 거치면 `sameSite: "strict"` 가
+ * `sameSite: "      "` 가 된다 — 값 검사는 반드시 **원문**에 걸어야 한다(X3 가 그렇게 죽어 있었다).
+ */
+function stripLiterals(code) {
+    const out = code.split("");
+    const blank = (from, to) => {
+        for (let k = from; k < to && k < out.length; k++) if (out[k] !== "\n") out[k] = " ";
+    };
+    // `/` 가 정규식의 시작인지 나눗셈인지는 **직전 비공백 문자**로 가른다(표준 휴리스틱).
+    // 아래 문자 뒤라면 값이 올 자리이므로 정규식이고, 그 밖(식별자·`)`·숫자 뒤)이면 나눗셈이다.
+    const BEFORE_REGEX = new Set(["(", ",", "=", ":", "[", "!", "&", "|", "?", "{", "}", ";", "+", "-", "*", "%", "~", "^", "<", ">"]);
+    let prev = "";
+    for (let i = 0; i < code.length; i++) {
+        const c = code[i];
+        if (c === '"' || c === "'" || c === "`") {
+            const start = i;
+            for (i++; i < code.length; i++) {
+                if (code[i] === "\\") i++;
+                else if (code[i] === c) break;
+            }
+            blank(start + 1, i); // 따옴표는 남긴다 — 토큰 경계가 무너지지 않게.
+            prev = c;
+            continue;
+        }
+        if (c === "/" && code[i + 1] === "/") {
+            const start = i;
+            i = code.indexOf("\n", i);
+            if (i < 0) i = code.length;
+            blank(start, i);
+            continue; // prev 는 그대로 — 주석은 토큰이 아니다.
+        }
+        if (c === "/" && code[i + 1] === "*") {
+            const start = i;
+            i = code.indexOf("*/", i);
+            if (i < 0) i = code.length;
+            else i += 1;
+            blank(start, i + 1);
+            continue;
+        }
+        if (c === "/" && (prev === "" || BEFORE_REGEX.has(prev))) {
+            // 정규식 리터럴. 줄바꿈을 못 넘으므로 **같은 줄 안에서만** 닫는 `/` 를 찾는다 —
+            // 판정이 틀려도 폭주가 한 줄로 제한된다. 문자 클래스 `[...]` 안의 `/` 는 종료가 아니다.
+            let j = i + 1;
+            let inClass = false;
+            for (; j < code.length && code[j] !== "\n"; j++) {
+                if (code[j] === "\\") j++;
+                else if (code[j] === "[") inClass = true;
+                else if (code[j] === "]") inClass = false;
+                else if (code[j] === "/" && !inClass) break;
+            }
+            if (j < code.length && code[j] === "/") {
+                blank(i + 1, j); // 슬래시 둘은 남긴다.
+                i = j;
+                prev = "/";
+                continue;
+            }
+            // 같은 줄에서 안 닫혔다 = 정규식이 아니었다. 나눗셈으로 두고 지나간다.
+        }
+        if (!/\s/.test(c)) prev = c;
+    }
+    return out.join("");
+}
+
+/**
+ * 변이 메서드 핸들러를 **선언 형태에 관계없이** 열거한다. 초판이 `export function` 만 봐서
+ * 화살표 export 가 통째로 빠져나갔다(심의 실측).
+ *
+ * 입력은 [stripLiterals] 를 거친 소스여야 한다 — 그래야 문자열 안의 `export function POST(` 이
+ * 유령 핸들러를 만들지 않고, 중괄호 짝도 리터럴에 흔들리지 않는다.
+ *
+ * 반환: `[{method, body}]`. `body` 는 중괄호 본문의 **안쪽 문자열**이고, 본문을 확정할 수
+ * 없으면 `null` 이다(재export·간접 참조·중괄호 없는 화살표) — 그 형태는 호출부에서 error 로 다룬다.
+ */
+function findMutationHandlers(code) {
+    const found = [];
+    const seen = new Set();
+    const push = (method, body) => {
+        if (seen.has(method)) return; // 같은 메서드를 두 번 세지 않는다.
+        seen.add(method);
+        found.push({method, body});
+    };
+
+    // 리터럴이 이미 지워졌으므로 중괄호를 그대로 센다.
+    const bodyAt = (open) => {
+        let depth = 0;
+        for (let i = open; i < code.length; i++) {
+            if (code[i] === "{") depth++;
+            else if (code[i] === "}" && --depth === 0) return code.slice(open + 1, i);
+        }
+        return null;
+    };
+
+    // 시그니처의 여는 괄호 다음 위치에서 짝을 찾아 **매개변수 목록을 건너뛴다.**
+    // 이걸 안 하면 `DELETE(req: Request, {params}: …)` 의 구조분해 중괄호를 본문으로 오인해
+    // 정상 라우트가 전부 빨개진다(재작성 1차에서 실제로 그랬다).
+    const afterParams = (openParen) => {
+        let depth = 0;
+        for (let i = openParen; i < code.length; i++) {
+            if (code[i] === "(") depth++;
+            else if (code[i] === ")" && --depth === 0) return i + 1;
+        }
+        return -1;
+    };
+
+    const METHODS = "POST|PUT|PATCH|DELETE";
+
+    // ⒜ `export [async] function POST(...) {`
+    for (const m of code.matchAll(new RegExp(`export\\s+(?:async\\s+)?function\\s+(${METHODS})\\s*\\(`, "g"))) {
+        const sigEnd = afterParams(m.index + m[0].length - 1);
+        const open = sigEnd < 0 ? -1 : code.indexOf("{", sigEnd);
+        push(m[1], open < 0 ? null : bodyAt(open));
+    }
+
+    // ⒝ `export const POST = async (req) => {` / `= async function (req) {` / 타입 주석 포함
+    for (const m of code.matchAll(new RegExp(`export\\s+(?:const|let|var)\\s+(${METHODS})\\b[^=\\n]*=`, "g"))) {
+        let i = m.index + m[0].length;
+        const skip = (re) => {
+            const t = code.slice(i).match(re);
+            if (t) i += t[0].length;
+            return !!t;
+        };
+        skip(/^\s+/);
+        skip(/^async\s*/);
+        const isFn = skip(/^function\s*\w*\s*/);
+        let open = -1;
+        if (code[i] === "(") {
+            const sigEnd = afterParams(i);
+            if (sigEnd > 0) {
+                i = sigEnd;
+                if (isFn) open = code.indexOf("{", i);
+                else if (skip(/^\s*(?::[^=]*)?=>\s*/)) open = code[i] === "{" ? i : -1;
+            }
+        } else if (!isFn && skip(/^\w+\s*=>\s*/)) {
+            open = code[i] === "{" ? i : -1;
+        }
+        push(m[1], open < 0 ? null : bodyAt(open));
+    }
+
+    // ⒞ `export {POST}` · `export {handler as POST}` — 본문을 못 따라간다.
+    for (const m of code.matchAll(/export\s*\{([^}]*)\}/g)) {
+        for (const part of m[1].split(",")) {
+            const name = part.trim().split(/\s+as\s+/).pop()?.trim();
+            if (name && new RegExp(`^(${METHODS})$`).test(name)) push(name, null);
+        }
+    }
+
+    return found;
+}
+
+/**
+ * 핸들러 본문 하나를 판정한다. 위반이면 사람이 읽을 사유 문자열, 통과면 `null`.
+ *
+ * 규칙은 **두 줄**이다 — 규칙 이름("가드는 첫 구문")과 구현이 어긋나지 않게 문자 그대로 잰다.
+ *  ① 본문의 **첫 구문**이 가드여야 한다(앞에 무엇이 오든 위반 — 열거식 금지 목록은 반드시 샌다).
+ *  ② 가드의 반환값이 **`return` 에 닿아야** 한다.
+ *
+ * ⚠ **②를 "관용구 일치"로 강제하면 안 된다.** 재작성 1차는 `const X = …; if (X) return X;` 를
+ * 철자까지 요구했고, 그 결과 **정상 코드 6형태가 빨개졌다**(중괄호 `if`, 세미콜론 없는 스타일,
+ * 타입 주석, 긴 주석, `!== null`, 네임스페이스 import — 심의 실측). 거짓 양성은 우회보다 위험하다:
+ * 검사기가 정상 리팩터링을 막으면 사람이 면제 마커를 남발하거나 `validate` 를 꺼 버린다. 그 둘 다
+ * memo118 §7-8 이 죽인 "사람이 관리하는 예외 목록"의 부활이다.
+ */
+function judgeGuardPlacement(rawBody) {
+    let body = rawBody;
+    // `try { … }` 로 감싼 본문은 정당하다 — 가드는 여전히 먼저 돈다. 한 겹씩 들어간다.
+    for (;;) {
+        const head = body.match(/^\s*try\s*\{/);
+        if (!head) break;
+        body = body.slice(head[0].length);
+    }
+    const rest = body.replace(/^\s+/, "");
+    const CALL = "(?:\\w+\\s*\\.\\s*)?assertSameOrigin\\s*\\("; // 네임스페이스 import 허용
+
+    // ① 첫 구문이 선언형 가드인가 — 타입 주석·세미콜론 유무를 묻지 않는다.
+    const decl = rest.match(new RegExp(`^(?:const|let|var)\\s+(\\w+)\\b[^=;]*=\\s*${CALL}`));
+    if (decl) {
+        // ② 그 이름이 return 에 닿는가. `if (x) return x` · `if (x) { return x }` · `if (x !== null)`
+        //    전부 이 한 줄로 통과한다.
+        if (new RegExp(`return\\s+${decl[1]}\\b`).test(body)) return null;
+        return (
+            `가 assertSameOrigin 의 반환값을 차단에 쓰지 않습니다 — 호출만 있고 막지는 않는 상태입니다.` +
+            ` \`const blocked = assertSameOrigin(req); if (blocked) return blocked;\` 형태를 쓰세요.`
+        );
+    }
+
+    // ① 첫 구문이 `if (assertSameOrigin(req)) …` 형태인 경우(직접 판정).
+    //
+    // ⚠ `return` 을 **본문 아무 데서나** 찾으면 안 된다 — 그러면 `if (가드) { /* 삼킨다 */ }` 뒤의
+    //    정상 `return` 하나로 충족돼 **차단하지 않는 가드**가 통과한다(실측). "반환값 버림"이
+    //    if 갈래로 재발한 것이라, `return` 은 **그 if 의 본문 안**에서만 인정한다.
+    if (new RegExp(`^if\\s*\\(\\s*${CALL}`).test(rest)) {
+        if (new RegExp(`^if\\s*\\([\\s\\S]*?\\)\\s*(?:\\{[^}]*\\breturn\\b|\\breturn\\b)`).test(rest)) return null;
+        return `가 가드에 걸린 요청을 return 으로 끊지 않습니다 — 차단이 성립하지 않습니다.`;
+    }
+
+    // 가드가 어디에도 없다 vs 첫 구문이 아니다 — 사유를 갈라 준다(고치는 방법이 다르다).
+    if (!new RegExp(CALL).test(body)) {
+        return (
+            `가 변이 메서드인데 assertSameOrigin 호출이 없습니다 — 교차사이트 위조가 열립니다(memo118).` +
+            ` 정당한 예외면 파일 상단에 \`// zalkera-allow-cross-origin: 이유\` 를 다세요.`
+        );
+    }
+    return (
+        `의 assertSameOrigin 이 **본문의 첫 구문이 아닙니다** — 앞선 쿠키 쓰기는 403 응답에 Set-Cookie 를` +
+        ` 실어 memo118 §3 의 불변식을 깹니다(실측 재현됨). 가드를 감싸거나(헬퍼·중첩 함수) 뒤로 미루지` +
+        ` 말고 본문 맨 앞에 두세요.`
+    );
+}
+
 // ── X1: 교차사이트 위조 가드 (memo118) ─────────────────────────────
 //
-// 변이 메서드(POST·PUT·PATCH·DELETE)를 export 하는 API 라우트는 **같은 파일 안에서**
+// 변이 메서드(POST·PUT·PATCH·DELETE)를 export 하는 라우트 핸들러는 **자기 본문의 첫 구문으로**
 // `assertSameOrigin` 을 불러야 한다. 경로 목록이 아니라 **메서드**로 판정하는 이유는,
 // 사람이 관리하는 위험 라우트 목록이 반드시 드리프트하기 때문이다 — 새 라우트가 자동 합류한다.
 //
 // 면제는 파일 상단 마커 한 줄로만 가능하고, **면제 목록을 항상 출력**한다(조용히 늘지 않게).
 //     // zalkera-allow-cross-origin: 이유
 //
-// ⚠ 이 규칙은 "가드를 불렀는가"만 본다. 가드가 **올바른가**는 `src/lib/crossOrigin.ts` 의
-// 단위 테스트가 지킨다 — 특히 `Sec-Fetch-Site` 를 `!== "cross-site"` 로 쓰면 플랫폼 존에서
-// 형제 테넌트가 통과한다.
+// ⚠ **초판은 파일 단위 문자열 검사였고, 가드 없는 변이 라우트를 네 형태로 통과시켰다**(심의 실측):
+// ⒜ `export const POST = async (req) => …`(화살표라 `function` 정규식에 안 걸림) ⒝ 가드가 `GET`
+// 에만 있고 `POST` 는 무방비 ⒞ `assertSameOrigin(req);` 로 **반환값을 버림** ⒟ 가드가 쿠키 쓰기
+// **뒤**. ⒟ 는 특히 memo118 §3 의 실질 불변식을 깬다 — `cookies()` 변이는 뒤에 만든
+// `NextResponse` 에 그대로 합류하므로 **403 응답에 `Set-Cookie` 가 실린다**(실측 재현됨).
+// 그래서 판정을 파일이 아니라 **핸들러 본문 단위**로 올린다([judgeGuardPlacement]).
+//
+// ⚠ 이 규칙은 "가드를 올바른 자리에서 불렀는가"만 본다. 가드 **자체가 올바른가**는
+// `src/lib/crossOrigin.ts` 의 단위 테스트가 지킨다 — 특히 `Sec-Fetch-Site` 를 `!== "cross-site"`
+// 로 쓰면 플랫폼 존에서 형제 테넌트가 통과한다.
 function checkCrossOriginGuards() {
     const routes = [];
     const collect = (dir) => {
@@ -1024,31 +1254,45 @@ function checkCrossOriginGuards() {
             else if (e.name === "route.ts" || e.name === "route.tsx") routes.push(full);
         }
     };
-    // ⚠ `root` 는 **레포 루트가 아니라 소스 루트**(`./src`)다(82행). 그래서 여기서 붙일 것은
-    // `app/api` 하나다 — 초판은 `src/app/api` 도 함께 걸었는데 그건 `./src/src/app/api` 라
-    // 존재하지 않는 죽은 경로였고, 실제로 도는 것은 아래 한 줄이었다.
+    // ⚠ `root` 는 **레포 루트가 아니라 소스 루트**(`./src`)다(82행). 초판은 `src/app/api` 도
+    // 함께 걸었는데 그건 `./src/src/app/api` 라 존재하지 않는 죽은 경로였다.
     //
-    // 앱 루트를 `src/app` 하나로 못박는 것은 의도다(업로드 zip 명세 §4). Next 는 `app/` 도
-    // 허용하지만 이 잣대의 기본 루트가 `./src` 라 규칙마다 분기를 만들지 않는다 —
-    // 여기서 시작하는 사람은 **새로 짓는** 사람이라 골격을 우리가 정해도 된다.
-    collect(join(root, "app", "api"));
+    // ⚠ **초판의 두 번째 좌표 오류 — `app/api` 만 걸었다.** Next 의 route handler 는 `app/` 아래
+    // 어디에나 살 수 있고 이 레포에도 실물이 있다(`app/media/[id]/route.ts` — 오늘은 GET 전용이라
+    // 피해 0). `app/upload/route.ts` 같은 자리에 변이 라우트가 생기면 검사기가 **존재 자체를
+    // 모른다**. 경로가 아니라 메서드로 판정한다는 memo118 §5 원칙과도 전수 수집이 맞다.
+    collect(join(root, "app"));
 
     const exempted = [];
     for (const file of routes) {
         const code = readFileSync(file, "utf8");
-        if (!/export\s+(async\s+)?function\s+(POST|PUT|PATCH|DELETE)\s*\(/.test(code)) continue;
         const rel = relative(root, file);
-        const marker = code.match(/\/\/\s*zalkera-allow-cross-origin:\s*(.+)/);
+        const handlers = findMutationHandlers(stripLiterals(code));
+        if (!handlers.length) continue;
+
+        // 면제 마커는 **파일 상단**에만 둔다 — 아무 데나 허용하면 주석·문자열 안의 한 줄로
+        // 조용히 면제되고, 마커를 읽는 사람이 그 사실을 모른다. 첫 `export` 앞까지만 본다.
+        const head = code.slice(0, code.search(/^export\b/m) + 1 || code.length);
+        const marker = head.match(/\/\/\s*zalkera-allow-cross-origin:\s*(.+)/);
         if (marker) {
             exempted.push(`${rel} — ${marker[1].trim()}`);
             continue;
         }
-        if (!/assertSameOrigin\s*\(/.test(code)) {
-            errors.push(
-                `[X1] ${rel} 가 변이 메서드를 export 하는데 assertSameOrigin 호출이 없습니다 — ` +
-                    `교차사이트 위조가 열립니다(memo118). 정당한 예외면 파일 상단에 ` +
-                    `\`// zalkera-allow-cross-origin: 이유\` 를 다세요.`,
-            );
+
+        for (const h of handlers) {
+            const where = `[X1] ${rel} 의 ${h.method}`;
+            if (h.body === null) {
+                // 재export·간접 참조는 본문을 못 따라간다. 추측으로 통과시키면 그 형태가 곧
+                // 우회로가 되므로, **핸들러를 이 파일에 직접 선언하라**고 요구한다.
+                errors.push(
+                    `${where} 가 본문을 따라갈 수 없는 형태로 export 됩니다(재export·간접 참조·중괄호 없는` +
+                        ` 화살표) — 가드 위치를 기계로 확인할 수 없습니다. 핸들러를 이 파일에 중괄호 본문으로` +
+                        ` 직접 선언하세요(memo118 §4).`,
+                );
+                continue;
+            }
+            const verdict = judgeGuardPlacement(h.body);
+            if (verdict) errors.push(`${where} ${verdict}`);
         }
     }
     if (exempted.length) {
@@ -1063,6 +1307,84 @@ function checkCrossOriginGuards() {
             errors.push(
                 `[X2] ${relative(root, file)} 가 CORS 헤더를 답니다 — 읽기 GET 을 가드에서 빼는 근거가` +
                     ` "교차 오리진 JS 가 응답을 못 읽는다"인데, 그 전제가 무너집니다(memo118 §7-2).`,
+            );
+        }
+    }
+
+    // X3 — OAuth state 쿠키의 **1회용 소각**. 단위 테스트가 못 잠그는 자리다: `next/headers` 를
+    // import 하는 모듈은 Node 기본 러너가 못 읽어서, 소각 한 줄을 지워도 27/27 이 그대로 통과한다
+    // (심의 실측). 지워지면 state 가 유효기간(10분) 내내 재사용 가능해져 ②층의 리플레이 차단이
+    // 조용히 사라진다. S8(테마 주입 배선)과 같은 계열의 "테스트가 못 닿는 배선" 검사다.
+    //
+    // ⚠ **파일 경로·상수 이름을 하드코딩하지 않는다.** 초판은 `lib/session.ts` 와
+    //    `OAUTH_STATE_COOKIE` 를 박아 뒀는데, 파일을 옮기거나 상수를 리네임하면 검사가 조용히
+    //    **fail-open** 했다(심의 실측: 소각 삭제 + 리네임 = 통과). `./src/src/app/api` 이후
+    //    좌표가 죽어 검사가 사라진 **세 번째 사례**라 정의를 찾아가는 쪽으로 바꾼다.
+    const sources = [];
+    const collectSources = (dir) => {
+        let entries;
+        try {
+            entries = readdirSync(dir, {withFileTypes: true});
+        } catch {
+            return;
+        }
+        for (const e of entries) {
+            const full = join(dir, e.name);
+            if (e.isDirectory()) collectSources(full);
+            else if (/\.tsx?$/.test(e.name)) sources.push(full);
+        }
+    };
+    collectSources(root);
+
+    let consumeDef = null;
+    let usesStateCookie = false;
+    for (const file of sources) {
+        const raw = readFileSync(file, "utf8");
+        const src = stripLiterals(raw);
+        if (/\bconsumeOAuthState\s*\(/.test(src)) usesStateCookie = true;
+        // 정의 형태를 묻지 않는다 — function 선언·화살표 상수 둘 다.
+        const def = src.match(/(?:function\s+consumeOAuthState\b|consumeOAuthState\s*[:=][^=]*=>)/);
+        if (def) consumeDef = {file, src, raw, at: def.index};
+    }
+
+    if (usesStateCookie && !consumeDef) {
+        errors.push(
+            `[X3] consumeOAuthState 를 부르는 곳은 있는데 **정의를 찾지 못했습니다** — state 쿠키 소각을` +
+                ` 기계로 확인할 수 없습니다. 정의를 \`src/**\` 안에 두세요(검사가 조용히 사라지지 않게).`,
+        );
+    }
+    if (consumeDef) {
+        // 소각은 **그 함수 본문 안에서만** 찾는다 — 상수 이름은 묻지 않고 `.delete(...)` 호출만 본다.
+        //
+        // ⚠ 고정 길이 창(초판은 600자)으로 자르면 양쪽으로 틀린다: 소각을 지워도 **뒤 함수**의
+        //    `.delete(` 를 잘못 집어 통과하고(이 파일에는 실제로 `jar.delete(ACCESS_COOKIE)` 가 있다),
+        //    반대로 함수 안 주석이 길면 소각이 창 밖으로 밀려 정상 코드가 error 가 된다
+        //    (`stripLiterals` 가 길이를 보존하므로 주석이 예산을 그대로 먹는다). 중괄호 짝으로 자른다.
+        const open = consumeDef.src.indexOf("{", consumeDef.at);
+        let fnBody = "";
+        for (let i = open, depth = 0; i >= 0 && i < consumeDef.src.length; i++) {
+            if (consumeDef.src[i] === "{") depth++;
+            else if (consumeDef.src[i] === "}" && --depth === 0) {
+                fnBody = consumeDef.src.slice(open + 1, i);
+                break;
+            }
+        }
+        if (!/\.delete\s*\(/.test(fnBody)) {
+            errors.push(
+                `[X3] ${relative(root, consumeDef.file)} 의 consumeOAuthState 가 state 쿠키를 소각하지` +
+                    ` 않습니다 — 대조 통과 여부와 무관하게 지워야 1회용이 됩니다. 남기면 유효기간 동안` +
+                    ` 리플레이가 가능합니다(memo118 §2).`,
+            );
+        }
+        // ⚠ **원문(raw)에 건다.** `stripLiterals` 를 거친 소스에서는 `sameSite: "strict"` 가
+        //    `sameSite: "      "` 라 이 검사가 **어떤 파일에서도 매치되지 않는다** — 실제로 그렇게
+        //    죽어 있었고(실측: `strict` 로 바꿔도 통과), memo118 §2 는 그 사이 "X3 가 막는다"고
+        //    적어 뒀다. 값 검사는 원문, 코드 구조 검사는 stripped — 이 구분을 지켜라.
+        if (/sameSite:\s*["']strict["']/i.test(consumeDef.raw)) {
+            errors.push(
+                `[X3] ${relative(root, consumeDef.file)} 가 쿠키를 sameSite: "strict" 로 답니다 —` +
+                    ` authorize 리다이렉트로 **돌아올 때** 쿠키가 안 실려 정상 로그인이 깨집니다. 이 쿠키의` +
+                    ` 방어력은 SameSite 가 아니라 httpOnly + 서버 대조에서 나옵니다.`,
             );
         }
     }

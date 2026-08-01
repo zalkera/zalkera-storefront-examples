@@ -67,6 +67,43 @@
 - 세션·쓰기·개인화 UI 는 클라이언트 컴포넌트(아일랜드)로 내리고, 공개 SEO 페이지(홈·목록·상세·콘텐츠)는 ISR/static 으로 유지한다(요청마다 동적 SSR 금지).
 - `"use client"` 파일에서 `@zalkera/client` 나 서버 클라이언트 싱글턴을 **값으로** import 하지 마라(타입만 `import type` 으로). baseUrl·토큰 노출을 막는 경계다.
 
+## BFF 라우트 — 교차사이트 위조 가드 (지우지 마라)
+
+**변이 메서드(`POST`·`PUT`·`PATCH`·`DELETE`)를 export 하는 라우트 핸들러는 본문의 첫 구문이 가드여야 한다.**
+막는 것은 `evil.example` 의 자동제출 `<form>` 이 브라우저를 `POST https://이사이트/api/...` 로 **직접**
+보내는 경로다. 그 경로에서는 우리 클라이언트 번들이 **한 줄도 실행되지 않으므로** `sessionStorage` 로는
+못 막는다 — 서버가 볼 수 있는 증거는 요청 헤더뿐이다. 실제로 실행으로 증명된 공격이다.
+
+```ts
+export async function POST(req: Request) {
+    const blocked = assertSameOrigin(req);      // ① 첫 구문. 앞에 아무것도 두지 마라
+    if (blocked) return blocked;
+    const badType = assertJsonContentType(req); // ③ 본문을 읽는 라우트만
+    if (badType) return badType;
+    ...
+}
+```
+
+- **왜 "첫 구문"인가**: `cookies()` 변이는 뒤에 만드는 `NextResponse` 에 그대로 합류한다. 가드보다 앞에
+  쿠키를 쓰면 **403 차단 응답에 `Set-Cookie` 가 실려** 방어가 무의미해진다(실측 재현됨).
+- **가드를 감싸지 마라.** 헬퍼로 한 겹 두르거나(`const guard = (r) => assertSameOrigin(r)`) 중첩 함수 안에
+  넣으면 검사기가 못 따라가 **error 로 막는다**(안전한 방향의 실패다). 부르는 자리에서 직접 불러라.
+  `try { … }` 로 감싼 본문은 괜찮다 — 가드가 여전히 먼저 돈다.
+- **읽기 `GET` 은 면제**다. 단 그 근거가 "이 코드베이스에 CORS 헤더가 0건이라 교차 오리진 JS 가 응답을
+  못 읽는다"이므로 — **`Access-Control-Allow-Origin` 을 추가하지 마라.** 면제의 전제가 무너진다.
+- **정당한 예외**는 파일 **상단**에 `// zalkera-allow-cross-origin: <이유 한 줄>`. 검사기가 면제 목록을
+  항상 출력한다(조용히 늘지 않게). 이유가 두 줄이면 목록에 잘려 찍히니 한 줄로 쓰고 부연은 마커 밖에.
+- **`Sec-Fetch-Site` 를 `!== "cross-site"` 로 쓰지 마라.** 플랫폼 존이 `{tenant}.{zone}` 이라 **테넌트끼리
+  서로 `same-site`** 다 — 그 관용구는 테넌트-대-테넌트 위조를 열어 둔 채 "고쳤다"고 기록된다.
+- **스킴을 비교하지 마라.** 서빙 오케스트레이터가 `x-forwarded-proto: "http"` 를 넣는데 공개 스킴은
+  https 다. 비교하면 전 사이트가 즉시 죽는다. 호스트만 본다.
+- 소셜 로그인은 **서버 `state` 쿠키 대조**가 한 겹 더 있다(`/api/auth/social/start` 발행 → 교환에서 대조 →
+  즉시 소각). `CallbackHandler` 의 `sessionStorage` 대조는 **UX 지 방어가 아니다** — 그걸 방어로 세지 마라.
+  state 쿠키는 `sameSite: "lax"` 여야 한다(`strict` 면 authorize 복귀에서 안 실려 로그인이 깨진다).
+- `readJsonBody` 는 **형식 가드**다. `Content-Type` 을 보지 않으므로 CSRF 방어로 쓰지 마라.
+
+판정 규칙의 근거는 `src/lib/crossOrigin.ts` 주석에, 관용구는 `src/lib/http.ts` 에 있다.
+
 ## 레시피 ↔ 이 레포의 구현 좌표 (교본으로 읽을 때)
 
 레시피는 `@zalkera/client` 의 **`llms.txt` §5.1(산출물 규범)** 이다(`npm install` 후 `node_modules/@zalkera/client/llms.txt`). 아래는 그 규범이 **이 레포 어디에 구현돼 있는지**의 좌표다 — 규범을 새로 만드는 자리가 아니라 찾아가는 자리이고, 규범의 정본은 llms.txt 와 그것이 운반하는 백엔드 `doc/contracts/aeo-surface-guarantees.json` 이다(사본을 여기 늘리지 않는다).
@@ -184,7 +221,7 @@ root layout(`src/app/layout.tsx`)이 `parseThemeColors(...)` 로 테넌트 색�
 
 검사기가 **둘**이고, 재는 대상이 다르다. 하나로 합치지 마라 — 소스가 규약대로여도 산출물에 그래프가 안 나갈 수 있고, 그 반대도 가능하다.
 
-**① 소스 검사 — `npm run validate`**(`scripts/validate-storefront.mjs`, CI 게이트). 어휘 사본이 여러 레포에 흩어져 있어 사람 주석 규약으로는 갈라짐을 못 막으므로, 기계가 센다 — **C2** 는 렌더러 switch 가 `SECTION_CONTRACT` 를 덮는지, **S6** 는 남의 토큰 어휘가 섞였는지, **N1~N5** 는 위 콘텐츠 좌표의 형상(매니페스트·섹션 형상·참조 무결·`sortOrder` 잔존·id 형 직기입)을 본다. 이 레포는 `tailwind-tokens`·`content=source` 둘 다 선언한 레포라 그 위반이 **에러**로 막힌다. 최종 판정은 push 후 CI(GitHub Actions) 결과다.
+**① 소스 검사 — `npm run validate`**(`scripts/validate-storefront.mjs`, CI 게이트). 어휘 사본이 여러 레포에 흩어져 있어 사람 주석 규약으로는 갈라짐을 못 막으므로, 기계가 센다 — **C2** 는 렌더러 switch 가 `SECTION_CONTRACT` 를 덮는지, **S6** 는 남의 토큰 어휘가 섞였는지, **N1~N5** 는 위 콘텐츠 좌표의 형상(매니페스트·섹션 형상·참조 무결·`sortOrder` 잔존·id 형 직기입)을 본다. **X1** 은 변이 라우트 핸들러마다 교차사이트 가드가 **본문 첫 구문**에 있고 반환값이 차단에 쓰이는지(위 BFF 절), **X2** 는 읽기 GET 면제의 전제인 "CORS 헤더 0건"이 유지되는지, **X3** 는 OAuth state 쿠키의 1회용 소각과 `sameSite` 를 본다 — X1 은 파일이 아니라 **핸들러 본문 단위**로 재므로 화살표 export·`GET` 에만 건 가드·반환값 버리기·가드를 뒤로 미루기·주석이나 문자열로 위장한 가드가 전부 걸린다. 이 레포는 `tailwind-tokens`·`content=source` 둘 다 선언한 레포라 그 위반이 **에러**로 막힌다. 최종 판정은 push 후 CI(GitHub Actions) 결과다.
 
 **이 문서 자신도 검사 대상이다 — `D1`.** validator 가 이 파일의 백틱 경로가 실재하는지 센다. 죽은 좌표는 문서 위생 문제가 아니라 **토큰 원가**이기 때문이다: codegen 이 이 문서를 가장 먼저 읽으므로, 없는 파일을 가리키면 에이전트가 찾다가 제 좌표를 짜 버린다(2026-07-30 실측에서 실제로 났다 — 페이지 신설 지시에서 콘텐츠 계약 대신 라우트를 새로 짰다). **좌표를 고칠 때는 파일을 옮긴 커밋과 같은 커밋에서 고쳐라.** `D2` 는 짝 방향으로, `llms.txt` 가 본보기로 지목한 경로가 이 레포에 있는지 센다(본보기 레포 전용).
 

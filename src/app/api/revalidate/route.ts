@@ -1,5 +1,10 @@
-// zalkera-allow-cross-origin: 자기 자격증명을 들고 온다 — `x-oneque-revalidate-secret` 헤더가
-// 없으면 401 이라 앰비언트 권한(쿠키)에 기대지 않는다. 즉 CSRF 개념이 성립하지 않는다(memo118 §5).
+// zalkera-allow-cross-origin: 시크릿 헤더가 없으면 401 — 앰비언트 권한에 기대지 않는다(memo118 §5).
+//
+// ⚠ 마커의 이유는 **한 줄**이다 — 검사기가 면제 목록에 출력하는 것이 그 한 줄이라, 두 줄로 쓰면
+// 목록에 문장이 잘린 채 찍힌다(그렇게 잘려 있었다). 부연은 아래처럼 마커 밖 주석으로 적는다.
+//
+// 자격증명은 `x-oneque-revalidate-secret` 헤더이고, 없으면 401 이라 쿠키에 기대지 않는다.
+// 즉 CSRF 개념이 성립하지 않는다.
 // 근거가 "브라우저가 아니다"가 **아니라는** 점이 중요하다 — 브라우저에서 불려도 시크릿이 없으면 막힌다.
 import {NextResponse} from "next/server";
 import {revalidatePath, revalidateTag} from "next/cache";

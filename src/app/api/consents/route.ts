@@ -1,6 +1,6 @@
 import {NextResponse} from "next/server";
 import {zalkera} from "@/lib/zalkera";
-import {assertSameOrigin, errorResponse} from "@/lib/http";
+import {assertJsonContentType, assertSameOrigin, errorResponse, invalidBody, readJsonBody} from "@/lib/http";
 import {getAccessToken} from "@/lib/session";
 
 /**
@@ -21,9 +21,14 @@ export async function GET() {
 export async function POST(req: Request) {
     const blocked = assertSameOrigin(req);
     if (blocked) return blocked;
+    // 본문을 읽는 라우트라 ③층(CT 강제)도 건다 — `<form enctype="text/plain">` 운반체를 막는다.
+    const badType = assertJsonContentType(req);
+    if (badType) return badType;
     const accessToken = await getAccessToken();
     if (!accessToken) return NextResponse.json({message: "로그인이 필요합니다."}, {status: 401});
-    const {consents} = await req.json();
+    const body = await readJsonBody(req);
+    if (!body) return invalidBody();
+    const {consents} = body;
     try {
         const message = await zalkera.updateConsents(accessToken, consents);
         return NextResponse.json({message});
