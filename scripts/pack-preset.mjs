@@ -28,7 +28,7 @@
  *
  * 사용:
  *   node scripts/pack-preset.mjs                    # 전체 테마, version=DEFAULT_VERSION
- *   node scripts/pack-preset.mjs biz-lead           # 특정 테마만
+ *   node scripts/pack-preset.mjs shop-goods         # 특정 테마만
  *   node scripts/pack-preset.mjs --version 1.1.0
  *
  * 출력: dist-presets/{code}-{version}.zip + sha256(적재 API 의 `expectedSha256` 로 그대로 보낸다).

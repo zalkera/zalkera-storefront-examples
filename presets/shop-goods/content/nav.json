@@ -1,0 +1,17 @@
+{
+    "header": [
+        {
+            "label": "홈",
+            "href": "/"
+        },
+        {
+            "label": "전체 상품",
+            "href": "/products"
+        },
+        {
+            "label": "배송·교환",
+            "href": "/shipping"
+        }
+    ],
+    "footer": []
+}

@@ -11,7 +11,7 @@
  * 사용: node scripts/gen-preset-assets.mjs [테마코드...]   (인자 없으면 전체)
  * 결정론적이라 재실행해도 바이트가 같다 — 재생성이 팩 sha256 을 흔들지 않는다.
  */
-import {mkdirSync, writeFileSync} from "node:fs";
+import {mkdirSync, readFileSync, writeFileSync} from "node:fs";
 import {dirname, join} from "node:path";
 import {fileURLToPath} from "node:url";
 import {Canvas, hex, rng} from "./preset-canvas.mjs";
@@ -36,14 +36,29 @@ const THEMES = {
         logos: ["NOVARC", "PELIQ", "MARUDO", "KUBRIX", "VANTIO"],
         avatars: ["K", "J"],
     },
-    "biz-lead": {
-        primary: "#0f766e",
-        accent: "#5eead4",
-        surface: "#f8fafc",
-        deep: "#0f172a",
-        arts: [["hero.png", 1200, 800, "orbit"]],
+    /**
+     * 커머스(재화 판매). 따뜻한 점토색 계열로 잡아 앞의 둘(파랑=정보형·청록=전환형)과 인상이 안 겹치게 한다.
+     *
+     * 상품 커버(`goods-*.png`)가 **시드 상품 `imageAsset`** 이고 나머지는 섹션 이미지다. 팩이 둘을 다른
+     * 자리로 보내므로(`.zalkera/assets/` vs `public/`) 생성 후 배치가 갈린다 — §아래 `generate` 주석 참조.
+     * 커버를 4:3 으로 두는 것은 상품 카드가 그 비율로 자르기 때문이다.
+     */
+    "shop-goods": {
+        primary: "#b45309",
+        accent: "#fdba74",
+        surface: "#fffbf5",
+        deep: "#1c1917",
+        arts: [
+            ["hero.png", 1200, 800, "shelf"],
+            ["story.png", 1000, 750, "bands"],
+            ["goods-cover.png", 800, 600, "object", {variant: 0}],
+            ["goods-mug.png", 800, 600, "object", {variant: 1}],
+            ["goods-candle.png", 800, 600, "object", {variant: 2}],
+            ["goods-towel.png", 800, 600, "object", {variant: 3}],
+            ["goods-tray.png", 800, 600, "object", {variant: 4}],
+        ],
         logos: [],
-        avatars: ["S", "H"],
+        avatars: ["D", "N"],
     },
     /**
      * 뷰티(네일). 색은 `BeautyStarterService.Vertical.NAIL` 의 팔레트 **바이트 그대로**다 — 그 KDoc 이
@@ -189,6 +204,65 @@ function swatch(canvas, palette, random, {variant = 0, stage = 0} = {}) {
     scatter(canvas, deep, random, 40);
 }
 
+/**
+ * 진열대 — 재화를 파는 가게의 첫 화면. 선반 두 단 위에 물건이 놓인 실루엣을 추상 도형으로 세운다.
+ * "무엇을 파는지"를 지어내지 않으면서 진열의 리듬만 보여주는 것이 목적이고, 고객은 이 그림을 교체한다.
+ */
+function shelf(canvas, palette, random) {
+    const {primary, accent, deep} = palette;
+    canvas.circle(canvas.width * 0.78, canvas.height * 0.28, canvas.width * 0.24, accent, 0.32);
+    for (let row = 0; row < 2; row++) {
+        const shelfY = canvas.height * (0.46 + row * 0.28);
+        // 선반 판.
+        canvas.roundRect(canvas.width * 0.12, shelfY, canvas.width * 0.76, 12, 6, deep, 0.22);
+        for (let i = 0; i < 4; i++) {
+            // 물건 높이·폭을 칸마다 달리해 "같은 물건 반복"으로 안 읽히게 한다.
+            const h = canvas.height * [0.16, 0.11, 0.19, 0.13][(i + row) % 4];
+            const w = canvas.width * [0.11, 0.14, 0.09, 0.12][(i + row) % 4];
+            const x = canvas.width * (0.16 + i * 0.19);
+            const lead = (i + row) % 3 === 0; // 한 칸만 브랜드색으로 세운다 — 시선이 갈 자리.
+            canvas.roundRect(x, shelfY - h, w, h, w * 0.22, lead ? primary : deep, lead ? 0.9 : 0.16);
+            canvas.roundRect(x + w * 0.24, shelfY - h * 0.7, w * 0.52, 8, 4, lead ? accent : deep, lead ? 0.85 : 0.24);
+        }
+    }
+    canvas.ring(canvas.width * 0.22, canvas.height * 0.2, canvas.width * 0.13, 12, primary, 0.26);
+    scatter(canvas, deep, random, 80);
+}
+
+/**
+ * 상품 커버 자리표시자. **상품 사진이 아니다** — 바닥 그림자 위에 물건 하나를 추상 도형으로 세우고
+ * `variant` 로 실루엣만 달리한다. 실제 상품을 지어내지 않으면서 "여기 상품 사진이 들어간다"는 자리를
+ * 보여주는 것이 목적이다(§7 금지선: 식별 가능 인물 0 · 실존 상표 0).
+ */
+function object(canvas, palette, random, {variant = 0} = {}) {
+    const {primary, accent, deep} = palette;
+    const cx = canvas.width * 0.5;
+    const baseY = canvas.height * 0.72;
+    canvas.circle(cx, canvas.height * 0.46, canvas.width * 0.3, accent, 0.24);
+    // 바닥 그림자 — 물건이 떠 보이지 않게.
+    canvas.circle(cx, baseY + 10, canvas.width * 0.22, deep, 0.1);
+
+    // variant 가 실루엣을 정한다: 폭·높이·모서리·손잡이 유무.
+    const [wf, hf, roundf, handle] = [
+        [0.34, 0.34, 0.1, false], // 접힌 천 — 넓고 낮다
+        [0.24, 0.3, 0.16, true], // 컵 — 손잡이가 붙는다
+        [0.2, 0.42, 0.12, false], // 초 — 좁고 높다
+        [0.38, 0.26, 0.08, false], // 수건 — 가장 넓다
+        [0.44, 0.16, 0.3, false], // 트레이 — 납작하다
+    ][variant % 5];
+
+    const w = canvas.width * wf;
+    const h = canvas.height * hf;
+    const x = cx - w / 2;
+    const y = baseY - h;
+    canvas.roundRect(x, y, w, h, Math.min(w, h) * roundf, primary, 0.9);
+    // 띠 하나 — 라벨·결의 자리.
+    canvas.roundRect(x, y + h * 0.62, w, h * 0.14, 0, deep, 0.14);
+    if (handle) canvas.ring(x + w + w * 0.16, y + h * 0.48, w * 0.24, w * 0.11, primary, 0.9);
+
+    scatter(canvas, deep, random, 36);
+}
+
 /** 아주 옅은 점 격자 — 평평한 그라디언트에 질감을 준다(고정 시드라 결정론 유지). */
 function scatter(canvas, color, random, count) {
     for (let i = 0; i < count; i++) {
@@ -196,7 +270,7 @@ function scatter(canvas, color, random, count) {
     }
 }
 
-const COMPOSITIONS = {stack, bands, orbit, petal, bloom, swatch};
+const COMPOSITIONS = {stack, bands, orbit, petal, bloom, swatch, shelf, object};
 
 function art(width, height, palette, kind, opts = {}) {
     const canvas = new Canvas(width, height);
@@ -268,6 +342,20 @@ function mix(fromHex, toHex, t) {
     return a.map((v, i) => Math.round(v + (b[i] - v) * t));
 }
 
+/**
+ * 시드가 상품 커버로 쓰는 파일명 — **시드가 정본**이다. 여기서 목록을 따로 관리하면 시드와 갈라지고,
+ * 갈라진 순간 팩 게이트가 "안 쓰는 에셋"으로 잡거나(양성) 커버가 섹션 자리로 새어 나간다(음성).
+ * 상품이 없는 테마는 빈 집합이라 `assets/` 가 아예 안 생긴다(팩의 기대와 같다).
+ */
+function readSeedCovers(code) {
+    try {
+        const seed = JSON.parse(readFileSync(join(ROOT, "presets", code, "seed.json"), "utf8"));
+        return (seed.products ?? []).map((p) => p.imageAsset).filter(Boolean);
+    } catch {
+        return []; // 시드가 없는 테마 — 전부 섹션 이미지로 본다.
+    }
+}
+
 function generate(code) {
     const spec = THEMES[code];
     if (!spec) throw new Error(`알 수 없는 테마: ${code}`);
@@ -279,13 +367,26 @@ function generate(code) {
         primaryHex: spec.primary,
         surfaceHex: spec.surface,
     };
-    const dir = join(ROOT, "presets", code, "assets");
-    mkdirSync(dir, {recursive: true});
+    // ⚠ **거처가 둘이고 팩이 그 둘을 다른 자리로 보낸다**(pack v2):
+    //    `presets/<code>/assets/`  → zip `.zalkera/assets/` — **상품 커버 전용 풀**이다.
+    //    `presets/<code>/public/`  → zip `public/` — 섹션 이미지(히어로·후기 아바타 등).
+    //
+    // 초판은 **전부 `assets/` 로** 썼다. 팩이 v2 에서 갈라진 뒤에도 생성기가 안 따라가서, 재생성하면
+    // 섹션 이미지가 `assets/` 로 되돌아가고 팩의 참조 무결성 게이트("아무 상품도 안 쓰는 에셋")에
+    // 걸린다 — 즉 **"재생성은 결정론적이라 안전하다"는 계약이 조용히 깨져 있었다**(실측: 이 파일을
+    // import 하는 것만으로 전 테마가 재생성돼 stray 가 21개 생겼다).
+    //
+    // 판별은 이름으로 한다: 시드 상품이 `imageAsset` 으로 가리키는 파일만 상품 커버다.
+    const coverNames = new Set(readSeedCovers(code));
+    const assetDir = join(ROOT, "presets", code, "assets");
+    const publicDir = join(ROOT, "presets", code, "public", "images");
 
     const written = [];
     const emit = (name, canvas) => {
+        const dir = coverNames.has(name) ? assetDir : publicDir;
+        mkdirSync(dir, {recursive: true});
         writeFileSync(join(dir, name), canvas.toPng());
-        written.push(name);
+        written.push(coverNames.has(name) ? `assets/${name}` : `public/images/${name}`);
     };
 
     for (const [name, width, height, kind, opts] of spec.arts) emit(name, art(width, height, palette, kind, opts));
