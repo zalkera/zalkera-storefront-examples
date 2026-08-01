@@ -86,6 +86,7 @@ export function HeroSection({config}: {config: unknown}) {
                 {/* 원본의 플로팅 카드 — 회사의 3대 사업 축 */}
                 <div className="relative hidden h-[500px] lg:block">
                     {CARDS.map((card) => (
+                        // zalkera-allow-inline-style: 카드마다 다른 좌표·지연이라 유틸리티 클래스로 표현되지 않는다(값이 데이터다).
                         <div
                             key={card.title}
                             className="float-card absolute w-[220px] rounded-2xl bg-surface px-7 py-6 shadow-xl"
