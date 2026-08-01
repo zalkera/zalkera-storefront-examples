@@ -824,6 +824,13 @@ function collectPackSource(code) {
     const out = [];
     for (const path of [...tracked].sort()) {
         const abs = join(ROOT, path);
+        // 원장에는 있는데 워킹트리에 없다 = 지워 놓고 커밋 안 한 상태. 평소엔 DIRTY_TREE 가 먼저 잡지만
+        // `--allow-dirty` 로 우회하면 여기까지 온다 — 던지지 말고 무슨 일인지 말한다(실측으로 ENOENT
+        // 스택트레이스가 났고, 그건 게이트 메시지가 아니다).
+        if (!existsSync(abs)) {
+            fail("PACK_SRC_DELETED", `${path}: git 원장에는 있는데 파일이 없습니다 — 삭제를 커밋하거나 되돌리십시오`);
+            continue;
+        }
         if (lstatSync(abs).isSymbolicLink()) {
             fail("SOURCE_SYMLINK", `${path}: 소스에 심링크를 둘 수 없습니다 — 대상 내용이 zip 에 실립니다`);
             continue;

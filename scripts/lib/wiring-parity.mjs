@@ -151,6 +151,19 @@ export function checkWiringParity(root = ROOT) {
         }
         for (const [rel, seen] of [...byPath].sort()) {
             if (seen.size > 1) problems.push(driftMessage(rel, seen));
+            // ⚠ **삭제도 드리프트다**(깨뜨려 확인에서 잡힌 구멍). "한 팩에만 있으면 새 능력"의 뒤집힌
+            //    쪽 — 여러 벌이 가진 파일이 한 벌에서만 사라졌으면 그것은 능력 추가가 아니라 **가드
+            //    제거**다. 실측: `app/media/[id]/route.ts` 를 한 팩에서 지웠더니 남은 넷이 동일해서
+            //    통과했다. 기준은 위 `WIRING_FILES` 와 같다 — 지우는 것이 고치는 것보다 쉬우면 안 된다.
+            const holders = [...seen.values()].flat();
+            if (holders.length > 1 && holders.length < trees.length) {
+                const missing = trees.map((t) => t.name).filter((n) => !holders.includes(n));
+                problems.push(
+                    `[WIRING_MISSING] ${rel} 이 ${missing.join(", ")} 에만 없습니다 — 다른 ${holders.length}벌은 갖고 ` +
+                        "있습니다. 전송·인증 배선을 한 벌에서만 지우는 것은 그 사이트에서만 가드를 끄는 일입니다" +
+                        "(정말 그 능력을 통째로 뺀 것이라면 그 계열 전부를 빼고 이 목록을 다시 판정하십시오).",
+                );
+            }
         }
     }
     return problems;
