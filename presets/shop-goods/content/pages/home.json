@@ -38,7 +38,6 @@
         {
             "type": "SERVICE_MENU",
             "config": {
-                "title": "많이들 고르는 것",
                 "products": ["linen-cover", "clay-mug", "soy-candle", "cotton-towel", "oak-tray"]
             }
         },

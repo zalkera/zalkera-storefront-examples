@@ -21,11 +21,15 @@ import {zalkera} from "@/lib/zalkera";
 export async function SectionList({sections}: {sections: ContentSection[]}) {
     // 상품 참조 섹션이 있을 때만 1회 조회. 공개 API 에 handle 필터가 없어 목록을 맵으로 만든다.
     // 실패해도 페이지는 살아야 한다 — 그 섹션들만 빠진다.
+    //
+    // ⚠ **유형으로 거르지 마라.** 초판은 `productType: "SERVICE"` 를 박아 뒀는데, 그러면 재화를 파는
+    //    사이트에서 이 맵이 통째로 비어 상품 참조 섹션이 **조용히 사라진다**(`ServiceMenuSection` 이
+    //    `items.length === 0` 에서 `return null`). 실측으로 커머스 프리셋의 홈에서 상품 카드 5종과
+    //    `ItemList` JSON-LD 가 전부 없어졌고, 예약 프리셋에서만 우연히 맞아 발견이 늦었다.
+    //    섹션의 상품 참조는 **명시 핸들**이라 유형 필터가 애초에 불필요하다(`/products` 도 무필터다).
     let products = new Map<string, ProductSummary>();
     if (needsProducts(sections)) {
-        const list = await zalkera
-            .listProducts({productType: "SERVICE", size: 100}, {tags: ["products"]})
-            .catch(() => null);
+        const list = await zalkera.listProducts({size: 100}, {tags: ["products"]}).catch(() => null);
         if (list) products = new Map(list.content.map((p) => [p.slug, p]));
     }
 

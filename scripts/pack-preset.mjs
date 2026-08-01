@@ -251,8 +251,18 @@ const SEED_PRODUCT_TYPES = new Set(["SERVICE", "PHYSICAL"]);
  * 초기 재고를 명시로 요구하는 유형 — 백엔드가 `ProductType.defaultTrackInventory` 로 판별하는 그 집합이다.
  * 여기에 드는 유형은 재고추적이 켜진 채 태어나므로, `stock` 이 없거나 0 이면 **전 상품 품절 진열 +
  * JSON-LD `OutOfStock`** 이 된다(memo137 §2 D2).
+ *
+ * ⚠ **여기는 리터럴이고 백엔드는 파생이다**(심의 기능 축 W2). 추적 ON 인 신유형이 추가되면 백엔드는
+ * 자동으로 재고를 요구하는데 이 목록은 안 따라오므로, 팩은 green 인데 개시가 중단된다 — 시끄러운
+ * 실패라 사고는 아니지만 **갈림 지점**이다. 유형이 늘면 이 줄을 같이 고쳐라.
  */
 const STOCK_REQUIRED_TYPES = new Set(["PHYSICAL"]);
+
+/**
+ * 착지 컬럼이 `varchar(255)`/`varchar(100)` 인 텍스트의 상한 — 백엔드 `SiteSeedCaps` 와 **동수**.
+ * 길이를 팩에서도 재는 이유는 백엔드와 같다: 안 재면 S3 적재 뒤 DB 제약에서 터져 미디어 고아가 남는다.
+ */
+const MAX_TEXT_COLUMN = 255;
 
 /** 상품 1건 초기 재고 상한. 백엔드 `SiteSeedCaps.MAX_STOCK_PER_PRODUCT` 와 **동수 유지**(갈리면 검출이 죽는다). */
 const MAX_STOCK_PER_PRODUCT = 999;
@@ -278,6 +288,13 @@ function validateProducts(code, products) {
         }
         if (handles.has(handle)) fail("SEED_PRODUCT", `${code}: handle 중복 — ${handle}`);
         handles.add(handle);
+
+        // 길이 — 백엔드와 동수. 넘치면 개시가 S3 적재 뒤 DB 제약에서 터진다(미디어 고아).
+        for (const [field, value] of [["handle", handle], ["name", product.name]]) {
+            if (typeof value === "string" && value.length > MAX_TEXT_COLUMN) {
+                fail("SEED_PRODUCT", `${code}/${handle}: ${field} 길이 ${value.length} > ${MAX_TEXT_COLUMN}`);
+            }
+        }
 
         if (!SEED_PRODUCT_TYPES.has(product.type)) {
             fail(
