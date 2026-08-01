@@ -238,9 +238,24 @@ function assertGuaranteesCarried() {
  */
 const HANDLE_FORMAT = /^[a-z0-9-]+$/;
 
-/** v1 개방 범위. `PHYSICAL` 은 재고·배송 시드 표현이 미정이라 열면 "재고 0 품절 진열"이 되고(개방 = 오너 결정 1),
- *  `DIGITAL` 은 이행 엔진 자체가 후속 페이즈다(§2.2·§5-9). */
-const SEED_PRODUCT_TYPES = new Set(["SERVICE"]);
+/**
+ * 시드에 개방된 상품 유형. **화이트리스트다** — 새 유형이 자동으로 열리지 않는다.
+ *
+ * `DIGITAL` 이 빠진 것은 누락이 아니라 결정이다(memo137 §5-3): 이행 엔진(다운로드·라이선스 전달)이
+ * 후속 페이즈라, 열면 "결제는 됐는데 아무것도 안 오는" 조용한 실패가 즉시 상용 가능해진다.
+ * `PHYSICAL` 은 2026-08-01 오너 확정으로 열렸다(memo119 §2.2 의 "오너 결정 1" 소진).
+ */
+const SEED_PRODUCT_TYPES = new Set(["SERVICE", "PHYSICAL"]);
+
+/**
+ * 초기 재고를 명시로 요구하는 유형 — 백엔드가 `ProductType.defaultTrackInventory` 로 판별하는 그 집합이다.
+ * 여기에 드는 유형은 재고추적이 켜진 채 태어나므로, `stock` 이 없거나 0 이면 **전 상품 품절 진열 +
+ * JSON-LD `OutOfStock`** 이 된다(memo137 §2 D2).
+ */
+const STOCK_REQUIRED_TYPES = new Set(["PHYSICAL"]);
+
+/** 상품 1건 초기 재고 상한. 백엔드 `SiteSeedCaps.MAX_STOCK_PER_PRODUCT` 와 **동수 유지**(갈리면 검출이 죽는다). */
+const MAX_STOCK_PER_PRODUCT = 999;
 
 function validateProducts(code, products) {
     if (!Array.isArray(products)) {
@@ -273,6 +288,32 @@ function validateProducts(code, products) {
         // 가격은 **문자열**이다(BigDecimal — 부동소수 회피). 숫자로 적으면 백엔드 strict 파싱이 개시를 중단한다.
         if (typeof product.price !== "string" || !/^\d+(\.\d+)?$/.test(product.price)) {
             fail("PRODUCT_PRICE", `${code}/${handle}: price 는 음수 아닌 십진 **문자열**이어야 합니다 — ${JSON.stringify(product.price)}`);
+        }
+        // 초기 재고(memo137). 백엔드 `SiteSeedPlanner.validateStock` 과 **같은 규칙**이다 — 갈리면
+        // 팩은 통과하는데 개시가 중단된다.
+        if (STOCK_REQUIRED_TYPES.has(product.type)) {
+            if (product.stock == null) {
+                fail(
+                    "PRODUCT_STOCK",
+                    `${code}/${handle}: ${product.type} 은 초기 재고(stock) 명시가 필수입니다 — 없으면 재고추적이 켜진 채` +
+                        ` onHand 0 으로 태어나 전 상품이 품절로 진열됩니다`,
+                );
+            } else if (!Number.isInteger(product.stock)) {
+                // 문자열 "40" 은 백엔드가 관용 수용할 수 있으나, 팩에서 정수로 못박아야 형식이 안 흔들린다.
+                fail("PRODUCT_STOCK", `${code}/${handle}: stock 은 **정수**여야 합니다 — ${JSON.stringify(product.stock)}`);
+            } else if (product.stock <= 0) {
+                fail("PRODUCT_STOCK", `${code}/${handle}: stock 0 은 곧 품절 진열입니다 — 견본 재고를 명시하십시오`);
+            } else if (product.stock > MAX_STOCK_PER_PRODUCT) {
+                fail(
+                    "PRODUCT_STOCK",
+                    `${code}/${handle}: stock ${product.stock} > ${MAX_STOCK_PER_PRODUCT} — 네 자리 재고는 견본이 아니라 데이터 이관입니다`,
+                );
+            }
+        } else if (product.stock != null) {
+            fail(
+                "PRODUCT_STOCK",
+                `${code}/${handle}: ${product.type} 은 무한재고라 stock 이 무의미합니다 — 적으면 백엔드가 개시를 중단합니다`,
+            );
         }
         // 섹션 config 와 같은 규칙 — 상품의 커버도 `imageAsset`(파일명)이지 `imageAssetId`(숫자)가 아니다(§2.6-5).
         for (const path of collectIdKeys(product)) {

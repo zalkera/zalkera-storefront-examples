@@ -14,6 +14,7 @@
             "type": "PHYSICAL",
             "name": "워싱 린넨 베개 커버",
             "price": "32000",
+            "stock": 40,
             "description": "한 번 빨아서 보내 드립니다. 처음부터 뻣뻣하지 않고, 쓸수록 더 부드러워집니다.\n50×70cm 표준 사이즈입니다.",
             "imageAsset": "goods-cover.png"
         },
@@ -22,6 +23,7 @@
             "type": "PHYSICAL",
             "name": "무광 도자 머그",
             "price": "28000",
+            "stock": 60,
             "description": "손에 쥐었을 때 무게가 남는 두께로 만들었습니다. 280ml 로 커피 한 잔이 딱 맞습니다.\n전자레인지와 식기세척기를 씁니다.",
             "imageAsset": "goods-mug.png"
         },
@@ -30,6 +32,7 @@
             "type": "PHYSICAL",
             "name": "소이 캔들 · 삼나무",
             "price": "24000",
+            "stock": 80,
             "description": "콩기름만 씁니다. 그을음이 거의 없고 40시간 정도 탑니다.\n향이 세지 않아 방에 두고 일해도 머리가 아프지 않습니다.",
             "imageAsset": "goods-candle.png"
         },
@@ -38,6 +41,7 @@
             "type": "PHYSICAL",
             "name": "워싱 코튼 타월",
             "price": "16000",
+            "stock": 120,
             "description": "얇은데 잘 마릅니다. 욕실에 걸어 두면 다음 날 아침에 이미 말라 있습니다.\n40×80cm, 낱장 판매입니다.",
             "imageAsset": "goods-towel.png"
         },
@@ -46,6 +50,7 @@
             "type": "PHYSICAL",
             "name": "오크 원목 트레이",
             "price": "46000",
+            "stock": 25,
             "description": "한 덩이를 깎아 만들어 이어 붙인 자국이 없습니다. 물에 오래 담그지만 않으면 오래 갑니다.\n32×22cm 입니다.",
             "imageAsset": "goods-tray.png"
         }
