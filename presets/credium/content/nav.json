@@ -1,0 +1,13 @@
+{
+  "header": [
+    {
+      "label": "회사소개",
+      "href": "/about"
+    },
+    {
+      "label": "문의",
+      "href": "/contact"
+    }
+  ],
+  "footer": []
+}

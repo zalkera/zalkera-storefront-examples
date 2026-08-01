@@ -1,0 +1,116 @@
+{
+  "title": "홈",
+  "sections": [
+    {
+      "type": "HERO",
+      "config": {
+        "eyebrow": "AX · AI Transformation",
+        "title": "믿을 수 있는 AI 전환, 크레디움",
+        "subtitle": "크레디움은 신뢰할 수 있는 AI 전환으로 비즈니스의 성장을 키웁니다. 이 웹사이트도 AI 협업으로 제작되었습니다.",
+        "ctaLabel": "문의하기",
+        "ctaHref": "/contact",
+        "asset": "/images/brands/credium-og.svg"
+      }
+    },
+    {
+      "type": "FEATURE_GRID",
+      "config": {
+        "title": "AX, AI 전환을 위한 서비스",
+        "items": [
+          {
+            "icon": "globe",
+            "title": "웹 애플리케이션 개발",
+            "body": "최신 프레임워크를 활용한 확장 가능한 웹 솔루션을 제공합니다. 반응형 UI/UX 디자인과 고성능 최적화."
+          },
+          {
+            "icon": "compass",
+            "title": "AX 전환 컨설팅",
+            "body": "조직 운영 전반을 AI 중심으로 재설계하는 AI Transformation. 데이터·인프라 진단, AI 워크플로우 구축, AI 리터러시 교육."
+          },
+          {
+            "icon": "layers",
+            "title": "클라우드 인프라",
+            "body": "안정적이고 확장 가능한 클라우드 아키텍처 구축. DevOps 자동화와 마이크로서비스 아키텍처."
+          },
+          {
+            "icon": "lightbulb",
+            "title": "AI/ML 솔루션",
+            "body": "인공지능과 머신러닝을 활용한 스마트 솔루션. 데이터 분석과 모델 운영까지 함께 봅니다."
+          }
+        ]
+      }
+    },
+    {
+      "type": "LOGO_WALL",
+      "config": {
+        "title": "크레디움이 만든 서비스 — 직접 기획·개발·운영하며 쌓은 경험을 고객의 비즈니스에 적용합니다",
+        "items": [
+          {
+            "asset": "/images/brands/road2gm.svg",
+            "name": "로드투지엠 — 그랜드마스터로 함께하는 여정 (2026~ 운영 중)"
+          },
+          {
+            "asset": "/images/brands/pincoin.svg",
+            "name": "핀코인 — 대한민국 대표 온라인 상품권 쇼핑몰 (2012~ 운영 중)"
+          },
+          {
+            "asset": "/images/brands/payoneque.svg",
+            "name": "페이원큐 — 결제·정산 자동화 플랫폼 (2025~ 운영 중)"
+          }
+        ]
+      }
+    },
+    {
+      "type": "TEXT_MEDIA",
+      "config": {
+        "title": "우리가 겪은 전환을, 고객의 비즈니스에",
+        "body": "조직의 모든 활동을 데이터로 표준화해 AI 학습과 판단의 기반을 만듭니다.\n\n클라우드·자동화 워크플로우로 AI가 실무에서 작동하는 확장 가능한 기반을 구축합니다.\n\nAI 리터러시를 높여 AI의 결과를 비즈니스 가치로 전환하는 역량을 더합니다.\n\n데이터 기반 의사결정과 실험·개선의 문화로 지속적인 혁신을 가능하게 합니다.",
+        "asset": "/images/logo.png",
+        "mediaSide": "right",
+        "ctaLabel": "회사 소개 보기",
+        "ctaHref": "/about"
+      }
+    },
+    {
+      "type": "FEATURE_GRID",
+      "config": {
+        "title": "AI가 일하는 방식 — 크레디움이 직접 만들고 지금도 운영하는 서비스에 그대로 적용한 방식입니다",
+        "items": [
+          {
+            "icon": "search",
+            "title": "요구사항 분석",
+            "body": "AI가 레퍼런스와 요구사항을 빠르게 분석해 최적의 방향을 제시합니다."
+          },
+          {
+            "icon": "layers",
+            "title": "설계 & 아키텍처",
+            "body": "전문가와 AI가 협업해 확장 가능한 구조와 UI/UX를 설계합니다."
+          },
+          {
+            "icon": "rocket",
+            "title": "고속 개발",
+            "body": "반복적인 코드 작성은 AI가 자동화하고, 개발자는 핵심 로직에 집중합니다."
+          },
+          {
+            "icon": "shield-check",
+            "title": "검증 & 배포",
+            "body": "AI 기반 테스트로 품질을 보장하고 안정적으로 배포합니다."
+          },
+          {
+            "icon": "trending-up",
+            "title": "운영 & 개선",
+            "body": "지속적인 모니터링과 개선으로 최적의 성능을 유지합니다."
+          }
+        ]
+      }
+    },
+    {
+      "type": "LEAD_CTA",
+      "config": {
+        "title": "프로젝트를 시작할 준비가 되셨나요?",
+        "body": "AI 전환부터 풀스택 개발까지, 크레디움이 함께합니다. 편하게 문의해 주세요.",
+        "interest": "프로젝트 문의"
+      }
+    }
+  ]
+}
