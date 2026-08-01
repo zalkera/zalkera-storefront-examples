@@ -47,10 +47,10 @@ cp -r src presets/<new-code>/src     # 새 팩은 여기서 시작합니다
 
 | code | 콘솔 노출명 | 성격 | 구성 | 소스 파일 | 원본과 다른 곳 |
 |---|---|---|---|---|---|
-| `skeleton` | 출발 골격 | **골격** — "명세대로 짜면 이 배선이 나온다" | home(4섹션) · 진열 없음 | 102 | `ProductRail` 없음 |
+| `skeleton` | 출발 골격 | **골격** — "명세대로 짜면 이 배선이 나온다" | home(4섹션) · 진열 없음 | 103 | 없음(원본 그대로) |
 | `shop-goods` | 재화 판매형 | **커머스** — 물건을 진열하고 장바구니·결제로 보낸다 | home(6섹션 + 진열 레일) · shipping | 103 | `src/app/page.tsx`(레일) |
 | `beauty-nail` | 네일샵형 | **예약** — 시술을 보여주고 예약으로 보낸다 | home(8섹션 + 진열 레일) · about · visit | 103 | `src/app/page.tsx`(레일) |
-| `biz-standard` | 기업 소개형 | **기업소개** — 회사·서비스를 설명하고 상담으로 보낸다 | home(8섹션) · about · consult | 102 | `SiteHeader`(장바구니·로그인 없음) · `ProductRail` 없음 |
+| `biz-standard` | 기업 소개형 | **기업소개** — 회사·서비스를 설명하고 상담으로 보낸다 | home(8섹션) · about · consult | 103 | `SiteHeader`(장바구니·로그인 없음) |
 
 **시드는 넷 다 `themeColors` 하나뿐입니다** — 팩은 고객 DB 에 상품·갈래를 만들지 않습니다(팩 v3·memo142).
 팩의 차이는 데이터가 아니라 **얼굴 저작 · 전환 동선 · 소스 · 보장 주장** 넷으로 표현됩니다.
@@ -123,8 +123,7 @@ cp -r src presets/<new-code>/src     # 새 팩은 여기서 시작합니다
 ```
 
 ```tsx
-// presets/<code>/src/components/ProductRail.tsx — **쓰는 팩만 갖습니다**(skeleton·biz-standard 에는 없습니다).
-// 지우든 다시 짜든 자유입니다(능력 구성).
+// presets/<code>/src/components/ProductRail.tsx — 팩마다 자기 사본을 갖습니다(지우든 다시 짜든 자유).
 const page = await zalkera.listProducts({size: limit}, {tags: ["products"]}).catch(() => null);
 const items = page?.content ?? [];
 if (items.length === 0) return null;   // 빈 진열대는 방문자에게 거짓이다
