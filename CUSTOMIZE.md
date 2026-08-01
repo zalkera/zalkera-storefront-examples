@@ -200,7 +200,7 @@ npm run check:aeo -- https://내사이트주소 --category BOOKING
 상품 상세의 가격(`Product`+`Offer`)·목록(`ItemList`)·회사 정보(`Organization`)·고정 페이지(`WebPage`)가
 구조화 데이터로 나가는지 봅니다. **소스를 읽지 않으므로 직접 짠 화면이든 이 템플릿 그대로든 같은 잣대**입니다 —
 어떻게 짰는지가 아니라 나온 결과만 봅니다. `--category` 는 사이트 유형(`MARKETING`·`PORTFOLIO`·`EVENT`·
-`BOOKING`·`BLOG`)입니다. 화면을 직접 짜서 그 유형에 해당하지 않는다면 `--category` 대신 `--site-wide-only` 를
+`BOOKING`·`BLOG`·`COMMERCE`)입니다. 화면을 직접 짜서 그 유형에 해당하지 않는다면 `--category` 대신 `--site-wide-only` 를
 주십시오 — 검색·AI 가 목록을 받아 가는 최소치(robots·sitemap·주소 형식)만 재고, 유형별 요구는 재지 않습니다.
 
 잣대가 되는 **보장표 파일**(`aeo-surface-guarantees.json`)은 `@zalkera/client` 가 싣고 오므로 보통은 신경 쓸 것이

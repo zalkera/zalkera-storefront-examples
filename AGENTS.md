@@ -194,11 +194,19 @@ shadcn 소스는 자기 변수층(`--card`·`--muted-foreground` …)을 전제�
 오므로 "말로 고치기"가 편집 대상을 파일 하나로 좁힌다. **마크업에 문구를 하드코딩하면 이 경로가 죽는다.**
 
 - 어휘 정본은 **백엔드 레포의 `doc/contracts/section-vocabulary.json`** 이고, `@zalkera/client` 의
-  `SECTION_CONTRACT` 는 그것을 npm 으로 실어 나르는 **운반체**다(그 패키지 `sections.ts` 의 KDoc).
-  계약은 `contractRev` 로 자란다 — 현재 **rev 4**(`SECTION_CONTRACT_REV`). 오른 자국은 이렇다:
+  `SECTION_CONTRACT` 는 그것을 npm 으로 실어 나르는 **운반체**다. 그 KDoc 은 설치본
+  `node_modules/@zalkera/client/dist/index.d.ts` 에서 읽는다 — 패키지는 소스(`sections.ts`)를 배송하지
+  않으므로 여기서 그 파일을 찾지 마라(선언 파일이 KDoc 을 그대로 싣고 온다).
+  계약은 `contractRev` 로 자란다 — 현재 **rev 5**(`SECTION_CONTRACT_REV`). 오른 자국은 이렇다:
   rev 2 = `SERVICE_MENU` 의 `jsonLd` 열 `null`→`"ItemList"` · rev 3 = `SERVICE_MENU` 의 상품 참조 필수화 ·
-  **rev 4 = 참조 방언(`dialects`)과 콘텐츠 파일(`contentFile`)의 1급 승격**. rev 4 는 섹션 타입 12종·`config`
+  rev 4 = 참조 방언(`dialects`)과 콘텐츠 파일(`contentFile`)의 1급 승격 · **rev 5 = `categorySlug` 를 대등
+  참조로**. rev 4 는 섹션 타입 12종·`config`
   키 선언을 **한 글자도 안 바꿨다** — 바꾼 것은 "같은 `config` 를 **어느 방언으로 적는가**"뿐이다.
+  rev 5 는 `SERVICE_MENU`·`BOOKING_CTA` 의 **필수성 단위**를 옮겼다: "`productIds` 가 있는가"에서
+  "**참조가 하나라도 있는가**"(`requiredRefsAnyOf`)로. 이유가 이 레포의 존재 이유와 같다 — 배송된 예제가
+  상품을 handle 로 박아 두면 그 소스를 받은 사람의 카탈로그엔 그 handle 이 없어 섹션이 **영구히** 빈다.
+  갈래(`categorySlug`)로 가리키면 자기 상품을 등록하는 대로 채워진다. rev 3 이 막으려던 것(참조 0 =
+  조용히 사라지는 섹션)은 그대로 막히고 **막는 단위만 넓어졌다.**
 - **방언이 둘이다. 거처가 방언을 정한다.** DB(`page_section.config`)는 자기가 발급한 숫자 id 를 쓰고
   (`assetId`·`productIds`), **소스는 그 id 를 알 수 없으므로** 사람이 읽고 쓰는 참조를 쓴다
   (`asset` = `public/` 루트 절대 경로 · `product`/`products` = 상품 handle). 이 레포는 **소스 방언**이다.
