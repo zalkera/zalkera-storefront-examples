@@ -158,6 +158,33 @@ function servingSink() {
     return GATE_MODE ? errors : warnings;
 }
 
+/**
+ * **교차사이트 가드 축(X)의 목적지 — 관문 모드에서도 경고다.**
+ *
+ * 서빙 책임 축이면서도 `servingSink` 와 갈라 두는 이유는, **X1 이 보안이 아니라 이름을 재기 때문**이다.
+ * 양쪽으로 다 틀린다(심의 실측):
+ *  · **거짓 음성** — 라우트 안에 동명 `function assertSameOrigin(){return null}` 을 선언하면 통과한다.
+ *    인자로 엉뚱한 `Request` 를 넘겨도 통과한다. 즉 **통과가 안전을 뜻하지 않는다.**
+ *  · **거짓 양성** — 상용 서빙 중인 두 사이트(bix·credium)가 **둘 다 걸린다**(실측 2/2). 둘 다 문의
+ *    라우트 하나이고, reCAPTCHA + rate limit 으로 같은 위협을 이미 막고 있다.
+ *
+ * 통과가 안전을 뜻하지 않고 실패가 위험을 뜻하지 않는 검사를 관문에 놓으면, 얻는 것은 심리적 안심뿐이고
+ * 잃는 것은 신뢰다 — 게이트의 첫 동작이 **상용 전량 중단**이 된다.
+ *
+ * 그리고 마커(`zalkera-allow-cross-origin`)로 예외를 트는 길은 겉보기보다 나쁘다: 다는 순간 그 라우트는
+ * **영영 무검사**가 된다. 경고로 두면 매번 눈에 밟혀 언젠가 고쳐지지만, 마커는 침묵을 가르친다.
+ *
+ * ⚠ **이것은 X 축을 포기한다는 뜻이 아니다.** 재는 방법을 바꿔야 한다는 뜻이다 — "우리 심볼을 썼는가"가
+ * 아니라 "교차 오리진을 실제로 막는가"로. 그 판정은 정적 분석의 한계가 분명해 별도 설계 대상이고,
+ * 그때까지 이 축은 **크게 보이는 경고**로 남는다.
+ *
+ * 반면 `E`(시크릿이 브라우저 번들에 실림)·`C`(SEO 라우트가 동적 SSR 강제)는 **사실을 잰다** — 오탐 여지가
+ * 없고 상용 실측도 0건이라, 관문으로 켜도 아무도 안 막힌다. 그래서 그 둘만 `servingSink` 를 쓴다.
+ */
+function crossOriginSink() {
+    return warnings;
+}
+
 const STYLE_MODE = detectStyleMode(root);
 
 /**
@@ -1354,7 +1381,7 @@ function checkCrossOriginGuards() {
             if (h.body === null) {
                 // 재export·간접 참조는 본문을 못 따라간다. 추측으로 통과시키면 그 형태가 곧
                 // 우회로가 되므로, **핸들러를 이 파일에 직접 선언하라**고 요구한다.
-                servingSink().push(
+                crossOriginSink().push(
                     `${where} 가 본문을 따라갈 수 없는 형태로 export 됩니다(재export·간접 참조·중괄호 없는` +
                         ` 화살표) — 가드 위치를 기계로 확인할 수 없습니다. 핸들러를 이 파일에 중괄호 본문으로` +
                         ` 직접 선언하세요(memo118 §4).`,
@@ -1362,7 +1389,7 @@ function checkCrossOriginGuards() {
                 continue;
             }
             const verdict = judgeGuardPlacement(h.body);
-            if (verdict) servingSink().push(`${where} ${verdict}`);
+            if (verdict) crossOriginSink().push(`${where} ${verdict}`);
         }
     }
     if (exempted.length) {
@@ -1374,7 +1401,7 @@ function checkCrossOriginGuards() {
     for (const file of routes) {
         const code = readFileSync(file, "utf8");
         if (/Access-Control-Allow-Origin/i.test(code)) {
-            servingSink().push(
+            crossOriginSink().push(
                 `[X2] ${relative(root, file)} 가 CORS 헤더를 답니다 — 읽기 GET 을 가드에서 빼는 근거가` +
                     ` "교차 오리진 JS 가 응답을 못 읽는다"인데, 그 전제가 무너집니다(memo118 §7-2).`,
             );
@@ -1418,7 +1445,7 @@ function checkCrossOriginGuards() {
     }
 
     if (usesStateCookie && !consumeDef) {
-        servingSink().push(
+        crossOriginSink().push(
             `[X3] consumeOAuthState 를 부르는 곳은 있는데 **정의를 찾지 못했습니다** — state 쿠키 소각을` +
                 ` 기계로 확인할 수 없습니다. 정의를 \`src/**\` 안에 두세요(검사가 조용히 사라지지 않게).`,
         );
@@ -1440,7 +1467,7 @@ function checkCrossOriginGuards() {
             }
         }
         if (!/\.delete\s*\(/.test(fnBody)) {
-            servingSink().push(
+            crossOriginSink().push(
                 `[X3] ${relative(root, consumeDef.file)} 의 consumeOAuthState 가 state 쿠키를 소각하지` +
                     ` 않습니다 — 대조 통과 여부와 무관하게 지워야 1회용이 됩니다. 남기면 유효기간 동안` +
                     ` 리플레이가 가능합니다(memo118 §2).`,
@@ -1451,7 +1478,7 @@ function checkCrossOriginGuards() {
         //    죽어 있었고(실측: `strict` 로 바꿔도 통과), memo118 §2 는 그 사이 "X3 가 막는다"고
         //    적어 뒀다. 값 검사는 원문, 코드 구조 검사는 stripped — 이 구분을 지켜라.
         if (/sameSite:\s*["']strict["']/i.test(consumeDef.raw)) {
-            servingSink().push(
+            crossOriginSink().push(
                 `[X3] ${relative(root, consumeDef.file)} 가 쿠키를 sameSite: "strict" 로 답니다 —` +
                     ` authorize 리다이렉트로 **돌아올 때** 쿠키가 안 실려 정상 로그인이 깨집니다. 이 쿠키의` +
                     ` 방어력은 SameSite 가 아니라 httpOnly + 서버 대조에서 나옵니다.`,
