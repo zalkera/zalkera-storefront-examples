@@ -55,3 +55,10 @@ jobs:
 
       - name: Build (next build)
         run: npm run build
+
+      - name: 배선 동일성 (팩 4벌이 갈렸는지)
+        # 팩은 각자 온전한 소스를 갖는다(오너 확정 2026-08-01). 얼굴이 갈리는 것은 의도이고,
+        # **틀리면 사고가 나는 배선**만 바이트로 잠근다. npm 스크립트로 노출하지 않는 이유는
+        # 이 파일이 고객 zip 에 안 실리기 때문이다 — 안 실리는 것을 가리키는 스크립트를 배송하면
+        # 고객의 `npm run` 목록에 죽은 항목이 생긴다.
+        run: node scripts/lib/wiring-parity.mjs
