@@ -8,8 +8,32 @@
  *
  * **정본을 복사하지 않는다.** 규약 검사는 이 레포의 `validate-storefront.mjs` 를 **srcDir 인자로 참조 실행**
  * 한다 — 사본을 뜨면 그 순간 드리프트가 시작되고, 그게 이 프로젝트가 내내 싸우는 병이다(471946c).
- * 그래서 러너가 template 에 사는 것은 결합의 재생산이 아니라 **정본이 아직 여기 살기 때문**이고,
- * validator 가 client 의 bin 으로 승격되면(memo108 2단) 이 참조도 함께 이주한다.
+ * 그 파일은 이제 `@zalkera/client` 의 `zalkera-validate` 를 부르는 wrapper 라(2026-08-01 이관), 이 러너가
+ * 참조 실행하는 순간 판정은 **설치본 정본 한 벌**에서 나온다.
+ *
+ * ── 이 러너의 정본 위치(memo145 §7 T1-⑸) ────────────────────────────────────────
+ * **정본은 이 파일이다**(`zalkera-storefront-examples/scripts/verify-zip.mjs`). `backend/doc/vendor/verify-zip.mjs`
+ * 는 발주처에 건네는 **바이트 사본**이고, 고칠 곳은 언제나 여기다. 2026-08-01 에 그 둘이 **역방향으로**
+ * 갈라진 채 발견됐다(사본만 lockfile 축을 고쳤고, 정본만 `--gate` 를 가졌다) — 사본을 손으로 고치면
+ * 정확히 그 상태가 재생산된다. 합류시킨 뒤 사본은 `cp` 로 재고정했다.
+ *
+ * ── 이 러너가 왜 빌드까지 도는가(memo145) ───────────────────────────────────────
+ * **빌드 성공과 서빙 요건은 서로 다른 것을 잰다.** 2026-08-01 에 우리 팩 zip 이 `npm run build` 를
+ * 통과하고도 서빙 박스에서 반려됐다(exit 4) — `.next/standalone/server.js` 가 안 나왔기 때문이다.
+ * 이 러너는 exit 0 만 보고 ✅ 를 찍고 있었다. 그 간극을 ⑧ 산출물 검사가 닫는다: **이미 지불한 빌드에서
+ * 옳은 것을 읽는다**(추가 비용 0). "검사 통과"가 "서빙된다"를 뜻하지 않던 것이 그 사건의 본질이다.
+ *
+ * ── 검수 빌드는 **서빙 빌드의 조건을 닮아야 한다** ──────────────────────────────
+ * 그래서 설치를 `npm ci --ignore-scripts --include=dev` 로 돈다(샌드박스 `build.sh` 와 같은 플래그).
+ * 근거 둘: ⑴ 서빙 박스는 공급망 RCE 를 막으려 postinstall 을 **실행하지 않는다**(memo70 §3.6). 검수만
+ * 실행하면 postinstall 산출에 기대는 소스가 여기서 ✅ 를 받고 서빙에서 죽는다 — ⑧이 막으려는 것과
+ * 같은 종류의 거짓이다. ⑵ 납품 zip 은 **신뢰 밖 코드**다. 그 postinstall 을 검수자 기계에서 돌리는 것은
+ * 그 자체로 사고다. `--include=dev` 는 이 러너에서는 기본 동작이지만, NODE_ENV=production 인 CI 러너에서
+ * 돌 때 devDeps 가 빠져 멀쩡한 납품물이 거짓 반려되는 것을 막는다(샌드박스가 같은 이유로 붙였다).
+ * 반대로 **일부러 다르게 두는 축**도 있다: `ZALKERA_OFFLINE_BUILD=1`(러너에 백엔드가 없다는 선언).
+ *
+ * lockfile 축도 같은 원리다 — 서빙 박스는 `npm ci` 뿐이라 yarn·pnpm lock 을 소비하지 못한다.
+ * 넓게 받으면 "검사기는 통과했는데 업로드가 거절"이 만들어진다(백엔드 `SiteTypeDetector.LOCKFILES` 거울).
  *
  * 사용:
  *   node scripts/verify-zip.mjs <납품.zip> [--keep]
@@ -128,8 +152,14 @@ try {
 
         // ② 형상 — package.json + lockfile, 산출물 미포함.
         const hasPkg = existsSync(join(root, "package.json"));
-        const lock = ["package-lock.json", "pnpm-lock.yaml", "yarn.lock"].find((f) => existsSync(join(root, f)));
-        if (!record("프로젝트 형상", hasPkg && Boolean(lock), hasPkg ? (lock ?? "lockfile 없음") : "package.json 없음")) {
+        // **npm 계열만** — 빌드 샌드박스가 `npm ci` 로 돌아 yarn·pnpm lockfile 을 소비할 수 없다.
+        // 백엔드 `SiteTypeDetector.LOCKFILES` 의 거울이다. 여기서 넓게 받으면 "검사기는 통과했는데
+        // 업로드가 거절"이라는, 이 검사기가 막으려는 바로 그 형상이 만들어진다.
+        const lock = ["package-lock.json", "npm-shrinkwrap.json"].find((f) => existsSync(join(root, f)));
+        const lockNote = hasPkg
+            ? (lock ?? "npm lockfile 없음 — yarn·pnpm 프로젝트면 `npm install` 로 package-lock.json 을 만들어 포함하세요")
+            : "package.json 없음";
+        if (!record("프로젝트 형상", hasPkg && Boolean(lock), lockNote)) {
             failed = true;
         }
         for (const junk of ["node_modules", ".next"]) {
@@ -217,7 +247,9 @@ try {
                 return ok;
             };
 
-            if (!run("npm ci", "npm", ["ci", "--no-audit", "--no-fund"])) failed = true;
+            // ⚠ 플래그는 샌드박스 `build.sh` 와 **같아야 한다**(머리말 "검수 빌드는 서빙 빌드를 닮는다").
+            //   `--ignore-scripts` 를 빼면 postinstall 산출에 기대는 소스가 여기서만 통과한다.
+            if (!run("npm ci", "npm", ["ci", "--ignore-scripts", "--include=dev", "--no-audit", "--no-fund"])) failed = true;
             else {
                 // ⑦ 산출물 검사기가 **이 zip 안에서 살아서 뜨는가**(memo122 §1.3-3 · §8-ⓒ).
                 //
@@ -250,7 +282,35 @@ try {
                     }
                 }
 
-                if (!run("npm run build", "npm", ["run", "build"])) failed = true;
+                if (!run("npm run build", "npm", ["run", "build"])) {
+                    failed = true;
+                } else {
+                    // ⑧ **서빙 산출물 계약**(memo145 §2-4-⑴ — 이 러너의 주 관문).
+                    //
+                    //    재는 것은 `next.config` 에 무엇이 적혀 있는가가 **아니다**. 설정 문자열은 양쪽으로
+                    //    거짓말한다 — 조건부 조립이면 `output:"standalone"` 이 있어도 산출이 안 나오고,
+                    //    없어도 외부 조립·재export 로 나올 수 있다(memo140 §6.5 X1 과 같은 함정).
+                    //    빌드 산출물은 정의상 사실이고, 그 빌드는 **바로 위에서 이미 돌았다**(추가 비용 0).
+                    //
+                    //    이 파일이 없으면 잘커라 서빙 박스가 `node server.js` 로 띄울 것이 없어 exit 4 로
+                    //    반려한다. 즉 여기서 ✅ 를 주면 그건 거짓 통과다 — 실제로 저지른 사고다.
+                    const standalone = existsSync(join(root, ".next", "standalone", "server.js"));
+                    if (
+                        !record(
+                            "서빙 산출물(.next/standalone/server.js)",
+                            standalone,
+                            standalone
+                                ? ""
+                                : "빌드는 성공했지만 자기완결 산출물이 없습니다 — 이 소스는 잘커라 호스팅에서 서빙되지 않습니다.\n" +
+                                  "   → next.config 에 output: 'standalone' 을 추가하고 다시 빌드해 주세요\n" +
+                                  "     (잘커라는 빌드 산출물 .next/standalone/server.js 를 실행합니다.\n" +
+                                  "      output: 'export'·distDir 변경 상태로는 서빙할 수 없습니다).\n" +
+                                  "   자체 호스팅(BYO)이면 이 요건은 해당 없습니다 — 이 검수는 우리가 서빙할 납품물을 재는 자리입니다.",
+                        )
+                    ) {
+                        failed = true;
+                    }
+                }
             }
         }
     }
