@@ -15,16 +15,51 @@
  */
 const ALLOWED_SCHEMES = new Set(["http:", "https:", "mailto:", "tel:"]);
 
+/** 내부 경로 판정용 가짜 오리진 — 이 값으로 정규화되면 "밖으로 안 나간다"가 참이다. */
+const DUMMY_ORIGIN = "https://zalkera.invalid";
+
 export function safeLinkUrl(raw: string | null | undefined): string {
     if (!raw) return "#";
     const url = raw.trim();
-    // 내부 절대경로 — 스킴이 없다. `//host`(스킴 상대)는 외부라 파서로 넘겨 검증한다.
-    if (url.startsWith("/") && !url.startsWith("//")) return url;
+
+    // ── 내부 절대경로 — **문자 검사로는 못 막는다.**
+    //
+    // ⚠ 종전 판정은 `startsWith("/") && !startsWith("//")` 였고 다음이 전부 통과했다(심의 실측):
+    //    `/\evil.example` · `/<TAB>/evil.example` — 둘 다 `/` 로 시작하고 `//` 로 시작하지 않지만
+    //    **브라우저는 `https://evil.example/` 로 읽는다.** 저장형 XSS 는 아니지만 오픈 리다이렉트·
+    //    피싱이고, 이 값의 출처가 콘솔·AI·고객 zip 이라 신뢰 경계 밖이다. "회사소개" 라벨이 남의
+    //    사이트로 가는 링크가 전 테넌트에 복제된다.
+    //
+    // 같은 결함을 **이 레포가 이미 한 번 겪고 고쳤다** — `oauth.ts` 의 `safeNextPath` 가 정확히 같은
+    // 입력을 실측하고 파서 판정으로 옮겼는데, 이 함수만 문자 검사에 남아 있었다. 판정을 통일한다.
+    //
+    // 통과 값도 원문이 아니라 **파서가 정규화한 것**을 돌려준다 — 제어문자가 섞인 원문을 그대로
+    // 넘기면 소비자가 또 다르게 해석할 여지가 남는다.
+    // 현재 페이지 기준 조각·질의는 그대로 둔다 — 호스트를 바꿀 수 없어 안전하고, 정규화하면
+    // `#top` 이 `/#top` 이 되어 **다른 페이지에서 홈으로 튄다**(초판 수정에서 실제로 낸 회귀).
+    if (url.startsWith("#") || url.startsWith("?")) return url;
+
+    if (url.startsWith("/")) {
+        try {
+            const parsed = new URL(url, DUMMY_ORIGIN);
+            if (parsed.origin !== DUMMY_ORIGIN) return "#";
+            return parsed.pathname + parsed.search + parsed.hash;
+        } catch {
+            return "#";
+        }
+    }
+
     try {
         const parsed = new URL(url); // 절대 URL 만 파싱된다(상대면 throw)
         return ALLOWED_SCHEMES.has(parsed.protocol) ? url : "#";
     } catch {
-        // 파싱 실패 = 스킴 없는 상대경로(anchor#·?query 등) — 내부로 간주해 통과.
-        return url.startsWith("//") ? "#" : url;
+        // 파싱 실패 = 스킴 없는 상대경로(anchor#·?query 등). 여기도 파서로 재판정한다 —
+        // `\\evil.example` 같은 값이 "파싱 실패"로 빠져나가던 갈래를 닫는다(심의 실측).
+        try {
+            const parsed = new URL(url, DUMMY_ORIGIN);
+            return parsed.origin === DUMMY_ORIGIN ? parsed.pathname + parsed.search + parsed.hash : "#";
+        } catch {
+            return "#";
+        }
     }
 }

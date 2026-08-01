@@ -674,6 +674,22 @@ function sectionContractMap() {
     }
 }
 
+/**
+ * 계약을 못 읽으면 **N4·N5 가 통째로 조용히 스킵된다** — 미지 섹션 타입도, 빠진 필수 참조도 무검출인
+ * 채 `✅ 통과` 가 찍힌다. 실측으로 밟았다(node_modules 심링크가 깨진 트리에서 전부 통과).
+ *
+ * 잴 것이 없는 것은 통과가 아니라 **판정 불가**다. `npm ci` 를 안 한 트리에서 검사기를 돌리는 것은
+ * 사용자 실수이지 합격 조건이 아니므로, 조용히 넘기지 않고 경고로 드러낸다(스킵 자체는 유지 —
+ * 계약 없이 판정할 방법이 없고, error 로 막으면 설치 전 훑어보기가 불가능해진다).
+ */
+function warnIfContractMissing(contract) {
+    if (contract) return;
+    warnings.push(
+        "[W-CONTRACT] @zalkera/client 를 못 읽어 **섹션 계약 검사(N4·N5)를 건너뛰었습니다** — " +
+            "미지 섹션·빠진 필수 참조가 무검출입니다. `npm ci` 후 다시 돌리십시오.",
+    );
+}
+
 /** 참조 방언 키 판정 — 백엔드 `SeedAssetReferences`·팩 게이트와 **같은 판정**이어야 한다(계약 rev 4 `dialects`). */
 const isAssetRefKey = (key) => key === "asset" || (key.length > 5 && key.endsWith("Asset"));
 const isProductRefKey = (key) => key === "product" || (key.length > 7 && key.endsWith("Product"));
@@ -758,6 +774,7 @@ function checkContentContract() {
     }
 
     const contract = sectionContractMap();
+    warnIfContractMissing(contract);
 
     for (const file of files) {
         let page;
@@ -835,14 +852,28 @@ function checkContentContract() {
                 }
             }
             // N5 — 계약 필수 참조.
+            const isFilled = (idKey) => {
+                const value = cfg[sourceKeyOf(idKey)];
+                return Array.isArray(value) ? value.length > 0 : typeof value === "string" && value.trim() !== "";
+            };
             for (const idKey of spec?.requiredRefs ?? []) {
-                const key = sourceKeyOf(idKey);
-                const value = cfg[key];
-                const filled = Array.isArray(value) ? value.length > 0 : typeof value === "string" && value.trim() !== "";
-                if (!filled) {
+                if (!isFilled(idKey)) {
                     sink.push(
-                        `[N5] ${at}: ${section.type} 이 필수 참조 "${key}" 를 안 가리킵니다 — ` +
+                        `[N5] ${at}: ${section.type} 이 필수 참조 "${sourceKeyOf(idKey)}" 를 안 가리킵니다 — ` +
                             `렌더러가 이 섹션을 통째로 건너뜁니다(계약 ${idKey} 필수).`,
+                    );
+                }
+            }
+            // ⚠ **`requiredRefsAnyOf` 도 집행한다(심의 차단 3).** 계약 rev 5 가 `SERVICE_MENU`·`BOOKING_CTA` 의
+            //    필수 참조를 `requiredRefs`(이제 빈 배열)에서 이 키로 옮겼는데 이 검사기는 옛 키만 읽고 있었다 —
+            //    **참조가 하나도 없는 섹션이 통과했다**(실측). N5 가 존재 이유로 삼는 바로 그 결함이 무검출이었다.
+            //    팩 게이트(`pack-preset.mjs`)는 anyOf 를 집행하고 있어 **어휘 사본 둘이 갈라진 상태**였다.
+            for (const group of spec?.requiredRefsAnyOf ?? []) {
+                if (!group.some(isFilled)) {
+                    const names = group.map(sourceKeyOf).join(" 또는 ");
+                    sink.push(
+                        `[N5] ${at}: ${section.type} 이 ${names} 중 **하나도** 안 가리킵니다 — ` +
+                            `렌더러가 이 섹션을 통째로 건너뜁니다(계약 requiredRefsAnyOf).`,
                     );
                 }
             }
@@ -853,7 +884,13 @@ function checkContentContract() {
 function check(file) {
     const src = readFileSync(file, "utf8");
     const rel = relative(process.cwd(), file);
-    const isClient = /^["']use client["']/m.test(src);
+    // ⚠ **파일 머리만 본다(심의 차단 4).** 종전은 `/m` 플래그로 **원문 전체의 행머리**를 봤고,
+    //    행머리에 `"use client"` 를 담은 **템플릿 리터럴 한 줄**이 있으면 SEO 페이지가 클라이언트로
+    //    오판돼 `force-dynamic` 이 통과했다(실측). 이 레포는 codegen 산출물을 다루므로 코드-as-문자열이
+    //    현실적인 조건이다. 형제 함수 `isClientBoundary()` 는 이 함정을 이미 문서화하고 고쳐 뒀는데
+    //    이 자리만 남아 있었다 — 같은 관례를 두 곳이 다르게 구현한 것(오늘 고친 S2 와 같은 계열).
+    //    덤으로 주석을 지우고 재므로 "주석 속 `use client` 언급"에 오탐하지 않는다.
+    const isClient = isClientBoundary(src);
 
     // 서버 클라이언트 싱글턴 존재 확인 — create{Zalkera,Oneque}Client 호출(구 심볼 수용).
     if (/create(?:Zalkera|Oneque)Client\s*\(/.test(src)) {
