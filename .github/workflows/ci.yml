@@ -56,6 +56,14 @@ jobs:
       - name: Build (next build)
         run: npm run build
 
+      - name: 서빙 산출물 (.next/standalone/server.js)
+        # memo145 — `next build` 성공은 **서빙된다**를 뜻하지 않는다. 잘커라 호스팅은 `next start` 가
+        # 아니라 자기완결 산출물을 `node server.js` 로 띄우므로, standalone 이 안 나오면 이 레포의
+        # 소스로 개시한 사이트는 서빙 박스에서 exit 4 로 반려된다(2026-08-01 실사고).
+        # 재는 것은 next.config 의 문자열이 아니라 **방금 낸 산출물**이다 — 빌드는 이미 위에서 돌았고
+        # (추가 비용 0), 설정 정적 판독은 조건부 조립 앞에서 양방향으로 거짓말한다(memo140 §6.5 X1).
+        run: test -f .next/standalone/server.js
+
       - name: 배선 동일성 (팩 4벌이 갈렸는지)
         # 팩은 각자 온전한 소스를 갖는다(오너 확정 2026-08-01). 얼굴이 갈리는 것은 의도이고,
         # **틀리면 사고가 나는 배선**만 바이트로 잠근다. npm 스크립트로 노출하지 않는 이유는

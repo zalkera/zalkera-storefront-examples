@@ -55,15 +55,22 @@
  * 나는 배선**만 바이트로 잠근다 — `scripts/lib/wiring-parity.mjs`. 얼굴(홈·헤더·섹션 렌더·카피)이
  * 갈리는 것은 **의도**라 방어 대상이 아니다.
  *
+ * ── 산출물 검수 (memo145 · 오너 확정 2026-08-01) ─────────────────────────────
+ * 팩은 **자기 zip 을 재고 끝낸다**: 산출 직후 `verify-zip.mjs` 가 각 zip 을 풀어 실제로 빌드하고
+ * `.next/standalone/server.js` 가 나오는지 본다(기본 on · `--no-verify` 로만 끈다). 이 배선이 없던
+ * 동안 소스 게이트를 전부 통과한 zip 이 서빙 박스에서 반려됐다 — 이 파일의 게이트는 전부 **소스**를
+ * 재고, 서빙 요건은 **산출물**에만 나타나기 때문이다.
+ *
  * 사용:
  *   node scripts/pack-preset.mjs                    # 전체 테마, version=DEFAULT_VERSION
  *   node scripts/pack-preset.mjs shop-goods         # 특정 테마만
  *   node scripts/pack-preset.mjs --version 1.1.0
+ *   node scripts/pack-preset.mjs --no-verify        # 산출물 검수 생략(권장하지 않음)
  *
  * 출력: dist-presets/{code}-{version}.zip + sha256(적재 API 의 `expectedSha256` 로 그대로 보낸다).
  * zip 은 결정론적이다(고정 타임스탬프·경로 정렬) — 같은 입력이면 같은 sha 가 나온다.
  */
-import {execFileSync} from "node:child_process";
+import {execFileSync, spawnSync} from "node:child_process";
 import {createHash} from "node:crypto";
 import {existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync} from "node:fs";
 import {dirname, join, relative} from "node:path";
@@ -1081,6 +1088,35 @@ if (problems.length) {
 
 const packed = inspected.map((item) => write(item, version, source, llmsManual));
 
+// **산출 직후 자기 zip 을 검수한다**(memo145 §7 T1-⑶ · 오너 확정 기본 on).
+//
+// 왜 여기냐: 이 스크립트의 게이트는 전부 **소스**를 잰다(시드·콘텐츠·에셋·배선). 그런데 2026-08-01 에
+// 소스가 전부 통과한 zip 이 서빙 박스에서 반려됐다 — `.next/standalone/server.js` 가 안 나왔기 때문이고,
+// 소스만 보는 검사로는 영원히 못 보는 축이었다. 산출물 축을 재려면 빌드가 필요하고, 빌드하는 검사기는
+// 이미 있다(`verify-zip.mjs`). 없던 것은 **그 둘을 잇는 배선**뿐이었다.
+//
+// 기본이 on 인 이유: "절차 문서로 남기자"는 이번 사건이 이미 반증했다 — 문서는 안 돈다. 완화는
+// 명시적으로 켜는 것이다(`--no-verify`, build.sh 의 GATE_MISSING_CHECKER 와 같은 원칙). 대가는 팩 시간이
+// zip 당 수 분 늘어나는 것이고, 팩은 릴리스 행위라 그 비용을 치르는 것이 맞다.
+//
+// 실패해도 zip 은 지우지 않는다 — `--keep` 로 다시 돌려 원인을 봐야 하기 때문이다. 대신 **적재 안내를
+// 찍지 않고** 종료코드 1 로 끝낸다(운영자가 마지막으로 읽는 줄이 curl 명령이라, 그것이 보이면 올린다).
+if (!process.argv.includes("--no-verify")) {
+    console.log(`\n산출물 검수 — 팩한 zip ${packed.length}개를 verify-zip 으로 실제 빌드해 봅니다(zip 당 수 분).`);
+    console.log("  건너뛰려면 --no-verify (권장하지 않습니다 — 소스 게이트는 산출물 축을 못 봅니다).");
+    const rejected = [];
+    for (const p of packed) {
+        console.log(`\n── verify-zip ${relative(ROOT, p.path)} ${"─".repeat(20)}`);
+        const r = spawnSync(process.execPath, [join(ROOT, "scripts/verify-zip.mjs"), p.path], {stdio: "inherit"});
+        if (r.status !== 0) rejected.push(p);
+    }
+    if (rejected.length) {
+        console.error(`\n팩 실패 — 산출된 zip ${rejected.length}개가 자기 검수를 통과하지 못했습니다:`);
+        for (const p of rejected) console.error(`  ${relative(ROOT, p.path)} — 적재하지 마십시오`);
+        console.error("  원인을 보려면: node scripts/verify-zip.mjs <zip> --keep");
+        process.exit(1);
+    }
+}
 
 // 레지스트리는 DB(theme + theme_artifact)다. 종전의 backend `site.presets` yaml 은 memo105 T3 에서
 // 은퇴했는데 이 안내만 남아 있었다 — 운영자가 마지막으로 읽는 줄이라 틀린 채로 두면 그대로 따라 한다.
