@@ -52,7 +52,7 @@
 | 경로 | 무엇 |
 |---|---|
 | `/` | 홈 — 시드 섹션이 있으면 그것이 홈, 없으면 상호·카테고리 골격 (RSC, 공개 조회) |
-| `/[slug]` | 콘솔·시드가 만든 **고정 페이지**(회사소개·이용안내 등) — 섹션 배열로 그린다 |
+| `/[slug]` | **소스가 갖는 고정 페이지**(회사소개·이용안내 등) — `content/pages/<slug>.json` 의 섹션 배열로 그린다. 얼굴이 소스 정본이라 `force-static`(재검증 없음)이고, 고치려면 재업로드한다 |
 | `/products` | **상품 목록** — 카탈로그 허브(`ItemList`) |
 | `/products/[slug]` | 상품 상세 + 장바구니 담기 (예약 상품이면 슬롯 선택) |
 | `/blog`, `/blog/[slug]` | 글 목록·상세 (공지·블로그) |
@@ -89,8 +89,9 @@ npm run dev                    # http://localhost:3000
 
 백엔드가 떠 있어야 하고, `ZALKERA_TENANT` 에 이 사이트의 테넌트 코드를 넣어야 합니다.
 
-> 구 `ONEQUE_` 접두 변수도 그대로 동작합니다(이행기 폴백) — 관리형 서빙이 주입하는 이름이라
-> 플랫폼 쪽과 함께 전환하는 중입니다. 새로 쓸 때는 `ZALKERA_` 를 쓰세요.
+> ⚠ **구 `ONEQUE_` 접두는 더 이상 동작하지 않습니다.** 폴백을 제거했습니다(`src/lib/env.ts`) — 옛 이름만
+> 넣으면 빌드가 그 자리에서 죽습니다. 종전 판본이 "그대로 동작한다"고 적어 뒀는데 거짓이었고, 그 말을
+> 믿은 BYO 배포는 기동에 실패합니다. `ZALKERA_` 로 쓰십시오.
 
 ## AI 매뉴얼 — `llms.txt`
 
@@ -109,7 +110,7 @@ npm run dev                    # http://localhost:3000
 | 경로 | 렌더링 | 이유 |
 |---|---|---|
 | `/` (홈) | **ISR** (`revalidate=600`) | 사이트 설정·카테고리 = 세션 무관 공개 데이터 |
-| `/[slug]` (고정 페이지) | **ISR** (`revalidate=300`) | 콘솔·시드 콘텐츠 = 공개 읽기. 발행 시 백엔드가 태그로 콕 집어 무효화 |
+| `/[slug]` (고정 페이지) | **정적** (`force-static`) | **소스가 갖는 콘텐츠**라 재검증할 것이 없다 — 고치면 재업로드하고, 그때 새로 구워진다 |
 | `/products` (상품 목록) | **ISR** (`revalidate=300`) | 카탈로그 허브. **`searchParams` 를 안 받는 것이 의도** — 정렬·필터를 쿼리로 받으면 동적 렌더로 강등된다 |
 | `/products/[slug]` (상품 상세) | **ISR** (`revalidate=300`) | 카탈로그 = 공개 읽기. 재고·가격은 결제 시점에 백엔드가 재검증하므로 stale 안전 |
 | `/blog`·`/blog/[slug]` (글) | **ISR** (`revalidate=300`) | 발행글 = 세션 무관 공개 읽기 |
@@ -169,7 +170,12 @@ npm run validate            # ./src 스캔. 위반 있으면 exit 1
 
 - `use client` 파일이 `@zalkera/client` 를 값으로 import(baseUrl 노출)하면 오류(E1/E2).
 - SEO 라우트가 per-page 동적 SSR 을 강제하면 오류(C1/C1b — ISR-우선 게이트).
-- 스타일 규약(위 섹션): 죽은 토큰 `var(--oneq-*)` 참조(S1)·globals.css 배선 소실(S3)은 오류, 인라인 `style={{}}`(S2)·색 하드코딩(S4)·CSS 파일 난립(S5)은 경고.
+- 스타일 규약(위 섹션): 죽은 토큰 `var(--oneq-*)` 참조(S1)·globals.css 배선 소실(S3)은 오류.
+  인라인 `style={{}}`(S2)·색 하드코딩(S4)은 **이 레포에서 오류**입니다 — `package.json` 의 `zalkera.styling`
+  을 선언한 레포는 그 둘이 error 로 격상됩니다(선언 안 한 레포에서만 경고). 정당한 동적 스타일은
+  `// zalkera-allow-inline-style: <이유>` 마커로 억제합니다.
+- 콘텐츠 규약(N1~N5)·문서 좌표(D1·D2)·교차사이트 위조 가드(X1~X3)도 오류입니다 — 위 목록에 빠져 있던
+  것을 채웁니다(`AGENTS.md` 가 각 규칙의 상세를 갖습니다).
 
 ### ② 산출물 검사 — `npm run check:aeo`
 
@@ -180,7 +186,7 @@ npm run check:aeo -- https://개시된사이트 --category BOOKING --out out/aeo
 ```
 
 - 잣대는 잘커라 백엔드의 보장표 정본(`doc/contracts/aeo-surface-guarantees.json`)이고, 이 스크립트는 그 **집행자**입니다 — 규범을 여기서 새로 만들지 않습니다. 찾는 순서는 ① `--guarantees <경로>` ② 설치된 `@zalkera/client` 안의 운반본(= `npm install` 로 따라오는 기본 경로) ③ 형제 체크아웃(`../backend`)의 정본이고, 실행할 때 어느 출처로 쟀는지 찍습니다. 셋 다 없으면 **아무 판정도 하지 않고 멈춥니다**(exit 2) — 없는 잣대로 통과시키지 않습니다. 잣대 해석만 확인: `npm run check:aeo -- --print-guarantees`.
-- `--category` 는 보장표에 등재된 이름입니다(`MARKETING`·`PORTFOLIO`·`EVENT`·`BOOKING`·`BLOG` — `COMMERCE` 는 아직 막혀 있습니다). 표에 없는 이름은 순수 라벨이라 잴 것이 없습니다.
+- `--category` 는 보장표에 등재된 이름입니다(`MARKETING`·`PORTFOLIO`·`EVENT`·`BOOKING`·`BLOG`·`COMMERCE` — `COMMERCE` 는 2026-08-01 해제됐습니다). 표에 없는 이름은 순수 라벨이라 잴 것이 없습니다.
 - 보장 주장이 없는 사이트는 `--category` 대신 **`--site-wide-only`** — robots·sitemap·JSON-LD 절대 URL 만 재고 유형별 요구는 판정하지 않습니다.
 - 종료코드 0=required 전부 통과 · 1=보장 미충족 · 2=실행 불가(인자·네트워크·표 부재).
 - 검사기 본체는 `@zalkera/client` 가 배송하는 bin(`zalkera-aeo-check`)이고 `scripts/check-aeo-surfaces.mjs` 는 그것을 부르는 wrapper 입니다 — 발행 직후 자동 검사(서빙단)와 **같은 검사기**를 쓰려고 정본을 하나로 뒀습니다.
