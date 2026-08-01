@@ -155,15 +155,26 @@ try {
             failed = true;
         }
 
-        // ⑤ 규약 검사 — **정본 참조 실행**(사본 0). declared 레포면 S 계열이 error 로 격상되고,
-        //    S8(memo109)이 L1 배선까지 센다. 선언이 없으면 validator 가 스스로 스킵한다.
+        // ⑤ 규약 검사 — **정본 참조 실행**(사본 0).
+        //
+        //    두 축이 다르게 걸린다:
+        //     · **스타일·콘텐츠 규약(S·N)** — `package.json` 의 `zalkera.*` 를 **선언한 레포에서만** error.
+        //       선언은 자발이고, 안 하면 경고이거나 스킵이다(요건 1 — 어휘를 강제할 수 없다).
+        //     · **서빙 책임 축(X·C·E)** — 선언과 **무관하게** 여기서는 error. `--gate` 가 그 뜻이다.
+        //       근거는 선언이 아니라 **누가 서빙하는가**다: 이 도구는 우리가 서빙할 납품물을 재는 자리다.
+        //
+        //    ⚠ 종전 주석은 "선언이 없으면 validator 가 스스로 스킵한다"였는데 **X·C·E 에는 거짓**이었다
+        //    (선언을 지워도 error 로 남았다 — 실측). 스펙 문면과도 갈라져 있었고, 이제 셋을 하나로 맞춘다.
         //
         //    소스 루트는 고정이 아니다: Next.js 는 `src/app` 과 루트 `app` 을 **둘 다** 허용하고,
         //    실제 납품물(credium)이 후자였다. `src` 를 못 찾으면 루트를 넘긴다 —
         //    validator 는 node_modules·.next 를 스스로 건너뛴다(실측).
         //    설치보다 **앞**에 둔다: 규약 위반은 몇 분짜리 npm ci 를 돌리기 전에 알려주는 게 맞다.
         const srcDir = existsSync(join(root, "src")) ? join(root, "src") : root;
-        const v = spawnSync("node", [VALIDATOR, srcDir], {cwd: root, encoding: "utf8"});
+        // `--gate` — **우리가 서빙 책임을 지는 자리**라 서빙 축(X·C·E)을 error 로 올린다.
+        // 개발자가 손으로 부르는 `npm run validate` 는 같은 규칙을 경고로만 낸다(권고). 기준은
+        // "선언했는가"가 아니라 **누가 서빙하는가** 다 — 검사기 머리말의 GATE_MODE 참조.
+        const v = spawnSync("node", [VALIDATOR, srcDir, "--gate"], {cwd: root, encoding: "utf8"});
         // validator 는 위반을 **stderr** 로 낸다 — stdout 만 잡으면 반려 사유가 빈칸으로 나온다
         // (실제 납품물에 처음 돌렸을 때 그랬다. 왜 반려됐는지 못 알려주는 검수는 쓸모없다).
         //    채널이 갈리므로(요약은 stdout, 위반은 stderr) 합친 뒤 **내용으로** 골라낸다 —
