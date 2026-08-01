@@ -22,13 +22,23 @@ import {TextMediaSection} from "./TextMediaSection";
 export function SectionRenderer({
     section,
     products,
+    categoryProducts,
 }: {
     section: ContentSection;
+    /** handle 참조 해소분 — `SectionList` 가 참조된 것만 직접 조회해 채운다. */
     products: Map<string, ProductSummary>;
+    /** `categorySlug` 참조 해소분(동적) — 서버가 그 카테고리로 준 목록 그대로. */
+    categoryProducts: Map<string, ProductSummary[]>;
 }) {
     switch (section.type) {
         case "SERVICE_MENU":
-            return <ServiceMenuSection config={section.config} products={products} />;
+            return (
+                <ServiceMenuSection
+                    config={section.config}
+                    products={products}
+                    categoryProducts={categoryProducts}
+                />
+            );
         case "BEFORE_AFTER_GALLERY":
             return <BeforeAfterGallerySection config={section.config} />;
         case "BOOKING_CTA":

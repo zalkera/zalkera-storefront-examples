@@ -1,37 +1,115 @@
-import type {ProductSummary} from "@zalkera/client";
 import type {ContentSection} from "@/lib/content";
+import type {ProductSummary} from "@zalkera/client";
+import {asHandle, asHandleArray, asString, readConfig} from "@zalkera/client";
 import {SectionRenderer, needsProducts} from "./SectionRenderer";
 import {zalkera} from "@/lib/zalkera";
 
 /**
- * 섹션 배열을 그린다 — 상품 프리페치·렌더 디스패치를 한 자리에 모은다.
+ * 섹션 배열을 그린다 — 상품 해소·렌더 디스패치를 한 자리에 모은다.
  *
  * 섹션 페이지 입구가 둘이라(고정 페이지 `[slug]`, 홈 `/`) 이 로직이 두 벌이 되면 한쪽만 고치는
  * 드리프트가 난다 — 이 레포가 memo102 §6 에서 내내 싸우는 병이라 여기서도 사본을 안 만든다.
  *
- * **정렬하지 않는다**: 콘텐츠 파일의 `sections` **배열 순서가 곧 화면 순서**다(어휘 계약 rev 4
- * `contentFile`). 종전엔 `sortOrder` 로 한 번 더 정렬했는데, 순서의 원장이 파일 하나가 된 지금은
- * 그 축이 아예 없다 — 순서를 정하는 곳이 둘이면 "후기를 위로 올려줘"가 어느 쪽을 고치는 일인지가
- * 매번 판별 문제가 되고, 그 판별이 곧 토큰이다.
+ * ## 왜 목록을 긁어 맵을 만들지 않는가 (두 번 데인 자리다)
  *
- * **상품 맵의 키는 handle 이다**(숫자 id 가 아니라). 소스가 DB 카탈로그를 가리키는 유일한 안정 키가
- * handle(= `ProductSummary.slug`)이고, 숫자 id 는 테넌트 스코프라 소스에 적으면 그 소스가 다른
- * 테넌트에서 의미를 잃는다 — 고객이 소스를 소유하고 재업로드한다는 전제가 그것을 금지한다.
+ * 초판은 `listProducts({productType: "SERVICE", size: 100})` 로 목록을 긁어 handle 맵을 만들었다.
+ * 그러면 **재화를 파는 사이트에서 상품 섹션이 통째로 사라진다**(SERVICE 가 0건이라 맵이 빈다).
+ * 필터만 뺐더니 이번엔 **예약 사이트가 상품 100종을 넘기는 순간 사라졌다** — 목록 정렬이
+ * `created DESC` 라 오래된 시드 상품이 1페이지 밖으로 밀려나기 때문이다(둘 다 실측 재현).
+ *
+ * 근본 원인은 규모가 아니라 **형태**였다. 껍데기(소스)는 업무 데이터를 소유하지 않고 **가리키기만**
+ * 하는데, "상위 100건을 긁어 그중에서 찾는다"는 소유하는 쪽의 사고다. 그래서 조회 축을 뒤집는다 —
+ * **참조가 조회를 만든다.**
+ *
+ *  - `products`/`product` (handle 참조) → 그 handle 만 **직접 조회**한다. 카탈로그가 몇 종이든 무관하다.
+ *  - `categorySlug` (동적 참조) → 그 카테고리를 **서버에 물어** 오는 대로 그린다.
+ *
+ * 후자가 이 제품의 전제와 직결된다: **외양은 어디서든 구해 업로드한다**(우리 예제든 남이 만든 것이든).
+ * 그렇다면 껍데기가 특정 상품 handle 에 얼어붙으면 안 된다 — 받은 사람 카탈로그에 그 handle 이 없기
+ * 때문이다. 카테고리로 가리키면 자기 상품을 등록하는 대로 저절로 채워진다.
+ *
+ * 실패는 섹션 단위로 격리한다 — 한 참조가 죽어도 페이지는 살고 그 카드만 빠진다.
  */
 export async function SectionList({sections}: {sections: ContentSection[]}) {
-    // 상품 참조 섹션이 있을 때만 1회 조회. 공개 API 에 handle 필터가 없어 목록을 맵으로 만든다.
-    // 실패해도 페이지는 살아야 한다 — 그 섹션들만 빠진다.
-    //
-    // ⚠ **유형으로 거르지 마라.** 초판은 `productType: "SERVICE"` 를 박아 뒀는데, 그러면 재화를 파는
-    //    사이트에서 이 맵이 통째로 비어 상품 참조 섹션이 **조용히 사라진다**(`ServiceMenuSection` 이
-    //    `items.length === 0` 에서 `return null`). 실측으로 커머스 프리셋의 홈에서 상품 카드 5종과
-    //    `ItemList` JSON-LD 가 전부 없어졌고, 예약 프리셋에서만 우연히 맞아 발견이 늦었다.
-    //    섹션의 상품 참조는 **명시 핸들**이라 유형 필터가 애초에 불필요하다(`/products` 도 무필터다).
-    let products = new Map<string, ProductSummary>();
-    if (needsProducts(sections)) {
-        const list = await zalkera.listProducts({size: 100}, {tags: ["products"]}).catch(() => null);
-        if (list) products = new Map(list.content.map((p) => [p.slug, p]));
+    const {byHandle, byCategory} = needsProducts(sections)
+        ? await resolveProducts(sections)
+        : {byHandle: new Map<string, ProductSummary>(), byCategory: new Map<string, ProductSummary[]>()};
+
+    return sections.map((section, i) => (
+        <SectionRenderer key={i} section={section} products={byHandle} categoryProducts={byCategory} />
+    ));
+}
+
+/** 상품 참조 섹션이 config 에 적어 둔 handle·categorySlug 를 걷는다. */
+function collectRefs(sections: ContentSection[]) {
+    const handles = new Set<string>();
+    const categories = new Set<string>();
+    for (const s of sections) {
+        if (s.type !== "SERVICE_MENU" && s.type !== "BOOKING_CTA") continue;
+        const c = readConfig<Record<string, unknown>>(s.config);
+        for (const h of asHandleArray(c?.products)) handles.add(h);
+        const one = asHandle(c?.product);
+        if (one != null) handles.add(one);
+        const cat = asString(c?.categorySlug);
+        if (cat) categories.add(cat);
+    }
+    return {handles, categories};
+}
+
+async function resolveProducts(sections: ContentSection[]) {
+    const {handles, categories} = collectRefs(sections);
+
+    // handle 참조 — 참조 수만큼만 부른다. 계약이 섹션당 참조 수를 캡하므로 이 팬아웃은 상한이 있다.
+    const byHandle = new Map<string, ProductSummary>();
+    await Promise.all(
+        [...handles].map(async (handle) => {
+            const detail = await zalkera.getProduct(handle, {tags: ["products"]}).catch(() => null);
+            if (detail) byHandle.set(handle, toSummary(detail));
+        }),
+    );
+
+    // categorySlug 참조 — 서버가 주는 대로. slug→id 해소가 필요해 카테고리 목록을 한 번 부른다.
+    const byCategory = new Map<string, ProductSummary[]>();
+    if (categories.size > 0) {
+        // ⚠ `listCategories()` 가 아니라 `listProductCategories()` 다 — 전자는 **게시판 카테고리**이고
+        //    상품 카테고리는 후자다(`/public/categories` vs `/public/product-categories`). 이름이 비슷해
+        //    한 번 잘못 잡았고, 게시판이 비어 있으면 조용히 아무것도 안 그려져 증상이 "섹션 소멸"로 같다.
+        const all = await zalkera.listProductCategories({tags: ["products"]}).catch(() => null);
+        await Promise.all(
+            [...categories].map(async (slug) => {
+                const category = all?.find((c) => c.slug === slug);
+                if (!category) return; // 없는 카테고리 = 그 섹션만 안 그린다(페이지는 산다)
+                const page = await zalkera
+                    .listProducts({categoryId: category.id, size: CATEGORY_PAGE_SIZE}, {tags: ["products"]})
+                    .catch(() => null);
+                if (page) byCategory.set(slug, page.content);
+            }),
+        );
     }
 
-    return sections.map((section, i) => <SectionRenderer key={i} section={section} products={products} />);
+    return {byHandle, byCategory};
+}
+
+/**
+ * 한 화면에 그리는 카테고리 상품 수 상한. 섹션은 **진열**이지 목록 라우트가 아니라 페이지네이션이
+ * 없다 — 전량을 그리면 카탈로그가 큰 테넌트에서 홈이 무거워진다. 전체 목록의 정위치는 `/products` 다.
+ */
+const CATEGORY_PAGE_SIZE = 24;
+
+/**
+ * `getProduct` 는 상세형(`ProductDetail`)이라 카드가 쓰는 `priceFrom`·`inStock` 이 없다 — variant 에서
+ * 만든다. 가격의 정본은 variant 이므로 여기서 **최솟값**을 취하는 것이 상세 화면과 같은 규칙이다.
+ */
+function toSummary(detail: Awaited<ReturnType<typeof zalkera.getProduct>>): ProductSummary {
+    const prices = detail.variants.map((v) => Number(v.price)).filter((n) => Number.isFinite(n));
+    return {
+        id: detail.id,
+        slug: detail.slug,
+        name: detail.name,
+        productType: detail.productType,
+        coverAssetId: detail.coverAssetId,
+        priceFrom: prices.length > 0 ? Math.min(...prices) : null,
+        currency: detail.variants[0]?.currency ?? "KRW",
+        inStock: detail.variants.some((v) => v.inStock),
+    };
 }

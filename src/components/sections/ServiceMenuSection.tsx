@@ -2,7 +2,7 @@ import Link from "next/link";
 import type {ProductSummary} from "@zalkera/client";
 import {JsonLd, itemListJsonLd} from "@/components/JsonLd";
 import {siteUrl} from "@/lib/site";
-import {asHandleArray, mediaSrc, readConfig} from "@zalkera/client";
+import {asHandleArray, asString, mediaSrc, readConfig} from "@zalkera/client";
 
 /** 필드를 믿지 않는다 — raw 편집기가 문법만 보고 통과시킨 값이 올 수 있다. */
 type ServiceMenuConfig = Record<string, unknown>;
@@ -21,16 +21,30 @@ type ServiceMenuConfig = Record<string, unknown>;
 export function ServiceMenuSection({
     config,
     products,
+    categoryProducts,
 }: {
     config: unknown;
     products: Map<string, ProductSummary>;
+    categoryProducts: Map<string, ProductSummary[]>;
 }) {
     const c = readConfig<ServiceMenuConfig>(config);
-    // config 의 handle 순서를 지킨다 — **이 배열이 노출 순서의 원장**이고, 아래 ItemList 도 같은 배열에서
-    // 만든다. 사라진 상품(카탈로그에서 지운 handle)은 카드만 빠진다.
-    const items = asHandleArray(c?.products)
+
+    // 참조 방식이 둘이고 **계약이 둘 다 선언**한다(`productIds`·`categorySlug`).
+    //
+    //  - **명시 참조** — config 의 handle 순서를 지킨다. **이 배열이 노출 순서의 원장**이고 아래
+    //    ItemList 도 같은 배열에서 만든다. 카탈로그에서 지운 handle 은 카드만 빠진다.
+    //  - **카테고리 참조**(동적) — 서버가 그 카테고리로 주는 대로 그린다. 상품을 등록하는 대로
+    //    저절로 채워지므로, **남이 만든 외양을 가져다 쓰는 경로에서 유일하게 성립하는 방식**이다
+    //    (받은 사람 카탈로그에 남의 handle 이 있을 리 없다).
+    //
+    // ⚠ `categorySlug` 는 계약에 있는데 **렌더러가 오래 안 읽고 있었다**(죽은 선언). 그래서 이 섹션은
+    //    명시 handle 에만 의존했고, 그것이 "가져다 쓰면 빈다"는 구조적 결함의 뿌리였다.
+    const explicit = asHandleArray(c?.products)
         .map((handle) => products.get(handle))
         .filter((p): p is ProductSummary => p != null);
+    const categorySlug = asString(c?.categorySlug);
+    // 명시 참조가 우선이다 — 큐레이션이 있으면 그것이 원장이고, 없을 때 카테고리가 채운다.
+    const items = explicit.length > 0 ? explicit : (categorySlug ? (categoryProducts.get(categorySlug) ?? []) : []);
     if (items.length === 0) return null;
 
     const base = siteUrl();

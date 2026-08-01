@@ -259,8 +259,12 @@ const SEED_PRODUCT_TYPES = new Set(["SERVICE", "PHYSICAL"]);
 const STOCK_REQUIRED_TYPES = new Set(["PHYSICAL"]);
 
 /**
- * 착지 컬럼이 `varchar(255)`/`varchar(100)` 인 텍스트의 상한 — 백엔드 `SiteSeedCaps` 와 **동수**.
+ * 착지 컬럼이 `varchar(255)` 인 텍스트의 상한 — 백엔드 `SiteSeedCaps.MAX_TEXT_COLUMN` 과 **동수**.
  * 길이를 팩에서도 재는 이유는 백엔드와 같다: 안 재면 S3 적재 뒤 DB 제약에서 터져 미디어 고아가 남는다.
+ *
+ * ⚠ **커버리지는 상품 축뿐이다**(심의 지적 — 커밋 서사가 이보다 컸다). 백엔드는 페이지 slug(100)·
+ * title(255)·메뉴 label(100)·url(500)까지 재는데, 현 팩들이 시드에 pages/menus 를 안 실어 여기서는
+ * 잠재적이다. 시드가 그것들을 싣기 시작하면 이 게이트도 같이 넓혀야 한다.
  */
 const MAX_TEXT_COLUMN = 255;
 
@@ -303,8 +307,13 @@ function validateProducts(code, products) {
             );
         }
         // 가격은 **문자열**이다(BigDecimal — 부동소수 회피). 숫자로 적으면 백엔드 strict 파싱이 개시를 중단한다.
-        if (typeof product.price !== "string" || !/^\d+(\.\d+)?$/.test(product.price)) {
-            fail("PRODUCT_PRICE", `${code}/${handle}: price 는 음수 아닌 십진 **문자열**이어야 합니다 — ${JSON.stringify(product.price)}`);
+        // 자릿수까지 백엔드와 동수다 — 착지 컬럼이 `decimal(12,2)` 라, 소수 3자리는 조용히 반올림되고
+        // 정수 11자리는 S3 적재 뒤 DB 제약에서 터진다(memo137 보안 재검수 W-a).
+        if (typeof product.price !== "string" || !/^\d{1,10}(\.\d{1,2})?$/.test(product.price)) {
+            fail(
+                "PRODUCT_PRICE",
+                `${code}/${handle}: price 는 정수 10자리·소수 2자리 이하의 **문자열**이어야 합니다 — ${JSON.stringify(product.price)}`,
+            );
         }
         // 초기 재고(memo137). 백엔드 `SiteSeedPlanner.validateStock` 과 **같은 규칙**이다 — 갈리면
         // 팩은 통과하는데 개시가 중단된다.
