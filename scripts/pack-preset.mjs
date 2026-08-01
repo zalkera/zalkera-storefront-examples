@@ -11,8 +11,22 @@
  *
  *   presets/<code>/content/       → zip 의 `content/` (레포 상주 · 페이지·섹션·문구·내비)
  *   presets/<code>/public/        → zip 의 `public/`  (섹션 이미지 · 레포 상주)
- *   presets/<code>/seed.json      → zip 의 `.zalkera/seed.json` (**업무 데이터만** — 상품·테마 값)
- *   presets/<code>/assets/        → zip 의 `.zalkera/assets/`   (상품 이미지 — S3 media 로 착지)
+ *   presets/<code>/src/           → zip 의 `src/`     (정본을 가리는 오버레이 — 이 팩의 호출 구성)
+ *   presets/<code>/seed.json      → zip 의 `.zalkera/seed.json` (**테마색만**)
+ *   presets/<code>/assets/        → zip 의 `.zalkera/assets/`   (섹션 config 가 참조하는 전송 이미지)
+ *
+ * ── 팩 v3 (memo142) — **배송물은 업무 데이터를 만들지 않는다** ────────────────
+ * 시드가 고객 DB 에 상품·갈래를 만들던 경로가 닫혔다. `seed.json` 에 남는 최상위 키는 `themeColors`
+ * 하나이고, 콘텐츠 섹션은 업무 축(상품·갈래)을 **가리키지 않는다**.
+ *
+ * 경계는 **정본 값의 거처**로 긋는다(memo142 §1): 값이 콘텐츠 파일에 사는 저작물은 **선언 섹션**의
+ * 소관이고, 값이 업무 DB 에 살고 화면이 비추기만 하는 조회는 **소스가 `@zalkera/client` 를 직접 호출**해
+ * 그린다. 따름정리 — 배송물은 handle 이든 갈래 slug 든 **업무 축의 고유명사를 어디에도 박지 않는다**
+ * (`리빙`·`시술`은 사장이 정할 이름이다). 직접 호출이 배송 가능한 이유가 정확히 이것이다:
+ * `listProducts()` 는 이름을 하나도 안 박고 그 사장의 카탈로그가 있는 대로 내놓는다.
+ *
+ * 그래서 아래 게이트가 **타입 이름이 아니라 키 형상**으로 건다(BUSINESS_REF) — 어휘에서 조회형 타입
+ * 둘이 삭제됐지만, 같은 형태의 타입이 미래에 다시 생겨도 같은 자리에서 잡힌다.
  *
  * **변환기가 없다.** 프리셋 디렉터리가 처음부터 최종 형상을 갖고 있고 팩은 그것을 소스 트리에
  * 병합하기만 한다 — seed→content 변환 코드를 두면 그 변환기가 계약의 숨은 두 번째 정본이 된다.
@@ -68,12 +82,8 @@ const CAPS = {
     navLinks: 30,
     sectionsPerPage: 50,
     configBytes: 64 * 1024,
-    /** 백엔드 `SiteSeedCaps.MAX_PRODUCTS`(memo119 §2.5). 20종을 넘으면 템플릿이 아니라 데이터 이관이다. */
-    products: 20,
-    /** 백엔드 `SiteSeedCaps.MAX_CATEGORIES`(memo139). */
-    categories: 10,
-    /** 백엔드 `SiteSeedCaps.MAX_CATEGORIES_PER_PRODUCT`. */
-    categoriesPerProduct: 3,
+    // ⚠ 상품·갈래 캡(products·categories·categoriesPerProduct·재고·텍스트 길이)은 memo142 에서
+    //    **축 자체가 사라져** 백엔드 `SiteSeedCaps` 와 함께 은퇴했다. 시드는 업무 데이터를 만들지 않는다.
 };
 
 /** 백엔드 `StorageFileService.putMediaObject` 의 화이트리스트와 같다 — 래스터만, svg·영상 없음. */
@@ -111,12 +121,32 @@ const fail = (code, message) => problems.push(`[${code}] ${message}`);
 const isReferenceKey = (key) => key === "asset" || (key.length > 5 && key.endsWith("Asset"));
 
 /**
- * `product`/`*Product`(단수·문자열) · `products`/`*Products`(복수·문자열 배열) = `products[].handle` 참조
- * (memo119 §2.3). 백엔드 `SeedProductReferences` 와 **같은 판정**이어야 한다 — 갈라지면 팩은 통과하는데
- * 개시가 중단된다.
+ * **업무 참조 키 형상**(memo142 §1 기계 판정). `product`/`*Product`(단수) · `products`/`*Products`(복수) ·
+ * `categorySlug`. 종전에는 이 판정이 "이 handle 이 시드에 있는가"를 묻는 **해석기**였는데, 이제는
+ * **금지 판정**이다 — 섹션 config 에 이 형상의 키가 있으면 그 섹션은 조회형이고, 조회의 자리는 선언이
+ * 아니라 소스다.
+ *
+ * **타입 이름이 아니라 키 형상으로 거는 이유**: 어휘에서 `SERVICE_MENU`·`BOOKING_CTA` 가 삭제됐지만,
+ * 같은 성격의 타입이 다시 생기면 이름만 다를 뿐 같은 위반이다. 형상으로 걸면 미래의 조회형도 잡힌다.
+ * (판정 자체는 백엔드 `SeedProductReferences` 가 쓰던 것과 **같은 형태**를 그대로 재사용한다 — 그 규칙이
+ * 이미 "무엇이 업무 참조인가"를 정확히 정의해 뒀다.)
  */
 const isProductRefKey = (key) => key === "product" || (key.length > 7 && key.endsWith("Product"));
 const isProductsRefKey = (key) => key === "products" || (key.length > 8 && key.endsWith("Products"));
+const isBusinessRefKey = (key) => key === "categorySlug" || isProductRefKey(key) || isProductsRefKey(key);
+
+/** 섹션 config 안의 업무 참조 키 **경로 전수**(사람이 고칠 재료라 경로로 돌려준다). */
+function collectBusinessRefKeys(node, path = "", into = []) {
+    if (Array.isArray(node)) node.forEach((v, i) => collectBusinessRefKeys(v, `${path}[${i}]`, into));
+    else if (node && typeof node === "object") {
+        for (const [key, value] of Object.entries(node)) {
+            const here = path ? `${path}.${key}` : key;
+            if (isBusinessRefKey(key)) into.push(here);
+            else collectBusinessRefKeys(value, here, into);
+        }
+    }
+    return into;
+}
 
 /**
  * 참조 키가 재작성된 뒤의 **id 형** 키(`assetId`·`photoAssetId`·`productId`·`productIds`…).
@@ -138,33 +168,8 @@ const isRewrittenIdKey = (key) => {
     return ID_STEMS.some((s) => stem === s || stem.endsWith(s));
 };
 
-/** 계약이 요구하는 id 형 키(`productIds`)를 시드가 쓰는 참조형 키(`products`)로 되돌린다. */
+/** 계약이 요구하는 id 형 키(`*AssetId`)를 소스가 쓰는 참조형 키(`*Asset`)로 되돌린다. */
 const seedKeyOf = (idKey) => (idKey.endsWith("Ids") ? `${idKey.slice(0, -3)}s` : idKey.replace(/Id$/, ""));
-
-function collectRefs(node, into = new Set()) {
-    if (Array.isArray(node)) node.forEach((v) => collectRefs(v, into));
-    else if (node && typeof node === "object") {
-        for (const [key, value] of Object.entries(node)) {
-            if (isReferenceKey(key) && typeof value === "string") into.add(value);
-            else collectRefs(value, into);
-        }
-    }
-    return into;
-}
-
-/** 상품 handle 참조 전수 수집. 최상위 `products`(상품 정의 배열)가 아니라 **섹션 config** 안만 훑는다. */
-function collectProductRefs(node, into = new Set()) {
-    if (Array.isArray(node)) node.forEach((v) => collectProductRefs(v, into));
-    else if (node && typeof node === "object") {
-        for (const [key, value] of Object.entries(node)) {
-            if (isProductRefKey(key) && typeof value === "string") into.add(value);
-            else if (isProductsRefKey(key) && Array.isArray(value) && value.every((v) => typeof v === "string")) {
-                value.forEach((v) => into.add(v));
-            } else collectProductRefs(value, into);
-        }
-    }
-    return into;
-}
 
 /** 시드 config 에 재작성된 id 형 키가 있으면 그 경로를 모은다(§2.6-5 — 숫자 직기입 금지). */
 function collectIdKeys(node, path = "", into = []) {
@@ -253,185 +258,6 @@ function assertGuaranteesCarried() {
 }
 
 /**
- * 시드 상품(memo119 §2.2). 백엔드 `SeedProduct`·`SiteSeedPlanner` 와 **같은 규칙**이다 — 캡·형식이 갈리면
- * 팩은 통과하는데 개시가 중단되는, 가장 늦게 발견되는 종류의 결함이 된다(CAPS 와 같은 관례).
- */
-const HANDLE_FORMAT = /^[a-z0-9-]+$/;
-
-/**
- * 시드에 개방된 상품 유형. **화이트리스트다** — 새 유형이 자동으로 열리지 않는다.
- *
- * `DIGITAL` 이 빠진 것은 누락이 아니라 결정이다(memo137 §5-3): 이행 엔진(다운로드·라이선스 전달)이
- * 후속 페이즈라, 열면 "결제는 됐는데 아무것도 안 오는" 조용한 실패가 즉시 상용 가능해진다.
- * `PHYSICAL` 은 2026-08-01 오너 확정으로 열렸다(memo119 §2.2 의 "오너 결정 1" 소진).
- */
-const SEED_PRODUCT_TYPES = new Set(["SERVICE", "PHYSICAL"]);
-
-/**
- * 초기 재고를 명시로 요구하는 유형 — 백엔드가 `ProductType.defaultTrackInventory` 로 판별하는 그 집합이다.
- * 여기에 드는 유형은 재고추적이 켜진 채 태어나므로, `stock` 이 없거나 0 이면 **전 상품 품절 진열 +
- * JSON-LD `OutOfStock`** 이 된다(memo137 §2 D2).
- *
- * ⚠ **여기는 리터럴이고 백엔드는 파생이다**(심의 기능 축 W2). 추적 ON 인 신유형이 추가되면 백엔드는
- * 자동으로 재고를 요구하는데 이 목록은 안 따라오므로, 팩은 green 인데 개시가 중단된다 — 시끄러운
- * 실패라 사고는 아니지만 **갈림 지점**이다. 유형이 늘면 이 줄을 같이 고쳐라.
- */
-const STOCK_REQUIRED_TYPES = new Set(["PHYSICAL"]);
-
-/**
- * 착지 컬럼이 `varchar(255)` 인 텍스트의 상한 — 백엔드 `SiteSeedCaps.MAX_TEXT_COLUMN` 과 **동수**.
- * 길이를 팩에서도 재는 이유는 백엔드와 같다: 안 재면 S3 적재 뒤 DB 제약에서 터져 미디어 고아가 남는다.
- *
- * ⚠ **커버리지는 상품 축뿐이다**(심의 지적 — 커밋 서사가 이보다 컸다). 백엔드는 페이지 slug(100)·
- * title(255)·메뉴 label(100)·url(500)까지 재는데, 현 팩들이 시드에 pages/menus 를 안 실어 여기서는
- * 잠재적이다. 시드가 그것들을 싣기 시작하면 이 게이트도 같이 넓혀야 한다.
- */
-const MAX_TEXT_COLUMN = 255;
-
-/** 상품 1건 초기 재고 상한. 백엔드 `SiteSeedCaps.MAX_STOCK_PER_PRODUCT` 와 **동수 유지**(갈리면 검출이 죽는다). */
-const MAX_STOCK_PER_PRODUCT = 999;
-
-/**
- * 시드 갈래 검증(memo139) — 백엔드 `SiteSeedPlanner.validateCategories` 와 **같은 규칙**이다.
- * 갈라지면 팩은 통과하는데 개시가 중단되는, 가장 늦게 발견되는 종류의 결함이 된다.
- *
- * **아무 상품도 안 드는 갈래를 막는 이유**: 데모의 빈 진열대는 거짓이다(고객 사이트의 빈 갈래는
- * 정상이고, 여기 걸리는 것은 **우리 팩**뿐이다).
- */
-function validateCategories(code, categories, products) {
-    if (!Array.isArray(categories)) {
-        fail("SEED_CATEGORIES", `${code}: categories 는 배열이어야 합니다`);
-        return new Set();
-    }
-    if (categories.length > CAPS.categories) {
-        fail("CAP_CATEGORIES", `${code}: 갈래 ${categories.length} > ${CAPS.categories} — 데모가 아니라 데이터 이관입니다`);
-    }
-    const slugs = new Set();
-    for (const category of categories) {
-        const slug = category?.slug;
-        if (!slug || !category?.name) {
-            fail("SEED_CATEGORY", `${code}: 갈래 slug·name 은 필수 — ${JSON.stringify(category)}`);
-            continue;
-        }
-        if (!HANDLE_FORMAT.test(slug)) {
-            fail("HANDLE_FORMAT", `${code}: 갈래 slug "${slug}" — 소문자·숫자·하이픈만 씁니다`);
-        }
-        if (slugs.has(slug)) fail("SEED_CATEGORY", `${code}: 갈래 slug 중복 — ${slug}`);
-        slugs.add(slug);
-        for (const [field, value] of [["slug", slug], ["name", category.name]]) {
-            if (typeof value === "string" && value.length > MAX_TEXT_COLUMN) {
-                fail("SEED_CATEGORY", `${code}/${slug}: ${field} 길이 ${value.length} > ${MAX_TEXT_COLUMN}`);
-            }
-        }
-    }
-
-    const used = new Set();
-    for (const product of products) {
-        const refs = product?.categories;
-        if (refs == null) continue;
-        if (!Array.isArray(refs)) {
-            fail("SEED_CATEGORY", `${code}/${product?.handle}: categories 는 배열이어야 합니다`);
-            continue;
-        }
-        if (refs.length > CAPS.categoriesPerProduct) {
-            fail("CAP_CATEGORIES", `${code}/${product.handle}: 갈래 ${refs.length} > ${CAPS.categoriesPerProduct}`);
-        }
-        for (const ref of refs) {
-            if (!slugs.has(ref)) {
-                fail("REF_MISSING", `${code}/${product.handle}: 미정의 갈래를 가리킵니다 — ${ref}`);
-            }
-            used.add(ref);
-        }
-    }
-    for (const slug of slugs) {
-        if (!used.has(slug)) {
-            fail("REF_UNUSED", `${code}: 아무 상품도 안 드는 갈래 — ${slug}. 데모의 빈 진열대는 거짓입니다`);
-        }
-    }
-    return slugs;
-}
-
-function validateProducts(code, products) {
-    if (!Array.isArray(products)) {
-        fail("SEED_PRODUCTS", `${code}: products 는 배열이어야 합니다`);
-        return new Set();
-    }
-    if (products.length > CAPS.products) {
-        fail("CAP_PRODUCTS", `${code}: 상품 ${products.length} > ${CAPS.products} — 이건 템플릿이 아니라 데이터 이관입니다`);
-    }
-
-    const handles = new Set();
-    for (const product of products) {
-        const handle = product?.handle;
-        if (!handle || !product?.name || product?.price == null) {
-            fail("SEED_PRODUCT", `${code}: 상품 handle·name·price 는 필수 — ${JSON.stringify(product)}`);
-            continue;
-        }
-        if (!HANDLE_FORMAT.test(handle)) {
-            fail("HANDLE_FORMAT", `${code}: handle "${handle}" — 소문자·숫자·하이픈만 씁니다(콘솔과 달리 시드는 ASCII 만)`);
-        }
-        if (handles.has(handle)) fail("SEED_PRODUCT", `${code}: handle 중복 — ${handle}`);
-        handles.add(handle);
-
-        // 길이 — 백엔드와 동수. 넘치면 개시가 S3 적재 뒤 DB 제약에서 터진다(미디어 고아).
-        for (const [field, value] of [["handle", handle], ["name", product.name]]) {
-            if (typeof value === "string" && value.length > MAX_TEXT_COLUMN) {
-                fail("SEED_PRODUCT", `${code}/${handle}: ${field} 길이 ${value.length} > ${MAX_TEXT_COLUMN}`);
-            }
-        }
-
-        if (!SEED_PRODUCT_TYPES.has(product.type)) {
-            fail(
-                "PRODUCT_TYPE",
-                `${code}/${handle}: type "${product.type}" 은 아직 개방 전입니다 — 시드 v1 은 ${[...SEED_PRODUCT_TYPES].join("·")} 만 받습니다`,
-            );
-        }
-        // 가격은 **문자열**이다(BigDecimal — 부동소수 회피). 숫자로 적으면 백엔드 strict 파싱이 개시를 중단한다.
-        // 자릿수까지 백엔드와 동수다 — 착지 컬럼이 `decimal(12,2)` 라, 소수 3자리는 조용히 반올림되고
-        // 정수 11자리는 S3 적재 뒤 DB 제약에서 터진다(memo137 보안 재검수 W-a).
-        if (typeof product.price !== "string" || !/^\d{1,10}(\.\d{1,2})?$/.test(product.price)) {
-            fail(
-                "PRODUCT_PRICE",
-                `${code}/${handle}: price 는 정수 10자리·소수 2자리 이하의 **문자열**이어야 합니다 — ${JSON.stringify(product.price)}`,
-            );
-        }
-        // 초기 재고(memo137). 백엔드 `SiteSeedPlanner.validateStock` 과 **같은 규칙**이다 — 갈리면
-        // 팩은 통과하는데 개시가 중단된다.
-        if (STOCK_REQUIRED_TYPES.has(product.type)) {
-            if (product.stock == null) {
-                fail(
-                    "PRODUCT_STOCK",
-                    `${code}/${handle}: ${product.type} 은 초기 재고(stock) 명시가 필수입니다 — 없으면 재고추적이 켜진 채` +
-                        ` onHand 0 으로 태어나 전 상품이 품절로 진열됩니다`,
-                );
-            } else if (!Number.isInteger(product.stock)) {
-                // 문자열 "40" 은 백엔드가 관용 수용할 수 있으나, 팩에서 정수로 못박아야 형식이 안 흔들린다.
-                fail("PRODUCT_STOCK", `${code}/${handle}: stock 은 **정수**여야 합니다 — ${JSON.stringify(product.stock)}`);
-            } else if (product.stock <= 0) {
-                fail("PRODUCT_STOCK", `${code}/${handle}: stock 0 은 곧 품절 진열입니다 — 견본 재고를 명시하십시오`);
-            } else if (product.stock > MAX_STOCK_PER_PRODUCT) {
-                fail(
-                    "PRODUCT_STOCK",
-                    `${code}/${handle}: stock ${product.stock} > ${MAX_STOCK_PER_PRODUCT} — 네 자리 재고는 견본이 아니라 데이터 이관입니다`,
-                );
-            }
-        } else if (product.stock != null) {
-            fail(
-                "PRODUCT_STOCK",
-                `${code}/${handle}: ${product.type} 은 무한재고라 stock 이 무의미합니다 — 적으면 백엔드가 개시를 중단합니다`,
-            );
-        }
-        // 섹션 config 와 같은 규칙 — 상품의 커버도 `imageAsset`(파일명)이지 `imageAssetId`(숫자)가 아니다(§2.6-5).
-        for (const path of collectIdKeys(product)) {
-            fail("NUMERIC_ID", `${code}/${handle}: 상품에 id 형 키 "${path}" — 시드는 참조형(파일명)으로 씁니다`);
-        }
-    }
-    // 상품 0 은 정상이다 — 상품을 안 쓰는 테마(biz-*)가 다수다. 필수 참조 게이트가 "쓰겠다고 선언해 놓고
-    // 안 가리킨" 경우만 잡는다.
-    return handles;
-}
-
-/**
  * 정적 라우트 세그먼트(`src/app/<seg>/page.tsx`). Next 규칙상 정적 세그먼트가 `[slug]` 보다 **우선**하므로,
  * 같은 이름의 시드 페이지는 그려지지 않는다 — 데이터는 들어갔는데 아무도 못 보는 고아가 된다.
  * 조용한 그림자라 사람 눈으로는 안 잡힌다. 레포에서 직접 세어 시드 slug 와 대조한다.
@@ -459,11 +285,14 @@ function iconKeys() {
 const HOME_SLUG = "home";
 
 /**
- * 시드 v2 검증 — **업무 데이터만** 남았다(테마 값 슬롯 + 상품). `pages`·`menus` 는 팩 v2 에서 탈락했고
- * 그 자리를 `content/` 가 받는다(아래 [validateContent]).
+ * 시드 v3 검증(memo142) — 남은 최상위 키는 **`themeColors` 하나**다.
  *
- * v1 잔재(`pages`/`menus` 키)를 조용히 무시하지 않고 **실패**시키는 이유: 무시하면 그 프리셋은
- * "페이지를 넣었는데 사이트에 안 나오는" 상태로 나가고, 그 원인이 파일 어디에도 안 적혀 있다.
+ * `pages`·`menus` 는 팩 v2 에서 탈락했고(그 자리를 `content/` 가 받는다 — 아래 [validateContent]),
+ * `products`·`categories` 는 팩 v3 에서 탈락했다(그 자리를 **소스의 직접 호출**이 받는다).
+ *
+ * **잔재 키를 조용히 무시하지 않고 실패시키는 이유는 두 세대가 같다**: 무시하면 그 프리셋은
+ * "상품을 넣었는데 안 생기는"·"페이지를 넣었는데 안 나오는" 상태로 나가고, 그 원인이 파일 어디에도
+ * 안 적혀 있다. 백엔드도 같은 판정이다(strict 파싱이 미지 키로 개시를 중단한다) — 갈리면 안 되는 축이다.
  */
 function validateSeed(code, seedBytes, assetNames) {
     if (seedBytes.length > CAPS.seedJsonBytes) {
@@ -483,29 +312,41 @@ function validateSeed(code, seedBytes, assetNames) {
         fail(
             "SEED_V1",
             `${code}: seed.json 에 ${legacy.join("·")} 가 남아 있습니다 — 팩 v2 에서 사이트의 얼굴은 ` +
-                `presets/${code}/content/ 로 갔습니다(seed 는 업무 데이터 전송 포맷). 옮기고 지우십시오`,
+                `presets/${code}/content/ 로 갔습니다. 옮기고 지우십시오`,
         );
     }
-    const unknownTop = Object.keys(seed).filter((k) => !["themeColors", "products", "categories"].includes(k));
-    if (unknownTop.length) fail("SEED_STRICT", `${code}: 최상위 미지 키 — ${unknownTop.join(", ")}`);
-
-    const categorySlugs = validateCategories(code, seed.categories ?? [], seed.products ?? []);
-    const handles = validateProducts(code, seed.products ?? []);
-
-    // 참조 무결성 — 양방향. `.zalkera/assets/` 는 **상품 이미지 전용 풀**이 됐다(섹션 이미지는 public/).
-    const refs = collectRefs(seed.products ?? []);
-    for (const ref of refs) if (!assetNames.has(ref)) fail("REF_MISSING", `${code}: 상품이 참조한 에셋 없음 — ${ref}`);
-    for (const name of assetNames) {
-        if (!refs.has(name)) {
-            fail(
-                "REF_UNUSED",
-                `${code}: 아무 상품도 안 쓰는 에셋 — .zalkera/assets/${name}. 섹션 이미지라면 ` +
-                    `presets/${code}/public/ 로 옮기십시오(레포 상주가 정위치입니다)`,
-            );
-        }
+    // ⚠ **팩 v3 의 핵심 게이트**(memo142). 상품·갈래를 시드에 실으면 그것은 우리가 고객 DB 에 업무
+    //    데이터를 만드는 것이고, 갈래 이름(`리빙`·`시술`)은 애초에 **사장이 정할 이름**이다.
+    //    카탈로그의 입구는 콘솔·MCP 이고, 화면에 비추는 일은 소스가 `listProducts()` 로 한다.
+    const business = ["products", "categories"].filter((k) => k in seed);
+    if (business.length) {
+        fail(
+            "SEED_BUSINESS_DATA",
+            `${code}: seed.json 에 ${business.join("·")} 가 있습니다 — 시드는 업무 데이터를 만들지 않습니다` +
+                `(memo142 §1). 카탈로그는 콘솔·MCP 가 채우고, 화면은 소스가 listProducts()·` +
+                `listProductCategories() 를 직접 불러 그립니다. 견본 카탈로그가 필요하면 ` +
+                `qa/fixtures/${code}/catalog.json 으로 옮겨 파트너 API 로 적재하십시오`,
+        );
+    }
+    const unknownTop = Object.keys(seed).filter((k) => k !== "themeColors");
+    if (unknownTop.length && !unknownTop.every((k) => ["pages", "menus", "products", "categories"].includes(k))) {
+        const rest = unknownTop.filter((k) => !["pages", "menus", "products", "categories"].includes(k));
+        fail("SEED_STRICT", `${code}: 최상위 미지 키 — ${rest.join(", ")}. 남은 키는 themeColors 뿐입니다`);
     }
 
-    return {seed, handles, categorySlugs};
+    // `.zalkera/assets/` 는 **전송 이미지 풀**이다. 팩 v3 에서 그 유일한 소비자(상품 커버)가 사라져
+    // 현행 팩들은 이 디렉터리가 아예 없다 — 파일을 두면 아무도 안 쓰는 채로 배송된다.
+    // 섹션 이미지의 정위치는 레포 상주(`presets/<code>/public/`)이고 그건 아래 [validateContent] 가 센다.
+    for (const name of assetNames) {
+        fail(
+            "REF_UNUSED",
+            `${code}: 아무도 안 쓰는 전송 에셋 — .zalkera/assets/${name}. 섹션 이미지라면 ` +
+                `presets/${code}/public/ 로 옮기고(레포 상주가 정위치입니다), 상품 이미지라면 ` +
+                `qa/fixtures/${code}/assets/ 로 옮기십시오(카탈로그는 콘솔이 채웁니다)`,
+        );
+    }
+
+    return {seed};
 }
 
 /**
@@ -519,7 +360,7 @@ function validateSeed(code, seedBytes, assetNames) {
  * 새로 생긴 축 둘: ⑴ 에셋이 `public/` 루트 절대 경로이고 그 파일이 실재하는가 ⑵ `sortOrder` 잔존
  * (배열이 순서인데 키가 남으면 순서의 원장이 둘이 된다).
  */
-function validateContent(code, contentDir, publicNames, contract, icons, reserved, handles, categorySlugs) {
+function validateContent(code, contentDir, publicNames, contract, icons, reserved) {
     const pagesDir = join(contentDir, "pages");
     let files;
     try {
@@ -617,16 +458,22 @@ function validateContent(code, contentDir, publicNames, contract, icons, reserve
                 }
             }
 
-            // 콘텐츠의 갈래 참조 ↔ 시드 갈래 대조.
+            // ⚠ **업무 참조 키 금지**(memo142 §1 기계 판정 · 팩 v3 의 핵심 게이트).
             //
-            // ⚠ **이 대조는 팩 게이트에만 설 수 있다.** 팩 v2 에서 페이지는 시드 밖(소스 `content/`)이라
-            //    백엔드 Planner 가 구조적으로 볼 수 없다. "팩은 위생이고 Planner 가 방어"라는 memo137 의
-            //    규율에 대한 **명시적 예외**이고, 그래서 여기가 유일한 검출 지점이다.
-            const catRef = typeof config.categorySlug === "string" ? config.categorySlug : null;
-            if (catRef && !categorySlugs.has(catRef)) {
+            //    종전에는 여기서 "이 갈래가 시드에 있는가"를 대조했다. 이제 묻는 것이 다르다 —
+            //    **선언이 업무 축을 가리키는 것 자체**가 경계 위반이다. 값이 업무 DB 에 살고 화면이
+            //    비추기만 하는 조회는 선언이 아니라 소스의 소관이고(`ProductRail` 이 본보기), 절반 선언은
+            //    "어디에"만 선언에 두고 "어떻게"를 공유 렌더러에 얼려 버린다.
+            //
+            //    **타입 이름이 아니라 키 형상으로 건다** — 어휘에서 조회형 둘이 삭제됐지만 같은 성격의
+            //    타입이 다시 생겨도 여기서 잡힌다. 이 게이트는 **우리 산출물인 팩에만** 선다(요건 1:
+            //    고객 zip·고객 레포의 어휘를 우리가 강제하지 않는다).
+            for (const path of collectBusinessRefKeys(config)) {
                 fail(
-                    "REF_MISSING",
-                    `${at}: 시드에 없는 갈래를 가리킵니다 — "${catRef}". 개시하면 이 섹션이 조용히 빕니다`,
+                    "BUSINESS_REF",
+                    `${at}: 섹션 config 에 업무 참조 키 "${path}" — 배송물은 업무 축의 고유명사(상품 handle·` +
+                        `갈래 slug)를 박지 않습니다(받은 사람 카탈로그에는 그 이름이 없어 영구히 빕니다). ` +
+                        `진열은 소스에서 listProducts()·listProductCategories() 를 직접 부르십시오`,
                 );
             }
 
@@ -667,12 +514,6 @@ function validateContent(code, contentDir, publicNames, contract, icons, reserve
                 usedAssets.add(value);
             }
 
-            // 상품 참조 — 시드 상품 handle 로 해결돼야 한다(레인 A ↔ 레인 B 의 통신 키).
-            for (const ref of collectProductRefs(config)) {
-                if (!handles.has(ref)) {
-                    fail("PRODUCT_REF_MISSING", `${at}: 참조한 상품 없음 — handle "${ref}" 가 seed.json products 에 없습니다`);
-                }
-            }
         }
     }
 
@@ -1057,7 +898,8 @@ function inspect(code, contract, icons, reserved) {
     const seedBytes = readFileSync(join(dir, "seed.json"));
     const manifest = readFileSync(join(dir, "ASSETS-LICENSE.md"), "utf8");
 
-    // `.zalkera/assets/` = **상품 이미지 전용**이 됐다. 상품을 안 쓰는 테마는 이 디렉터리가 아예 없다.
+    // `.zalkera/assets/` = 전송 이미지 풀. 팩 v3 에서 그 유일한 소비자(상품 커버)가 사라져
+    // **현행 팩은 전부 이 디렉터리가 없다** — 있으면 validateSeed 가 미사용으로 막는다.
     const assetDir = join(dir, "assets");
     let assets = [];
     try {
@@ -1072,7 +914,7 @@ function inspect(code, contract, icons, reserved) {
     const publicFiles = presetPublicFiles(join(dir, "public"));
 
     validateAssets(code, assets);
-    const seedResult = validateSeed(code, seedBytes, new Set(assets.map((a) => a.name)));
+    validateSeed(code, seedBytes, new Set(assets.map((a) => a.name)));
     const content = validateContent(
         code,
         join(dir, "content"),
@@ -1080,8 +922,6 @@ function inspect(code, contract, icons, reserved) {
         contract,
         icons,
         reserved,
-        seedResult?.handles ?? new Set(),
-        seedResult?.categorySlugs ?? new Set(),
     );
     const overlayImages = presetSourceOverlay(code)
         .map((o) => o.path.split("/").pop())

@@ -1,14 +1,11 @@
-import type {ProductSummary} from "@zalkera/client";
 import type {ContentSection} from "@/lib/content";
 import {BeforeAfterGallerySection} from "./BeforeAfterGallerySection";
-import {BookingCtaSection} from "./BookingCtaSection";
 import {DoctorIntroSection} from "./DoctorIntroSection";
 import {FaqListSection} from "./FaqListSection";
 import {FeatureGridSection} from "./FeatureGridSection";
 import {HeroSection} from "./HeroSection";
 import {LeadCtaSection} from "./LeadCtaSection";
 import {LogoWallSection} from "./LogoWallSection";
-import {ServiceMenuSection} from "./ServiceMenuSection";
 import {StatsBandSection} from "./StatsBandSection";
 import {TestimonialsSection} from "./TestimonialsSection";
 import {TextMediaSection} from "./TextMediaSection";
@@ -16,42 +13,20 @@ import {TextMediaSection} from "./TextMediaSection";
 /**
  * 섹션 디스패처.
  *
- * **모르는 타입은 조용히 건너뛴다** — 백엔드 `SectionType` 이 append-only 라, 새 타입이 추가돼도
- * 옛 스토어프론트가 깨지지 않아야 한다는 게 계약이다. 에러도 경고도 내지 않는 게 맞다.
+ * **모르는 타입은 조용히 건너뛴다** — 계약이 스큐 내성으로 설계돼 있다. 타입이 늘어도 옛 스토어프론트가
+ * 깨지지 않고, **타입이 빠져도**(계약 rev 6 이 조회형 둘을 삭제했다) 그 값을 적어 둔 옛 콘텐츠 파일이
+ * 페이지를 죽이지 않는다. 에러도 경고도 내지 않는 게 맞다.
+ *
+ * **전 타입이 선언형이다** — 어느 것도 백엔드를 부르지 않는다(memo142 §1 · `SectionList` KDoc).
+ * 업무 데이터를 비추는 진열은 섹션이 아니라 소스의 직접 호출이다(`ProductRail`).
  */
-export function SectionRenderer({
-    section,
-    products,
-    categoryProducts,
-}: {
-    section: ContentSection;
-    /** handle 참조 해소분 — `SectionList` 가 참조된 것만 직접 조회해 채운다. */
-    products: Map<string, ProductSummary>;
-    /** `categorySlug` 참조 해소분(동적) — 서버가 그 카테고리로 준 목록 그대로. */
-    categoryProducts: Map<string, ProductSummary[]>;
-}) {
+export function SectionRenderer({section}: {section: ContentSection}) {
     switch (section.type) {
-        case "SERVICE_MENU":
-            return (
-                <ServiceMenuSection
-                    config={section.config}
-                    products={products}
-                    categoryProducts={categoryProducts}
-                />
-            );
         case "BEFORE_AFTER_GALLERY":
             return <BeforeAfterGallerySection config={section.config} />;
-        case "BOOKING_CTA":
-            return (
-                <BookingCtaSection
-                    config={section.config}
-                    products={products}
-                    categoryProducts={categoryProducts}
-                />
-            );
         case "DOCTOR_INTRO":
             return <DoctorIntroSection config={section.config} />;
-        // ── 기업 마케팅(memo102) — 전부 상품 비참조라 products 를 안 받는다 ──
+        // ── 기업 마케팅(memo102) ──
         case "HERO":
             return <HeroSection config={section.config} />;
         case "FEATURE_GRID":
@@ -71,9 +46,4 @@ export function SectionRenderer({
         default:
             return null;
     }
-}
-
-/** 상품을 참조하는 섹션이 있는가 — 있을 때만 상품 목록을 부른다. */
-export function needsProducts(sections: ContentSection[]): boolean {
-    return sections.some((s) => s.type === "SERVICE_MENU" || s.type === "BOOKING_CTA");
 }

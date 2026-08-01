@@ -39,8 +39,8 @@ const THEMES = {
     /**
      * 커머스(재화 판매). 따뜻한 점토색 계열로 잡아 앞의 둘(파랑=정보형·청록=전환형)과 인상이 안 겹치게 한다.
      *
-     * 상품 커버(`goods-*.png`)가 **시드 상품 `imageAsset`** 이고 나머지는 섹션 이미지다. 팩이 둘을 다른
-     * 자리로 보내므로(`.zalkera/assets/` vs `public/`) 생성 후 배치가 갈린다 — §아래 `generate` 주석 참조.
+     * 상품 커버(`goods-*.png`)는 **검수 키트**(`qa/fixtures/`)의 것이고 나머지는 섹션 이미지다. 전자는
+     * zip 에 안 실린다(카탈로그는 콘솔이 채운다) — §아래 `generate` 주석 참조.
      * 커버를 4:3 으로 두는 것은 상품 카드가 그 비율로 자르기 때문이다.
      */
     "shop-goods": {
@@ -343,16 +343,21 @@ function mix(fromHex, toHex, t) {
 }
 
 /**
- * 시드가 상품 커버로 쓰는 파일명 — **시드가 정본**이다. 여기서 목록을 따로 관리하면 시드와 갈라지고,
- * 갈라진 순간 팩 게이트가 "안 쓰는 에셋"으로 잡거나(양성) 커버가 섹션 자리로 새어 나간다(음성).
- * 상품이 없는 테마는 빈 집합이라 `assets/` 가 아예 안 생긴다(팩의 기대와 같다).
+ * 검수 키트가 상품 커버로 쓰는 파일명 — **`qa/fixtures/<code>/catalog.json` 이 정본**이다.
+ * 여기서 목록을 따로 관리하면 키트와 갈라지고, 갈라진 순간 커버가 섹션 자리(`public/`)로 새어 나가
+ * 팩 게이트의 "아무도 안 쓰는 이미지"에 걸린다.
+ *
+ * ⚠ **거처가 시드에서 키트로 옮겨졌다**(memo142). 종전 정본은 `presets/<code>/seed.json` 의
+ * `products[].imageAsset` 이었는데, 시드가 상품을 만들지 않게 되면서 그 축이 사라졌다. 카탈로그 견본은
+ * 이제 **배송물이 아니라 검수용**이고(콘솔·파트너 API 로 적재한다), 그래서 이미지도 zip 밖에 산다.
+ * 키트가 없는 테마는 빈 집합이라 커버 자리가 아예 안 생긴다.
  */
-function readSeedCovers(code) {
+function readKitCovers(code) {
     try {
-        const seed = JSON.parse(readFileSync(join(ROOT, "presets", code, "seed.json"), "utf8"));
-        return (seed.products ?? []).map((p) => p.imageAsset).filter(Boolean);
+        const kit = JSON.parse(readFileSync(join(ROOT, "qa", "fixtures", code, "catalog.json"), "utf8"));
+        return (kit.products ?? []).map((p) => p.imageAsset).filter(Boolean);
     } catch {
-        return []; // 시드가 없는 테마 — 전부 섹션 이미지로 본다.
+        return []; // 키트가 없는 테마 — 전부 섹션 이미지로 본다.
     }
 }
 
@@ -367,18 +372,18 @@ function generate(code) {
         primaryHex: spec.primary,
         surfaceHex: spec.surface,
     };
-    // ⚠ **거처가 둘이고 팩이 그 둘을 다른 자리로 보낸다**(pack v2):
-    //    `presets/<code>/assets/`  → zip `.zalkera/assets/` — **상품 커버 전용 풀**이다.
-    //    `presets/<code>/public/`  → zip `public/` — 섹션 이미지(히어로·후기 아바타 등).
+    // ⚠ **거처가 둘이고 하나는 배송물이 아니다**(pack v3 · memo142):
+    //    `qa/fixtures/<code>/assets/` → **zip 밖.** 검수 적재 키트의 상품 커버다(콘솔·파트너 API 로 올린다).
+    //    `presets/<code>/public/`     → zip `public/` — 섹션 이미지(히어로·후기 아바타 등).
     //
-    // 초판은 **전부 `assets/` 로** 썼다. 팩이 v2 에서 갈라진 뒤에도 생성기가 안 따라가서, 재생성하면
-    // 섹션 이미지가 `assets/` 로 되돌아가고 팩의 참조 무결성 게이트("아무 상품도 안 쓰는 에셋")에
-    // 걸린다 — 즉 **"재생성은 결정론적이라 안전하다"는 계약이 조용히 깨져 있었다**(실측: 이 파일을
-    // import 하는 것만으로 전 테마가 재생성돼 stray 가 21개 생겼다).
+    // 세대마다 이 자리에서 한 번씩 어긋났다. v2 때는 생성기가 `presets/<code>/assets/`(=`.zalkera/assets/`)로
+    // 전부 쓰는 바람에 섹션 이미지가 전송 풀로 새어 팩 게이트에 걸렸고(실측 stray 21개), v3 에서는 상품
+    // 커버가 **배송물에서 통째로 빠졌다** — 시드가 업무 데이터를 만들지 않기 때문이다. 커버를 `presets/`
+    // 아래 어디로든 쓰면 그 순간 "아무도 안 쓰는 이미지"로 팩이 죽는다.
     //
-    // 판별은 이름으로 한다: 시드 상품이 `imageAsset` 으로 가리키는 파일만 상품 커버다.
-    const coverNames = new Set(readSeedCovers(code));
-    const assetDir = join(ROOT, "presets", code, "assets");
+    // 판별은 이름으로 한다: 검수 키트가 `imageAsset` 으로 가리키는 파일만 상품 커버다.
+    const coverNames = new Set(readKitCovers(code));
+    const assetDir = join(ROOT, "qa", "fixtures", code, "assets");
     const publicDir = join(ROOT, "presets", code, "public", "images");
 
     const written = [];
@@ -386,7 +391,7 @@ function generate(code) {
         const dir = coverNames.has(name) ? assetDir : publicDir;
         mkdirSync(dir, {recursive: true});
         writeFileSync(join(dir, name), canvas.toPng());
-        written.push(coverNames.has(name) ? `assets/${name}` : `public/images/${name}`);
+        written.push(coverNames.has(name) ? `qa/fixtures/${code}/assets/${name}` : `public/images/${name}`);
     };
 
     for (const [name, width, height, kind, opts] of spec.arts) emit(name, art(width, height, palette, kind, opts));
@@ -395,7 +400,7 @@ function generate(code) {
     // 이름이 역할을 말해야 하는 인물 자리(원장 등) — avatar-NN 연번에 섞으면 시드에서 누가 누군지 안 보인다.
     (spec.portraits ?? []).forEach(([name, initial, size]) => emit(name, avatar(initial, palette, size)));
 
-    // 썸네일은 시드 에셋이 아니다 — assets/ 밖에 둬야 참조 무결성 게이트(안 쓰는 에셋 = 실패)에 안 걸린다.
+    // 썸네일은 섹션 이미지도 커버도 아니다 — `public/` 밖에 둬야 "아무도 안 쓰는 이미지" 게이트에 안 걸린다.
     writeFileSync(join(ROOT, "presets", code, "thumbnail.png"), thumbnail(palette).toPng());
 
     console.log(`${code}: 시드 에셋 ${written.length}개 — ${written.join(", ")} (+ thumbnail.png)`);

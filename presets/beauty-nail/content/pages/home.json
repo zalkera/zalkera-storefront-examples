@@ -36,19 +36,6 @@
             }
         },
         {
-            "type": "SERVICE_MENU",
-            "config": {
-                "categorySlug": "care"
-            }
-        },
-        {
-            "type": "BOOKING_CTA",
-            "config": {
-                "label": "시술 예약하기",
-                "categorySlug": "care"
-            }
-        },
-        {
             "type": "BEFORE_AFTER_GALLERY",
             "config": {
                 "items": [

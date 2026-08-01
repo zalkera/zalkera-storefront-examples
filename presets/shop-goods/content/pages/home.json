@@ -36,12 +36,6 @@
             }
         },
         {
-            "type": "SERVICE_MENU",
-            "config": {
-                "categorySlug": "living"
-            }
-        },
-        {
             "type": "TEXT_MEDIA",
             "config": {
                 "title": "적게 만들고 오래 씁니다",
