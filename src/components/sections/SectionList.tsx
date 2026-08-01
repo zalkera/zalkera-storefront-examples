@@ -59,7 +59,12 @@ function collectRefs(sections: ContentSection[]) {
 async function resolveProducts(sections: ContentSection[]) {
     const {handles, categories} = collectRefs(sections);
 
-    // handle 참조 — 참조 수만큼만 부른다. 계약이 섹션당 참조 수를 캡하므로 이 팬아웃은 상한이 있다.
+    // handle 참조 — 참조 수만큼만 부른다.
+    //
+    // ⚠ **"계약이 참조 수를 캡한다"고 적었다가 심의가 정정했다** — 그 캡(상품 20)은 **팩/시드 경로에만**
+    //    참이고, 업로드된 자유 소스에는 파서에도 어휘 계약에도 길이 상한이 없다. 즉 이 팬아웃의 상한은
+    //    계약이 아니라 **그 사이트 저자의 선택**이다. 자해 수준이라(자기 사이트 재검증이 느려질 뿐)
+    //    가드를 두지 않지만, 없는 보증을 주석에 적어 두지는 않는다.
     const byHandle = new Map<string, ProductSummary>();
     await Promise.all(
         [...handles].map(async (handle) => {

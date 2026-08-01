@@ -36,7 +36,7 @@
  */
 import {execFileSync} from "node:child_process";
 import {createHash} from "node:crypto";
-import {mkdirSync, readFileSync, readdirSync, statSync, writeFileSync} from "node:fs";
+import {existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync} from "node:fs";
 import {dirname, join, relative} from "node:path";
 import {fileURLToPath} from "node:url";
 import {createRequire} from "node:module";
@@ -122,9 +122,21 @@ const isProductsRefKey = (key) => key === "products" || (key.length > 8 && key.e
  * 참조 키가 재작성된 뒤의 **id 형** 키(`assetId`·`photoAssetId`·`productId`·`productIds`…).
  * 시드에는 이 형태가 있으면 안 된다(§2.6-5) — 아래 NUMERIC_ID 게이트가 쓴다.
  */
-const isRewrittenIdKey = (key) =>
-    (key.endsWith("Id") && (isReferenceKey(key.slice(0, -2)) || isProductRefKey(key.slice(0, -2)))) ||
-    (key.endsWith("Ids") && isProductsRefKey(`${key.slice(0, -3)}s`));
+//
+// ⚠ **백엔드 `SeedIdKeys` 와 같은 판정이어야 한다.** memo139 D9 가 "백엔드·팩 양쪽에 category 어간을
+//    넣었다"고 적었는데 **팩 쪽이 안 들어갔다**(심의 실측): `categoryId: 46` 을 시드에 넣으면 팩은
+//    통과하고 개시가 500 으로 죽는다 — 이 파일 곳곳이 경고하는 "가장 늦게 발견되는 결함" 그 형태다.
+//    판정 방식도 백엔드와 맞춘다: **영숫자만 남겨 정규화**한 뒤 어간을 본다(`product_category_id`·
+//    `category-id`·후행 공백 같은 위장 철자를 같은 자리로 접는다).
+const ID_STEMS = ["asset", "product", "category"];
+const isRewrittenIdKey = (key) => {
+    const lower = String(key).toLowerCase().replace(/[^a-z0-9]/g, "");
+    let stem;
+    if (lower.endsWith("ids")) stem = lower.slice(0, -3).replace(/s$/, "");
+    else if (lower.endsWith("id")) stem = lower.slice(0, -2);
+    else return false;
+    return ID_STEMS.some((s) => stem === s || stem.endsWith(s));
+};
 
 /** 계약이 요구하는 id 형 키(`productIds`)를 시드가 쓰는 참조형 키(`products`)로 되돌린다. */
 const seedKeyOf = (idKey) => (idKey.endsWith("Ids") ? `${idKey.slice(0, -3)}s` : idKey.replace(/Id$/, ""));
@@ -1049,7 +1061,11 @@ for (const p of packed) {
             `    -H "Authorization: Bearer $TOKEN" \\\n` +
             `    -F "version=${p.version}" \\\n` +
             `    -F "file=@${relative(ROOT, p.path)}" \\\n` +
-            `    -F "thumbnail=@presets/${p.code}/thumbnail.png" \\\n` +
+            // 썸네일은 선택이다 — 이미지 0장인 프리셋(골격)에는 파일이 없고, 있는 줄 알고 복붙하면
+            // curl 이 파일을 못 읽어 통째로 실패한다(심의 실측). 있는 것만 안내한다.
+            (existsSync(join(PRESETS_DIR, p.code, "thumbnail.png"))
+                ? `    -F "thumbnail=@presets/${p.code}/thumbnail.png" \\\n`
+                : "") +
             `    -F "expectedSha256=${p.sha}"`,
     );
 }
