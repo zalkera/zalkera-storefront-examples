@@ -129,6 +129,62 @@ function detectStyleMode(srcDir) {
     return "none";
 }
 
+/**
+ * **관문 모드** — 이 검사기가 권고인지 관문인지.
+ *
+ * 기준(오너 확정 2026-08-01): **검사기는 권고하고, 우리가 책임지는 자리에서만 막는다.**
+ *
+ * 근거는 "선언했는가"도 "우리 어휘를 썼는가"도 아니라 **누가 서빙하는가**다. 실측으로 갈린다 —
+ * 백엔드는 `Origin` 을 **안 본다**(테넌트를 시크릿 키로 정한다). 즉 사이트의 CSRF 가 뚫려도
+ * **우리 백엔드는 안 뚫리고 그 사이트의 방문자가 다친다.** 자체 호스팅(BYO)이면 그건 그들의 위험이고
+ * 우리가 막을 근거가 없다(요건 1 — 어휘를 강제할 수 없다). 우리가 서빙하면 우리 박스에서 우리가
+ * 주입한 키를 들고 도는 것이라 운영 책임이 우리에게 온다 — 그 자리에서만 막는다.
+ *
+ * 그래서 도구가 모드를 정한다:
+ *  · `npm run validate`(개발자가 자기 손으로) → **권고**. X·C·E 가 경고로 내려간다.
+ *  · 팩 게이트(우리 예제·프리셋) → **관문**. 우리 자산이다.
+ *  · `verify-zip`(우리가 서빙할 납품물 검수) → **관문**. 서빙 책임을 지는 자리다.
+ *
+ * 종전에는 셋이 갈라져 있었다 — 발주 스펙은 "선언 없으면 경고", `verify-zip` 주석은 "선언 없으면
+ * 스킵", 실제 동작은 "선언 무관 error". 세 문서가 서로 다른 약속을 하고 있었고 이 모드가 그것을 하나로 합친다.
+ */
+const GATE_MODE = process.argv.includes("--gate") || process.env.ZALKERA_VALIDATE_GATE === "1";
+
+/**
+ * 서빙 책임 축(X 교차사이트 가드 · C 동적 렌더 강등 · E 시크릿 노출)의 목적지.
+ * 관문 모드면 error, 아니면 경고. **선언 여부와 무관하다** — 이 축의 근거는 선언이 아니라 서빙이다.
+ */
+function servingSink() {
+    return GATE_MODE ? errors : warnings;
+}
+
+/**
+ * **교차사이트 가드 축(X)의 목적지 — 관문 모드에서도 경고다.**
+ *
+ * 서빙 책임 축이면서도 `servingSink` 와 갈라 두는 이유는, **X1 이 보안이 아니라 이름을 재기 때문**이다.
+ * 양쪽으로 다 틀린다(심의 실측):
+ *  · **거짓 음성** — 라우트 안에 동명 `function assertSameOrigin(){return null}` 을 선언하면 통과한다.
+ *    인자로 엉뚱한 `Request` 를 넘겨도 통과한다. 즉 **통과가 안전을 뜻하지 않는다.**
+ *  · **거짓 양성** — 상용 서빙 중인 두 사이트(bix·credium)가 **둘 다 걸린다**(실측 2/2). 둘 다 문의
+ *    라우트 하나이고, reCAPTCHA + rate limit 으로 같은 위협을 이미 막고 있다.
+ *
+ * 통과가 안전을 뜻하지 않고 실패가 위험을 뜻하지 않는 검사를 관문에 놓으면, 얻는 것은 심리적 안심뿐이고
+ * 잃는 것은 신뢰다 — 게이트의 첫 동작이 **상용 전량 중단**이 된다.
+ *
+ * 그리고 마커(`zalkera-allow-cross-origin`)로 예외를 트는 길은 겉보기보다 나쁘다: 다는 순간 그 라우트는
+ * **영영 무검사**가 된다. 경고로 두면 매번 눈에 밟혀 언젠가 고쳐지지만, 마커는 침묵을 가르친다.
+ *
+ * ⚠ **이것은 X 축을 포기한다는 뜻이 아니다.** 재는 방법을 바꿔야 한다는 뜻이다 — "우리 심볼을 썼는가"가
+ * 아니라 "교차 오리진을 실제로 막는가"로. 그 판정은 정적 분석의 한계가 분명해 별도 설계 대상이고,
+ * 그때까지 이 축은 **크게 보이는 경고**로 남는다.
+ *
+ * 반면 `E`(시크릿이 브라우저 번들에 실림)·`C`(SEO 라우트가 동적 SSR 강제)는 **사실을 잰다** — 오탐 여지가
+ * 없고 상용 실측도 0건이라, 관문으로 켜도 아무도 안 막힌다. 그래서 그 둘만 `servingSink` 를 쓴다.
+ */
+function crossOriginSink() {
+    return warnings;
+}
+
 const STYLE_MODE = detectStyleMode(root);
 
 /**
@@ -547,7 +603,7 @@ function checkLayoutBlastRadius() {
             if (allow) {
                 warnings.push(`[C1b] ${detail} — 예외 허용(zalkera-allow-dynamic: ${allow[1].trim()}).`);
             } else {
-                errors.push(
+                servingSink().push(
                     `[C1b] ${detail}(memo31 §0-1). ${remedyFor(why)}. 꼭 필요하면 ` +
                         `${relative(process.cwd(), file)} 에 \`// zalkera-allow-dynamic: <이유>\` 마커로 정당화하라 ` +
                         `(마커는 layout 이 아니라 **이 파일**에 붙어야 듣는다).`,
@@ -644,7 +700,7 @@ function checkSectionCoverage() {
     const cases = new Set([...src.matchAll(/case\s+"([A-Z_]+)"/g)].map((m) => m[1]));
     const missing = contract.map((c) => c.type).filter((t) => !cases.has(t));
     if (missing.length > 0) {
-        errors.push(
+        servingSink().push(
             `[C2] SectionRenderer 가 계약의 ${missing.join("·")} 를 안 그린다 — 미지 타입은 조용히 스킵되므로 ` +
                 `콘솔에서 넣어도 화면에 안 나온다. case 를 추가하거나, 의도적 미지원이면 그 사유를 커밋에 남겨라.`,
         );
@@ -672,6 +728,22 @@ function sectionContractMap() {
     } catch {
         return null;
     }
+}
+
+/**
+ * 계약을 못 읽으면 **N4·N5 가 통째로 조용히 스킵된다** — 미지 섹션 타입도, 빠진 필수 참조도 무검출인
+ * 채 `✅ 통과` 가 찍힌다. 실측으로 밟았다(node_modules 심링크가 깨진 트리에서 전부 통과).
+ *
+ * 잴 것이 없는 것은 통과가 아니라 **판정 불가**다. `npm ci` 를 안 한 트리에서 검사기를 돌리는 것은
+ * 사용자 실수이지 합격 조건이 아니므로, 조용히 넘기지 않고 경고로 드러낸다(스킵 자체는 유지 —
+ * 계약 없이 판정할 방법이 없고, error 로 막으면 설치 전 훑어보기가 불가능해진다).
+ */
+function warnIfContractMissing(contract) {
+    if (contract) return;
+    warnings.push(
+        "[W-CONTRACT] @zalkera/client 를 못 읽어 **섹션 계약 검사(N4·N5)를 건너뛰었습니다** — " +
+            "미지 섹션·빠진 필수 참조가 무검출입니다. `npm ci` 후 다시 돌리십시오.",
+    );
 }
 
 /** 참조 방언 키 판정 — 백엔드 `SeedAssetReferences`·팩 게이트와 **같은 판정**이어야 한다(계약 rev 4 `dialects`). */
@@ -758,6 +830,7 @@ function checkContentContract() {
     }
 
     const contract = sectionContractMap();
+    warnIfContractMissing(contract);
 
     for (const file of files) {
         let page;
@@ -835,14 +908,28 @@ function checkContentContract() {
                 }
             }
             // N5 — 계약 필수 참조.
+            const isFilled = (idKey) => {
+                const value = cfg[sourceKeyOf(idKey)];
+                return Array.isArray(value) ? value.length > 0 : typeof value === "string" && value.trim() !== "";
+            };
             for (const idKey of spec?.requiredRefs ?? []) {
-                const key = sourceKeyOf(idKey);
-                const value = cfg[key];
-                const filled = Array.isArray(value) ? value.length > 0 : typeof value === "string" && value.trim() !== "";
-                if (!filled) {
+                if (!isFilled(idKey)) {
                     sink.push(
-                        `[N5] ${at}: ${section.type} 이 필수 참조 "${key}" 를 안 가리킵니다 — ` +
+                        `[N5] ${at}: ${section.type} 이 필수 참조 "${sourceKeyOf(idKey)}" 를 안 가리킵니다 — ` +
                             `렌더러가 이 섹션을 통째로 건너뜁니다(계약 ${idKey} 필수).`,
+                    );
+                }
+            }
+            // ⚠ **`requiredRefsAnyOf` 도 집행한다(심의 차단 3).** 계약 rev 5 가 `SERVICE_MENU`·`BOOKING_CTA` 의
+            //    필수 참조를 `requiredRefs`(이제 빈 배열)에서 이 키로 옮겼는데 이 검사기는 옛 키만 읽고 있었다 —
+            //    **참조가 하나도 없는 섹션이 통과했다**(실측). N5 가 존재 이유로 삼는 바로 그 결함이 무검출이었다.
+            //    팩 게이트(`pack-preset.mjs`)는 anyOf 를 집행하고 있어 **어휘 사본 둘이 갈라진 상태**였다.
+            for (const group of spec?.requiredRefsAnyOf ?? []) {
+                if (!group.some(isFilled)) {
+                    const names = group.map(sourceKeyOf).join(" 또는 ");
+                    sink.push(
+                        `[N5] ${at}: ${section.type} 이 ${names} 중 **하나도** 안 가리킵니다 — ` +
+                            `렌더러가 이 섹션을 통째로 건너뜁니다(계약 requiredRefsAnyOf).`,
                     );
                 }
             }
@@ -853,23 +940,29 @@ function checkContentContract() {
 function check(file) {
     const src = readFileSync(file, "utf8");
     const rel = relative(process.cwd(), file);
-    const isClient = /^["']use client["']/m.test(src);
+    // ⚠ **파일 머리만 본다(심의 차단 4).** 종전은 `/m` 플래그로 **원문 전체의 행머리**를 봤고,
+    //    행머리에 `"use client"` 를 담은 **템플릿 리터럴 한 줄**이 있으면 SEO 페이지가 클라이언트로
+    //    오판돼 `force-dynamic` 이 통과했다(실측). 이 레포는 codegen 산출물을 다루므로 코드-as-문자열이
+    //    현실적인 조건이다. 형제 함수 `isClientBoundary()` 는 이 함정을 이미 문서화하고 고쳐 뒀는데
+    //    이 자리만 남아 있었다 — 같은 관례를 두 곳이 다르게 구현한 것(오늘 고친 S2 와 같은 계열).
+    //    덤으로 주석을 지우고 재므로 "주석 속 `use client` 언급"에 오탐하지 않는다.
+    const isClient = isClientBoundary(src);
 
     // 서버 클라이언트 싱글턴 존재 확인 — create{Zalkera,Oneque}Client 호출(구 심볼 수용).
     if (/create(?:Zalkera|Oneque)Client\s*\(/.test(src)) {
         singletonFound = true;
-        if (isClient) errors.push(`[E1] ${rel}: "use client" 파일에서 createZalkeraClient 를 만든다 — baseUrl 노출.`);
+        if (isClient) servingSink().push(`[E1] ${rel}: "use client" 파일에서 createZalkeraClient 를 만든다 — baseUrl 노출.`);
     }
 
     if (isClient) {
         // E1: 값 import(= import type 아님)로 @zalkera/client 를 들여옴(구 @oneque/client 도 잡는다).
         const valueImport = /^import\s+(?!type\s)[^;]*from\s+["']@(?:zalkera|oneque)\/client["']/m.test(src);
         if (valueImport) {
-            errors.push(`[E1] ${rel}: "use client" 파일에서 @zalkera/client 를 값으로 import 한다 (타입은 \`import type\` 으로).`);
+            servingSink().push(`[E1] ${rel}: "use client" 파일에서 @zalkera/client 를 값으로 import 한다 (타입은 \`import type\` 으로).`);
         }
         // E2: 서버 싱글턴(lib/zalkera) import(구 lib/oneque 도 잡는다).
         if (/from\s+["'][^"']*lib\/(?:zalkera|oneque)["']/.test(src)) {
-            errors.push(`[E2] ${rel}: "use client" 파일에서 서버 클라이언트 싱글턴(lib/zalkera)을 import 한다.`);
+            servingSink().push(`[E2] ${rel}: "use client" 파일에서 서버 클라이언트 싱글턴(lib/zalkera)을 import 한다.`);
         }
     }
 
@@ -882,7 +975,7 @@ function check(file) {
             if (allow) {
                 warnings.push(`[C1] ${detail} — 예외 허용(zalkera-allow-dynamic: ${allow[1].trim()}).`);
             } else {
-                errors.push(
+                servingSink().push(
                     `[C1] ${detail}. SEO 페이지는 ISR(export const revalidate = N) 또는 static 이어야 한다. ` +
                         `실시간·개인화 값은 클라이언트 컴포넌트(아일랜드)로, 상태 변경은 BFF route handler 로 옮겨라. ` +
                         `동적 SSR 이 꼭 필요하면 \`// zalkera-allow-dynamic: <이유>\` 마커로 정당화하라(memo31 §0-12).`,
@@ -1288,7 +1381,7 @@ function checkCrossOriginGuards() {
             if (h.body === null) {
                 // 재export·간접 참조는 본문을 못 따라간다. 추측으로 통과시키면 그 형태가 곧
                 // 우회로가 되므로, **핸들러를 이 파일에 직접 선언하라**고 요구한다.
-                errors.push(
+                crossOriginSink().push(
                     `${where} 가 본문을 따라갈 수 없는 형태로 export 됩니다(재export·간접 참조·중괄호 없는` +
                         ` 화살표) — 가드 위치를 기계로 확인할 수 없습니다. 핸들러를 이 파일에 중괄호 본문으로` +
                         ` 직접 선언하세요(memo118 §4).`,
@@ -1296,7 +1389,7 @@ function checkCrossOriginGuards() {
                 continue;
             }
             const verdict = judgeGuardPlacement(h.body);
-            if (verdict) errors.push(`${where} ${verdict}`);
+            if (verdict) crossOriginSink().push(`${where} ${verdict}`);
         }
     }
     if (exempted.length) {
@@ -1308,7 +1401,7 @@ function checkCrossOriginGuards() {
     for (const file of routes) {
         const code = readFileSync(file, "utf8");
         if (/Access-Control-Allow-Origin/i.test(code)) {
-            errors.push(
+            crossOriginSink().push(
                 `[X2] ${relative(root, file)} 가 CORS 헤더를 답니다 — 읽기 GET 을 가드에서 빼는 근거가` +
                     ` "교차 오리진 JS 가 응답을 못 읽는다"인데, 그 전제가 무너집니다(memo118 §7-2).`,
             );
@@ -1352,7 +1445,7 @@ function checkCrossOriginGuards() {
     }
 
     if (usesStateCookie && !consumeDef) {
-        errors.push(
+        crossOriginSink().push(
             `[X3] consumeOAuthState 를 부르는 곳은 있는데 **정의를 찾지 못했습니다** — state 쿠키 소각을` +
                 ` 기계로 확인할 수 없습니다. 정의를 \`src/**\` 안에 두세요(검사가 조용히 사라지지 않게).`,
         );
@@ -1374,7 +1467,7 @@ function checkCrossOriginGuards() {
             }
         }
         if (!/\.delete\s*\(/.test(fnBody)) {
-            errors.push(
+            crossOriginSink().push(
                 `[X3] ${relative(root, consumeDef.file)} 의 consumeOAuthState 가 state 쿠키를 소각하지` +
                     ` 않습니다 — 대조 통과 여부와 무관하게 지워야 1회용이 됩니다. 남기면 유효기간 동안` +
                     ` 리플레이가 가능합니다(memo118 §2).`,
@@ -1385,7 +1478,7 @@ function checkCrossOriginGuards() {
         //    죽어 있었고(실측: `strict` 로 바꿔도 통과), memo118 §2 는 그 사이 "X3 가 막는다"고
         //    적어 뒀다. 값 검사는 원문, 코드 구조 검사는 stripped — 이 구분을 지켜라.
         if (/sameSite:\s*["']strict["']/i.test(consumeDef.raw)) {
-            errors.push(
+            crossOriginSink().push(
                 `[X3] ${relative(root, consumeDef.file)} 가 쿠키를 sameSite: "strict" 로 답니다 —` +
                     ` authorize 리다이렉트로 **돌아올 때** 쿠키가 안 실려 정상 로그인이 깨집니다. 이 쿠키의` +
                     ` 방어력은 SameSite 가 아니라 httpOnly + 서버 대조에서 나옵니다.`,

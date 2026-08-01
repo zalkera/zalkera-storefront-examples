@@ -977,7 +977,14 @@ function presetSourceOverlay(code) {
  * 능력 구성(커머스·예약·게시판)은 여기 없다 — 그것은 빼고 더하는 것이 자유다.
  */
 const PROTECTED_WIRING = [
-    "src/lib/crossOrigin.ts", // memo118 교차사이트 위조 가드
+    "src/lib/crossOrigin.ts", // memo118 교차사이트 위조 가드 — **판정**
+    // ⚠ 판정만 지키면 소용없다(보안 심의 차단 2). 실제로 403 을 만드는 것은 **전송층**이라,
+    //    `http.ts` 의 `assertSameOrigin` 을 `return null` 스텁으로 가리면 **변이 라우트 18개의 가드가
+    //    전부 죽은 zip 이 팩·validate 를 그린으로 통과한다**(E2E 재현). 판정/전송을 가른 뒤 이 목록이
+    //    따라오지 않은 것이 결함이었다.
+    "src/lib/http.ts",
+    "src/lib/session.ts", // 쿠키 httpOnly·secure 정책, state 소각
+    "src/lib/oauth.ts", // safeNextPath — 오픈 리다이렉트 판정
     "src/lib/safeUrl.ts", // 오픈 리다이렉트 소독
     "src/lib/oauthState.ts", // OAuth state 대조(fail-closed)
     "src/lib/env.ts",
