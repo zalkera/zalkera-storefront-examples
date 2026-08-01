@@ -38,7 +38,7 @@
         {
             "type": "SERVICE_MENU",
             "config": {
-                "products": ["linen-cover", "clay-mug", "soy-candle", "cotton-towel", "oak-tray"]
+                "categorySlug": "living"
             }
         },
         {

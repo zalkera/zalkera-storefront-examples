@@ -70,6 +70,10 @@ const CAPS = {
     configBytes: 64 * 1024,
     /** 백엔드 `SiteSeedCaps.MAX_PRODUCTS`(memo119 §2.5). 20종을 넘으면 템플릿이 아니라 데이터 이관이다. */
     products: 20,
+    /** 백엔드 `SiteSeedCaps.MAX_CATEGORIES`(memo139). */
+    categories: 10,
+    /** 백엔드 `SiteSeedCaps.MAX_CATEGORIES_PER_PRODUCT`. */
+    categoriesPerProduct: 3,
 };
 
 /** 백엔드 `StorageFileService.putMediaObject` 의 화이트리스트와 같다 — 래스터만, svg·영상 없음. */
@@ -175,10 +179,14 @@ function sectionContract() {
     try {
         const contract = createRequire(import.meta.url)("@zalkera/client")?.SECTION_CONTRACT;
         if (!Array.isArray(contract) || !contract.length) throw new Error("SECTION_CONTRACT 가 비었습니다(구버전 client)");
-        const stale = contract.filter((s) => !Array.isArray(s?.requiredRefs)).map((s) => s?.type ?? String(s));
+        // rev 5 부터 그룹 축(`requiredRefsAnyOf`)도 필요하다 — 없는 client 로 팩하면 "있는 줄 알았던
+        // 게이트가 사실 꺼져 있는" 상태가 된다(rev 3 의 requiredRefs 도입 때와 같은 관례).
+        const stale = contract
+            .filter((s) => !Array.isArray(s?.requiredRefs) || !Array.isArray(s?.requiredRefsAnyOf))
+            .map((s) => s?.type ?? String(s));
         if (stale.length) {
             throw new Error(
-                `SECTION_CONTRACT 에 requiredRefs 가 없습니다(contractRev 3 미만) — ${stale.slice(0, 3).join(", ")}…`,
+                `SECTION_CONTRACT 에 requiredRefs·requiredRefsAnyOf 가 없습니다(contractRev 5 미만) — ${stale.slice(0, 3).join(", ")}…`,
             );
         }
         return new Map(contract.map((s) => [s.type, s]));
@@ -270,6 +278,66 @@ const MAX_TEXT_COLUMN = 255;
 
 /** 상품 1건 초기 재고 상한. 백엔드 `SiteSeedCaps.MAX_STOCK_PER_PRODUCT` 와 **동수 유지**(갈리면 검출이 죽는다). */
 const MAX_STOCK_PER_PRODUCT = 999;
+
+/**
+ * 시드 갈래 검증(memo139) — 백엔드 `SiteSeedPlanner.validateCategories` 와 **같은 규칙**이다.
+ * 갈라지면 팩은 통과하는데 개시가 중단되는, 가장 늦게 발견되는 종류의 결함이 된다.
+ *
+ * **아무 상품도 안 드는 갈래를 막는 이유**: 데모의 빈 진열대는 거짓이다(고객 사이트의 빈 갈래는
+ * 정상이고, 여기 걸리는 것은 **우리 팩**뿐이다).
+ */
+function validateCategories(code, categories, products) {
+    if (!Array.isArray(categories)) {
+        fail("SEED_CATEGORIES", `${code}: categories 는 배열이어야 합니다`);
+        return new Set();
+    }
+    if (categories.length > CAPS.categories) {
+        fail("CAP_CATEGORIES", `${code}: 갈래 ${categories.length} > ${CAPS.categories} — 데모가 아니라 데이터 이관입니다`);
+    }
+    const slugs = new Set();
+    for (const category of categories) {
+        const slug = category?.slug;
+        if (!slug || !category?.name) {
+            fail("SEED_CATEGORY", `${code}: 갈래 slug·name 은 필수 — ${JSON.stringify(category)}`);
+            continue;
+        }
+        if (!HANDLE_FORMAT.test(slug)) {
+            fail("HANDLE_FORMAT", `${code}: 갈래 slug "${slug}" — 소문자·숫자·하이픈만 씁니다`);
+        }
+        if (slugs.has(slug)) fail("SEED_CATEGORY", `${code}: 갈래 slug 중복 — ${slug}`);
+        slugs.add(slug);
+        for (const [field, value] of [["slug", slug], ["name", category.name]]) {
+            if (typeof value === "string" && value.length > MAX_TEXT_COLUMN) {
+                fail("SEED_CATEGORY", `${code}/${slug}: ${field} 길이 ${value.length} > ${MAX_TEXT_COLUMN}`);
+            }
+        }
+    }
+
+    const used = new Set();
+    for (const product of products) {
+        const refs = product?.categories;
+        if (refs == null) continue;
+        if (!Array.isArray(refs)) {
+            fail("SEED_CATEGORY", `${code}/${product?.handle}: categories 는 배열이어야 합니다`);
+            continue;
+        }
+        if (refs.length > CAPS.categoriesPerProduct) {
+            fail("CAP_CATEGORIES", `${code}/${product.handle}: 갈래 ${refs.length} > ${CAPS.categoriesPerProduct}`);
+        }
+        for (const ref of refs) {
+            if (!slugs.has(ref)) {
+                fail("REF_MISSING", `${code}/${product.handle}: 미정의 갈래를 가리킵니다 — ${ref}`);
+            }
+            used.add(ref);
+        }
+    }
+    for (const slug of slugs) {
+        if (!used.has(slug)) {
+            fail("REF_UNUSED", `${code}: 아무 상품도 안 드는 갈래 — ${slug}. 데모의 빈 진열대는 거짓입니다`);
+        }
+    }
+    return slugs;
+}
 
 function validateProducts(code, products) {
     if (!Array.isArray(products)) {
@@ -406,9 +474,10 @@ function validateSeed(code, seedBytes, assetNames) {
                 `presets/${code}/content/ 로 갔습니다(seed 는 업무 데이터 전송 포맷). 옮기고 지우십시오`,
         );
     }
-    const unknownTop = Object.keys(seed).filter((k) => !["themeColors", "products"].includes(k));
+    const unknownTop = Object.keys(seed).filter((k) => !["themeColors", "products", "categories"].includes(k));
     if (unknownTop.length) fail("SEED_STRICT", `${code}: 최상위 미지 키 — ${unknownTop.join(", ")}`);
 
+    const categorySlugs = validateCategories(code, seed.categories ?? [], seed.products ?? []);
     const handles = validateProducts(code, seed.products ?? []);
 
     // 참조 무결성 — 양방향. `.zalkera/assets/` 는 **상품 이미지 전용 풀**이 됐다(섹션 이미지는 public/).
@@ -424,7 +493,7 @@ function validateSeed(code, seedBytes, assetNames) {
         }
     }
 
-    return {seed, handles};
+    return {seed, handles, categorySlugs};
 }
 
 /**
@@ -438,7 +507,7 @@ function validateSeed(code, seedBytes, assetNames) {
  * 새로 생긴 축 둘: ⑴ 에셋이 `public/` 루트 절대 경로이고 그 파일이 실재하는가 ⑵ `sortOrder` 잔존
  * (배열이 순서인데 키가 남으면 순서의 원장이 둘이 된다).
  */
-function validateContent(code, contentDir, publicNames, contract, icons, reserved, handles) {
+function validateContent(code, contentDir, publicNames, contract, icons, reserved, handles, categorySlugs) {
     const pagesDir = join(contentDir, "pages");
     let files;
     try {
@@ -532,6 +601,36 @@ function validateContent(code, contentDir, publicNames, contract, icons, reserve
                     fail(
                         "REQUIRED_REF",
                         `${at}: ${section.type} 이 필수 참조 "${key}" 를 안 가리킵니다 — 렌더러가 이 섹션을 통째로 건너뜁니다(계약 ${idKey} 필수)`,
+                    );
+                }
+            }
+
+            // 콘텐츠의 갈래 참조 ↔ 시드 갈래 대조.
+            //
+            // ⚠ **이 대조는 팩 게이트에만 설 수 있다.** 팩 v2 에서 페이지는 시드 밖(소스 `content/`)이라
+            //    백엔드 Planner 가 구조적으로 볼 수 없다. "팩은 위생이고 Planner 가 방어"라는 memo137 의
+            //    규율에 대한 **명시적 예외**이고, 그래서 여기가 유일한 검출 지점이다.
+            const catRef = typeof config.categorySlug === "string" ? config.categorySlug : null;
+            if (catRef && !categorySlugs.has(catRef)) {
+                fail(
+                    "REF_MISSING",
+                    `${at}: 시드에 없는 갈래를 가리킵니다 — "${catRef}". 개시하면 이 섹션이 조용히 빕니다`,
+                );
+            }
+
+            // 참조 그룹(rev 5) — 각 그룹에서 **하나 이상**이 채워져야 한다. 막으려는 것은
+            // requiredRefs 와 같다(아무것도 안 가리킨 채 들어와 조용히 사라지는 섹션). 단위만 넓다.
+            for (const group of spec?.requiredRefsAnyOf ?? []) {
+                const keys = group.map(seedKeyOf);
+                const anyFilled = keys.some((key) => {
+                    const value = config[key];
+                    return Array.isArray(value) ? value.length > 0 : typeof value === "string" && value !== "";
+                });
+                if (!anyFilled) {
+                    fail(
+                        "REQUIRED_REF",
+                        `${at}: ${section.type} 이 ${keys.map((k) => `"${k}"`).join(" 또는 ")} 중 아무것도 안 가리킵니다 —` +
+                            ` 렌더러가 이 섹션을 통째로 건너뜁니다`,
                     );
                 }
             }
@@ -837,6 +936,7 @@ function inspect(code, contract, icons, reserved) {
         icons,
         reserved,
         seedResult?.handles ?? new Set(),
+        seedResult?.categorySlugs ?? new Set(),
     );
     validateLicense(code, manifest, assets, publicFiles.map((f) => f.name));
     return {code, seedBytes, manifest, assets, publicFiles, content};

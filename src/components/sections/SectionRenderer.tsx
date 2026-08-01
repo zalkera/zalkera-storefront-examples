@@ -42,7 +42,13 @@ export function SectionRenderer({
         case "BEFORE_AFTER_GALLERY":
             return <BeforeAfterGallerySection config={section.config} />;
         case "BOOKING_CTA":
-            return <BookingCtaSection config={section.config} products={products} />;
+            return (
+                <BookingCtaSection
+                    config={section.config}
+                    products={products}
+                    categoryProducts={categoryProducts}
+                />
+            );
         case "DOCTOR_INTRO":
             return <DoctorIntroSection config={section.config} />;
         // ── 기업 마케팅(memo102) — 전부 상품 비참조라 products 를 안 받는다 ──
