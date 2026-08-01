@@ -25,6 +25,14 @@ jobs:
           node-version: 20
 
       - run: npm install          # lockfile 재생성 + 설치
+      # 고객 zip 은 루트 `llms.txt`(= client 운반본의 사본)를 나른다. client 를 올리면 그 사본도
+      # 같이 올라가야 명세가 안 낡는다 — 이 레포에는 사본이 없지만(정본 하나 원칙), 사본을 둔
+      # 체크아웃에서 이 워크플로가 돌 때를 대비해 있으면 갱신한다. 없으면 무동작.
+      - name: refresh llms.txt copy (if present)
+        run: |
+          if [ -f llms.txt ] && [ -f node_modules/@zalkera/client/llms.txt ]; then
+            cp node_modules/@zalkera/client/llms.txt llms.txt
+          fi
 
       - run: npm run validate && npm run typecheck && npm run build
 

@@ -104,6 +104,30 @@ export async function POST(req: Request) {
 
 판정 규칙의 근거는 `src/lib/crossOrigin.ts` 주석에, 관용구는 `src/lib/http.ts` 에 있다.
 
+## 능력 ↔ 구현 좌표 — **안 쓰는 것을 지우는 법**
+
+이 골격은 **최대 조합**으로 배선돼 있습니다(기업 홈페이지 + 쇼핑몰 + 예약). 사이트의 성격은 선언이 아니라
+**`@zalkera/client` 를 어떻게 부르는가**로 구성되므로, 자기 조합을 만드는 방법은 **안 쓰는 능력의 파일을
+지우는 것**입니다. 지워도 플랫폼 계약은 안 깨집니다 — 아래 "중립 배선"만 건드리지 마십시오.
+
+| 능력 | 지우면 되는 것 | 남는 client 호출 |
+|---|---|---|
+| **기업 홈페이지** (항상 필요) | — | `getSiteConfig` · `content/` 로더 |
+| **쇼핑몰** | `src/app/{cart,checkout,payment,orders,mypage,login,auth}/` · `src/app/api/{cart,checkout,orders,payment,auth,reviews,consents}/` · `src/app/products/` · `src/app/c/` · `src/components/{Review*,LogoutButton,MarketingConsent}.tsx` · `src/lib/{oauth,oauthState,session,authHint,useAuthHint}.ts` · 헤더의 장바구니·로그인 | `listProducts` · `getProduct` · `listProductCategories` · 장바구니·주문 계열 |
+| **예약** | `src/app/api/booking/` · `BOOKING_CTA`·`SERVICE_MENU` 섹션 사용 | 예약 슬롯 계열 |
+| **게시판·블로그** | `src/app/blog/` · `src/app/api/posts/` | `listPosts` · `getPost` |
+| **문의·리드** | `src/app/contact/` · `src/app/api/{inquiry,lead}/` · `src/components/LeadForm.tsx` | 리드 제출 |
+
+**중립 배선 — 지우지 마십시오** (능력이 아니라 플랫폼 계약입니다):
+`src/lib/theme.ts` + layout 의 테마 주입 · `src/app/media/[id]/` 프록시 · `src/app/api/revalidate/` ·
+`src/lib/{crossOrigin,safeUrl,env,buildEnv}.ts` · `robots.ts`·`sitemap.ts` · `src/lib/content.ts`.
+이 절 아래 "테마 주입 배선 — 지우지 마라"와 "BFF 라우트 — 교차사이트 위조 가드"가 그 상세입니다.
+
+**표현은 지우는 게 아니라 다시 씁니다.** 헤더·푸터는 사이트가 소유하는 외양이라, 반응형 드로어든
+스티키든 메가메뉴든 자기 것으로 새로 쓰면 됩니다 — 데이터로 표현되지 않는 자리라 **하드코딩이 정답**입니다.
+어떤 선언도 레이아웃을 강제하지 않습니다. (팩을 만드는 쪽이라면 `presets/<code>/src/**` 오버레이가
+정본 파일을 파일 단위로 가립니다 — 팩 시점에 가림 목록이 출력됩니다.)
+
 ## 레시피 ↔ 이 레포의 구현 좌표 (교본으로 읽을 때)
 
 레시피는 `@zalkera/client` 의 **`llms.txt` §5.1(산출물 규범)** 이다(`npm install` 후 `node_modules/@zalkera/client/llms.txt`). 아래는 그 규범이 **이 레포 어디에 구현돼 있는지**의 좌표다 — 규범을 새로 만드는 자리가 아니라 찾아가는 자리이고, 규범의 정본은 llms.txt 와 그것이 운반하는 백엔드 `doc/contracts/aeo-surface-guarantees.json` 이다(사본을 여기 늘리지 않는다).

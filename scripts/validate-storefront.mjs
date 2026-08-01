@@ -75,7 +75,7 @@
  * 마커(zalkera-allow-inline-style·zalkera-allow-dynamic — 구 oneque-/oneq- 도 수용)·CSS변수 주입
  * 면제는 모든 모드에서 유지.
  */
-import {readdirSync, readFileSync, statSync} from "node:fs";
+import {existsSync, readdirSync, readFileSync, statSync} from "node:fs";
 import {createRequire} from "node:module";
 import {basename, dirname, join, relative, resolve, sep} from "node:path";
 
@@ -1405,6 +1405,41 @@ checkSectionCoverage();
 checkContentContract(); // N1~N5 — 콘텐츠 파일 계약(선언 조건화).
 checkDocCoordinates(); // D1·D2 — 문서 좌표가 실물을 가리키는가.
 checkCrossOriginGuards(); // X1·X2 — 교차사이트 위조 가드(memo118).
+
+/**
+ * `llms.txt` 운반본 드리프트 — **fail-soft**.
+ *
+ * 팩이 zip 루트에 `@zalkera/client` 의 llms.txt 를 바이트 그대로 싣는다(정본은 그 패키지 하나). 여기서는
+ * 설치본과 대조해 갈라졌으면 **경고만** 한다:
+ *  · 파일이 **없으면 스킵** — 지운 것은 자유다(요건 1: 어휘를 강제할 수 없다). 없다고 벌하지 않는다.
+ *  · 있는데 다르면 경고 — 고객이 일부러 자기 메모를 적었을 수도 있고, 그것을 error 로 막으면
+ *    "우리 파일을 손대지 마라"가 되어 소유권 원칙과 충돌한다. 다만 **client 를 올린 뒤 사본을 안 고친**
+ *    경우가 훨씬 흔하므로, 조용히 두면 명세가 낡은 채 배송된다.
+ */
+function checkManualCarrier() {
+    // ⚠ **절대 경로여야 한다.** 초판이 `join(root, "..")` 상대 경로를 `createRequire` 에 넘겨 조용히
+    //    catch 로 빠졌고, 사본을 훼손해도 경고가 안 났다(변이 실측). 있는데 안 도는 검사기가 없는 것보다 나쁘다.
+    const projectRoot = resolve(root, "..");
+    const at = join(projectRoot, "llms.txt");
+    if (!existsSync(at)) return; // 없으면 스킵 — 지운 것은 자유.
+    let carried;
+    try {
+        const req = createRequire(join(projectRoot, "package.json"));
+        const anchorPath = req.resolve("@zalkera/client/contracts/aeo-surface-guarantees.json");
+        carried = join(dirname(dirname(anchorPath)), "llms.txt");
+    } catch {
+        return; // client 미설치 — 여기서 판정할 것이 없다.
+    }
+    if (!existsSync(carried)) return;
+    if (!readFileSync(at).equals(readFileSync(carried))) {
+        warnings.push(
+            "[W-LLMS] 루트 llms.txt 가 설치된 @zalkera/client 의 것과 다릅니다 — client 를 올린 뒤 사본을 " +
+                "안 고쳤다면 낡은 명세가 배송됩니다. 일부러 고친 것이면 이 경고는 무시하십시오.",
+        );
+    }
+}
+
+checkManualCarrier(); // W-LLMS — zip 이 나르는 명세가 설치본과 같은가(fail-soft).
 
 if (!singletonFound) warnings.push(`[W1] createZalkeraClient 싱글턴을 찾지 못했습니다 — 서버 사이드 호출 패턴이 있는지 확인하세요.`);
 

@@ -902,6 +902,76 @@ function validateSource(source) {
 // ── 팩 ───────────────────────────────────────────────────────────────────────
 
 /** 프리셋 `public/` 아래 전 파일을 `{zip 경로, public 루트 경로, bytes}` 로 모은다. */
+/**
+ * `presets/<code>/src/**` — **정본 소스를 파일 단위로 가리는 오버레이.**
+ *
+ * 왜 필요한가: 사이트의 정체는 선언이 아니라 **`@zalkera/client` 를 어떻게 부르는가**로 구성된다
+ * (오너 확정 2026-08-01). 그런데 정본 `src/` 는 전 팩 공유라, 커머스 호출을 쓰지 않는 팩(홍보·소개)이
+ * 자기 구성을 만들 방법이 규칙상 없었다 — 헤더에 장바구니·로그인이 남는 것이 그 증상이다.
+ * 그것을 `commerce: boolean` 같은 **렌더를 바꾸는 선언**으로 우회하려던 시도는 기각됐다
+ * (정본이 허용하는 선언은 *검증을 켜는* 선언뿐이다 — memo125 요건 1 "계약 준수는 선언으로 자발적이다").
+ *
+ * **포크가 아닌 이유**: memo102 "테마마다 소스를 포크하지 않는다"의 실질은 유지보수였다(정본 패치가
+ * 전 팩에 전파되어야 한다). 오버레이는 가리는 파일이 **유한하고 기계로 열거된다** — 팩이 매번
+ * 목록을 찍으므로, 정본 패치가 가려진 파일을 건드릴 때 사람이 안다. 전면 포크의 비가시 드리프트와 다르다.
+ * 가려진 파일에 정본 패치가 안 닿는 비용은 **정체 차이의 본질 비용**이라 없앨 수 없고, 가시화로 관리한다.
+ *
+ * v1 은 `src/**` 전체를 허용한다(추가·교체만 — 삭제는 짓지 않는다). `components/` 로만 좁히면 홍보 팩이
+ * 자기 라우트를 못 만들어 같은 결함이 라우트 축에서 재발한다.
+ */
+function presetSourceOverlay(code) {
+    const dir = join(PRESETS_DIR, code, "src");
+    if (!existsSync(dir)) return [];
+    const out = [];
+    const walk = (cur, base) => {
+        for (const e of readdirSync(cur, {withFileTypes: true}).sort((a, b) => (a.name < b.name ? -1 : 1))) {
+            const abs = join(cur, e.name);
+            if (e.isDirectory()) walk(abs, `${base}${e.name}/`);
+            else out.push({path: `src/${base}${e.name}`, bytes: readFileSync(abs)});
+        }
+    };
+    walk(dir, "");
+    return out;
+}
+
+/**
+ * `llms.txt` 를 **설치본에서 바이트 그대로** 실어 zip 루트에 둔다(Fable 설계 2026-08-01).
+ *
+ * 종전에는 zip 안에 없었다 — `npm ci` 뒤 `node_modules/@zalkera/client/llms.txt` 에만 생겼다. 그래서
+ * zip 만 받아 연 사람, 그리고 **zip 을 통째로 물린 고객 LLM** 은 명세를 영영 못 읽었다. `README.md` 가
+ * "AI 매뉴얼 — llms.txt"로 그 파일을 가리키는데 눈앞에 없었으니, 배송이 자기 문서를 배신하고 있었다.
+ *
+ * ⚠ **레포에 사본을 두지 않는다** — 두 번째 정본이 되어 드리프트가 시작된다. 팩 시점에 설치본에서
+ * 복사하고, 재직렬화하지 않는다(바이트 대조가 드리프트를 숨을 곳 없이 잡게 한다 — `sync-aeo-guarantees`
+ * 와 같은 근거). 버전 스탬프도 찍지 않는다: llms.txt 의 버전은 그것을 나른 `@zalkera/client` 의 버전이고
+ * `package-lock.json` 이 이미 고정한다.
+ */
+function llmsManualEntry() {
+    // ⚠ `require.resolve("@zalkera/client/llms.txt")` 는 **안 된다** — 그 패키지의 `exports` 맵이
+    //    llms.txt 를 열어 두지 않았다(`files` 로 tarball 에는 실리지만 서브패스 export 는 없다).
+    //    그래서 이미 존재가 보장된 운반본(`assertGuaranteesCarried` 가 먼저 확인한다) 경로에서
+    //    패키지 루트를 얻는다. client 에 `"./llms.txt"` export 를 여는 것이 더 깨끗하지만 재발행이
+    //    필요하므로 별건으로 남긴다 — 그때 이 함수는 resolve 한 줄로 줄어든다.
+    const req = createRequire(import.meta.url);
+    let root;
+    try {
+        root = dirname(dirname(req.resolve("@zalkera/client/contracts/aeo-surface-guarantees.json")));
+    } catch {
+        fail("LLMS_MISSING", "@zalkera/client 를 못 찾았습니다 — npm ci 후 재시도하십시오.");
+        return null;
+    }
+    const path = join(root, "llms.txt");
+    if (!existsSync(path)) {
+        fail(
+            "LLMS_MISSING",
+            `@zalkera/client 가 llms.txt 를 나르지 않습니다(${path}) — 이 버전으로는 팩하지 마십시오. ` +
+                "zip 이 명세 없이 나가면 README 가 없는 파일을 가리킵니다.",
+        );
+        return null;
+    }
+    return {path: "llms.txt", bytes: readFileSync(path)};
+}
+
 function presetPublicFiles(dir, base = "") {
     let entries;
     try {
@@ -993,8 +1063,19 @@ function identifierOf(slug) {
 function write(inspected, version, source) {
     const {code, seedBytes, manifest, assets, publicFiles, content} = inspected;
     const slugs = content.pages.map((p) => p.slug);
+    // 오버레이가 같은 경로를 가지면 **팩 것이 이긴다** — 정본을 먼저 깔고 뒤에서 덮는다.
+    const overlay = presetSourceOverlay(code);
+    const overlaid = new Set(overlay.map((o) => o.path));
+    if (overlay.length) {
+        const shadowed = source.filter((e) => overlaid.has(e.path)).map((e) => e.path);
+        console.log(`    · 소스 오버레이 ${overlay.length}개 — 정본 가림 ${shadowed.length}개`);
+        for (const p of shadowed) console.log(`      ↳ ${p}`);
+        for (const o of overlay) if (!shadowed.includes(o.path)) console.log(`      + ${o.path} (신규)`);
+    }
     const entries = [
-        ...source,
+        ...source.filter((e) => !overlaid.has(e.path)),
+        ...overlay,
+        ...[llmsManualEntry()].filter(Boolean),
         // ── 레포 상주(사이트의 얼굴) ────────────────────────────────────────
         {path: "content/index.ts", bytes: Buffer.from(contentManifest(slugs), "utf8")},
         {
