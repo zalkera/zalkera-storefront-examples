@@ -40,6 +40,11 @@
     ".next/dev/types/**/*.ts"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    // 팩 입력이지 이 프로젝트가 아니다(팩 v4 — `presets/<code>/src/` 는 그 팩의 소스 전량).
+    // 여기 넣어 두면 루트 타입체크가 팩 소스를 자기 것으로 알고 `content/index.ts`(팩이 생성)를
+    // 못 찾아 죽는다. 팩 소스의 타입·빌드는 zip 을 실제로 세우는 `scripts/verify-zip.mjs` 가 본다.
+    // 고객 zip 에는 `presets/` 가 없어 이 줄이 아무 일도 하지 않는다.
+    "presets"
   ]
 }

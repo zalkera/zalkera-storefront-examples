@@ -4,9 +4,9 @@
 
 착수 절차·브랜치·시크릿·백엔드 직접 fetch 금지 같은 **안전 규칙은 이 문서가 아니라 작업 지시 프롬프트가 단일 출처**다 — 여기서 중복하지 않는다. 이 문서는 "이 코드가 무슨 규약을 쓰나"(코드 사실)만 말한다.
 
-이 레포는 두 가지를 동시에 배송한다. ① 사진과 문구만 바꿔 그대로 쓰는 **판매 완성품** — 실물은 `content/`(사이트의 얼굴)와 `.zalkera/`(업무 데이터 전송분)다. ② 레시피(`@zalkera/client` 의 `llms.txt`)를 이렇게 따른다는 **본보기** — 실물은 소스 코드와 이 문서다. 뒤쪽은 앞쪽의 격하가 아니라 **역할 추가**다: 이 레포는 카탈로그에 오르고 팩 게이트·진열 게이트를 똑같이 통과하는 상품이면서, 새 템플릿을 짓는 사람·AI 가 읽는 교본이기도 하다.
+이 레포는 두 가지를 동시에 배송한다. ① 사진과 문구만 바꿔 그대로 쓰는 **판매 완성품** — 실물은 `content/`(사이트의 얼굴)·`public/`(이미지)·`src/`(호출 구성)이고, `.zalkera/seed.json` 은 **테마 색**만 나른다. ② 레시피(`@zalkera/client` 의 `llms.txt`)를 이렇게 따른다는 **본보기** — 실물은 소스 코드와 이 문서다. 뒤쪽은 앞쪽의 격하가 아니라 **역할 추가**다: 이 레포는 카탈로그에 오르고 팩 게이트·진열 게이트를 똑같이 통과하는 상품이면서, 새 템플릿을 짓는 사람·AI 가 읽는 교본이기도 하다.
 
-**분담**: 사이트의 **얼굴**(페이지·섹션·정적 문구·섹션 이미지·내비)의 정본은 **이 레포의 `content/`** 이고, `.zalkera/` 는 **업무 데이터**(상품·테마 값 슬롯)의 전송 포맷이다 — 개시 때 DB 로 들어가고 그 뒤로는 콘솔·"말로 고치기"가 그 축을 갖는다. 시드의 인명·후기·문구는 실감을 위해 지어낸 콘텐츠이지 규범이 아니다.
+**분담**: 사이트의 **얼굴**(페이지·섹션·정적 문구·섹션 이미지·내비)의 정본은 **이 레포의 `content/`** 이고, `.zalkera/seed.json` 은 **테마 색**만 나른다. **업무 데이터(상품·갈래)는 배송물이 만들지 않는다** — 주인은 콘솔·MCP 이고(계약 rev 6·memo142 §1), 화면에 비추는 일은 소스가 `listProducts()`·`listProductCategories()` 를 직접 불러서 한다(`src/components/ProductRail.tsx`). 콘텐츠의 인명·후기·문구는 실감을 위해 지어낸 것이지 규범이 아니다.
 
 **문구를 tsx 마크업에 굽지 마라.** 이 규범은 사라지지 않았고 **거처만 바뀌었다** — 굽지 말아야 할 곳은 그대로 JSX 이고, 있어야 할 곳이 DB 에서 `content/pages/*.json` 으로 왔다. 마크업에 박은 문구는 "말로 고치기"가 파일 하나를 여는 대신 컴포넌트 트리를 탐색하게 만든다.
 
@@ -20,15 +20,15 @@
 |---|---|---|
 | 페이지의 문구(제목·본문·버튼 라벨·FAQ 문답·후기 인용·통계 수치) | `content/pages/<slug>.json` — 해당 섹션의 `config` | 홈은 `home.json` 이다(루트가 집어 온다) |
 | 섹션 순서("후기를 특징 소개 위로") | 같은 파일 `sections` **배열 재배열** | `sortOrder` 키는 없다 — 배열이 곧 순서다 |
-| 섹션 추가·삭제 | 같은 파일 `sections` 에 `{"type": …, "config": {…}}` 삽입·제거 | `type` 은 어휘 12종에서만(§섹션 렌더) |
+| 섹션 추가·삭제 | 같은 파일 `sections` 에 `{"type": …, "config": {…}}` 삽입·제거 | `type` 은 어휘 10종에서만(§섹션 렌더) |
 | 섹션 이미지 교체 | 같은 파일의 `asset`/`*Asset` 값 = `"/images/hero.png"` | 값은 **레포 루트 절대 경로만**. 실물 파일은 레포 루트 `public/` 아래(템플릿 기본에는 `public/` 이 없고 팩이 프리셋 이미지를 거기로 병합한다) |
-| 상품 참조(`SERVICE_MENU`·`BOOKING_CTA`) | 같은 파일의 `products`/`product` 값 = 상품 **handle** 문자열 | handle = 공개 API 의 `ProductSummary.slug`. **숫자 id 금지**(테넌트 스코프라 재업로드하면 의미를 잃는다) |
+| **상품 진열**("여기에 상품 목록 보여줘") | `src/components/ProductRail.tsx` — 또는 그것을 조합하는 `src/app/page.tsx` | **콘텐츠 파일이 아니다.** 상품·갈래의 정본 값은 업무 DB 에 살고 화면은 비추기만 하므로, 조회는 선언이 아니라 **소스의 직접 호출**이다(§경계 규칙). 섹션 config 에 `product`·`products`·`categorySlug` 를 적으면 팩이 막는다 |
 | 그 페이지의 SEO 제목·설명 | 같은 파일의 `seo` | 없으면 페이지 제목·사이트 기본값으로 강하한다 |
 | **페이지 신설** | `content/pages/<slug>.json` **+ `content/index.ts` 두 줄**(import 1 · 맵 1) | **라우트를 새로 짜지 마라** — `src/app/[slug]/page.tsx` 가 이미 그리고 `src/app/sitemap.ts` 가 `pageSlugs()` 로 자동 등재한다. 라우트를 새로 짜면 그 페이지만 계약 밖으로 나가 "말로 고치기"가 다시 tsx 탐색이 된다 |
 | 헤더·푸터 메뉴 | `content/nav.json` | 배열 순서가 노출 순서. `href` 는 로더가 소독한다 |
 | 섹션의 마크업·레이아웃·클래스 | `src/components/sections/` 의 해당 `*Section.tsx` | 문구가 아니라 **모양**을 바꿀 때만 |
 | 헤더·푸터의 마크업 | `src/components/SiteHeader.tsx` · `src/components/SiteFooter.tsx` | |
-| 계약 밖 새 화면(자유 영역) | `src/app/<경로>/page.tsx` | 어휘 12종은 보장의 **바닥이지 천장이 아니다** |
+| 계약 밖 새 화면(자유 영역) | `src/app/<경로>/page.tsx` | 어휘 10종은 보장의 **바닥이지 천장이 아니다** |
 
 **소스에 없는 것 — 여기서 찾지 마라.** 아래는 DB 에 살고 콘솔·`@zalkera/client` 가 다룬다. 소스는 그것을 **가리킬 뿐**이다.
 
@@ -114,7 +114,7 @@ export async function POST(req: Request) {
 |---|---|---|
 | **기업 홈페이지** (항상 필요) | — | `getSiteConfig` · `content/` 로더 |
 | **쇼핑몰** | `src/app/{cart,checkout,payment,orders,mypage,login,auth}/` · `src/app/api/{cart,checkout,orders,payment,auth,reviews,consents}/` · `src/app/products/` · `src/app/c/` · `src/components/{Review*,LogoutButton,MarketingConsent}.tsx` · `src/lib/{oauth,oauthState,session,authHint,useAuthHint}.ts` · 헤더의 장바구니·로그인 | `listProducts` · `getProduct` · `listProductCategories` · 장바구니·주문 계열 |
-| **예약** | `src/app/api/booking/` · `BOOKING_CTA`·`SERVICE_MENU` 섹션 사용 | 예약 슬롯 계열 |
+| **예약** | `src/app/api/booking/` · `src/components/ProductRail.tsx`(시술 진열) | 예약 슬롯 계열 |
 | **게시판·블로그** | `src/app/blog/` · `src/app/api/posts/` | `listPosts` · `getPost` |
 | **문의·리드** | `src/app/contact/` · `src/app/api/{inquiry,lead}/` · `src/components/LeadForm.tsx` | 리드 제출 |
 
@@ -125,8 +125,9 @@ export async function POST(req: Request) {
 
 **표현은 지우는 게 아니라 다시 씁니다.** 헤더·푸터는 사이트가 소유하는 외양이라, 반응형 드로어든
 스티키든 메가메뉴든 자기 것으로 새로 쓰면 됩니다 — 데이터로 표현되지 않는 자리라 **하드코딩이 정답**입니다.
-어떤 선언도 레이아웃을 강제하지 않습니다. (팩을 만드는 쪽이라면 `presets/<code>/src/**` 오버레이가
-정본 파일을 파일 단위로 가립니다 — 팩 시점에 가림 목록이 출력됩니다.)
+어떤 선언도 레이아웃을 강제하지 않습니다. (우리 예제 계보를 만드는 쪽이라면: 팩은 각자 **자기 소스를
+온전히** 가지므로 팩끼리 얼굴이 갈리는 것이 의도이고, 전송·인증 배선만 바이트 동일로 잠깁니다 —
+그 판정기와 목록은 예제 레포 쪽에 있고 이 zip 에는 안 실립니다.)
 
 ## 레시피 ↔ 이 레포의 구현 좌표 (교본으로 읽을 때)
 
@@ -141,7 +142,7 @@ export async function POST(req: Request) {
 | 홈 = `Organization`(점포면 `LocalBusiness`·뷰티샵이면 `BeautySalon`) | `src/app/page.tsx` · `organizationJsonLd`(`config.businessType` 으로 좁힌다) |
 | 목록·상세엔 `BreadcrumbList` | `breadcrumbJsonLd` + 각 라우트 `page.tsx` |
 | 목록 라우트의 `ItemList`(그리는 그 순서·그 항목 · 0건이면 미산출) | `src/app/products/page.tsx` · `src/app/blog/page.tsx` · `itemListJsonLd` |
-| 예약 유형의 목록 보장 = `SERVICE_MENU` 섹션이 `ItemList` 직접 산출 | `src/components/sections/ServiceMenuSection.tsx` |
+| 예약 유형의 목록 보장 = 개시된 페이지 어딘가의 `ItemList`(운반체는 소스가 정한다) | `src/app/products/page.tsx` · `src/components/ProductRail.tsx` |
 | CMS 고정 페이지 = `WebPage` + `BreadcrumbList` | `src/app/[slug]/page.tsx` · `webPageJsonLd` |
 | `FAQ_LIST` 섹션 = `FAQPage` 직접 산출 | `src/components/sections/FaqListSection.tsx` |
 | `sitemap.ts`·`robots.ts` 필수 · 목록 라우트 등재 · 빈 목록 미등재 | `src/app/sitemap.ts` · `src/app/robots.ts` |
@@ -197,33 +198,38 @@ shadcn 소스는 자기 변수층(`--card`·`--muted-foreground` …)을 전제�
   `SECTION_CONTRACT` 는 그것을 npm 으로 실어 나르는 **운반체**다. 그 KDoc 은 설치본
   `node_modules/@zalkera/client/dist/index.d.ts` 에서 읽는다 — 패키지는 소스(`sections.ts`)를 배송하지
   않으므로 여기서 그 파일을 찾지 마라(선언 파일이 KDoc 을 그대로 싣고 온다).
-  계약은 `contractRev` 로 자란다 — 현재 **rev 5**(`SECTION_CONTRACT_REV`). 오른 자국은 이렇다:
-  rev 2 = `SERVICE_MENU` 의 `jsonLd` 열 `null`→`"ItemList"` · rev 3 = `SERVICE_MENU` 의 상품 참조 필수화 ·
-  rev 4 = 참조 방언(`dialects`)과 콘텐츠 파일(`contentFile`)의 1급 승격 · **rev 5 = `categorySlug` 를 대등
-  참조로**. rev 4 는 섹션 타입 12종·`config`
-  키 선언을 **한 글자도 안 바꿨다** — 바꾼 것은 "같은 `config` 를 **어느 방언으로 적는가**"뿐이다.
-  rev 5 는 `SERVICE_MENU`·`BOOKING_CTA` 의 **필수성 단위**를 옮겼다: "`productIds` 가 있는가"에서
-  "**참조가 하나라도 있는가**"(`requiredRefsAnyOf`)로. 이유가 이 레포의 존재 이유와 같다 — 배송된 예제가
-  상품을 handle 로 박아 두면 그 소스를 받은 사람의 카탈로그엔 그 handle 이 없어 섹션이 **영구히** 빈다.
-  갈래(`categorySlug`)로 가리키면 자기 상품을 등록하는 대로 채워진다. rev 3 이 막으려던 것(참조 0 =
-  조용히 사라지는 섹션)은 그대로 막히고 **막는 단위만 넓어졌다.**
+  계약은 `contractRev` 로 자란다 — 현재 **rev 6**(`SECTION_CONTRACT_REV`). 오른 자국은 이렇다:
+  rev 2·3·5 는 조회형 섹션(`SERVICE_MENU`·`BOOKING_CTA`)의 산출과 필수 참조를 조이던 세대이고,
+  rev 4 는 참조 방언(`dialects`)과 콘텐츠 파일(`contentFile`)을 1급으로 올렸다.
+  **rev 6 = 그 조회형 둘을 어휘에서 삭제 — 12종 → 10종.**
+
+  **경계 규칙**(memo142 §1): *값이 콘텐츠 파일에 사는 저작물 = 선언 섹션 / 값이 업무 DB 에 살고 화면이
+  비추기만 하는 조회 = 소스가 `@zalkera/client` 를 직접 호출.* rev 3·5 가 "조회형 섹션은 참조를 반드시
+  실어라"로 조이던 잣대가 **"조회형 섹션을 싣지 마라"로 반전**됐다. 절반 선언(`{ categorySlug }`)은
+  "어디에"만 선언에 두고 "어떻게"(카드 그리드·필드·개수)를 공유 렌더러에 얼려 버렸는데, 그것이
+  **자연어로 다양한 디자인을 만든다**는 방향과 반대였다. 따름정리로 **배송물은 상품 handle 이든 갈래
+  slug 든 업무 축의 고유명사를 어디에도 박지 않는다**(`리빙`·`시술`은 사장이 정할 이름이다).
+  자기 소스가 자기 카탈로그를 tsx 안에서 가리키는 것은 정당하다 — 금지되는 것은 배송물의 선언이다.
 - **방언이 둘이다. 거처가 방언을 정한다.** DB(`page_section.config`)는 자기가 발급한 숫자 id 를 쓰고
-  (`assetId`·`productIds`), **소스는 그 id 를 알 수 없으므로** 사람이 읽고 쓰는 참조를 쓴다
-  (`asset` = `public/` 루트 절대 경로 · `product`/`products` = 상품 handle). 이 레포는 **소스 방언**이다.
+  (`assetId`), **소스는 그 id 를 알 수 없으므로** 사람이 읽고 쓰는 참조를 쓴다
+  (`asset` = `public/` 루트 절대 경로). 이 레포는 **소스 방언**이다. rev 6 에서 상품 참조 방언은
+  **금지 키 형상**이 됐다(위 경계 규칙).
   아래 §어휘 표(그리고 `SECTION_CONTRACT`)의 `config` 선언은 **id 방언 표기**이므로, 콘텐츠 파일에 적을
   때는 `dialects` 의 대응을 따라 참조 방언으로 옮겨 적는다. 키의 **의미**는 두 방언이 같다.
 - **계약 영역 — 어휘에 있는 섹션 타입의 `config` 키는 지어내지 마라.** 이 표면에는 유형별 AEO/SEO 최소
   보장이 걸려 있고, 콘솔 폼·시드·렌더러가 같은 키를 읽어 데이터를 주고받는다. 키를 지어내면 콘솔이 넣은
   값이 렌더러에 안 읽히고 그 보장도 함께 죽는다.
 - **자유 영역 — 그 밖의 컴포넌트·라우트를 새로 만드는 것은 정상 경로다.** Next.js 라우트도 컴포넌트도 수에
-  제한이 없고, 어휘 12종은 보장의 **바닥이지 천장이 아니다**. 경계 판정은 하나다 — **여기에 보장이 걸려
+  제한이 없고, 어휘 10종은 보장의 **바닥이지 천장이 아니다**. **진열이 그 실물이다** — `ProductRail` 은
+  계약 표면이 아니라 자유 영역의 컴포넌트이고, 그래서 마음대로 뜯어고칠 수 있다. 경계 판정은 하나다 — **여기에 보장이 걸려
   있나.** 걸린 표면이면 계약을 그대로 따르고, 아니면 자유롭게 짜라.
 - `config` 파싱은 **`@zalkera/client` 헬퍼로만**(`readConfig`·`asString`·`asObjectArray`·`asHandle`·
   `asHandleArray`·`assetPath`). 이 레포에 파서 사본을 새로 만들지 마라 — 사본이 갈라지면 '섹션 하나가
   사이트를 죽이지 않는다'는 계약이 조용히 깨진다(종전 `sections/` 아래 사본이 그렇게 갈라져 회수했다).
   **절대 throw 하지 않는다** — 필수 필드가 없으면 그 섹션만 안 그리고 페이지는 산다.
-- `SectionRenderer` 의 `default:` 는 **조용히 null** 이다. 어휘가 append-only 라 새 타입이 추가돼도 옛 사이트가
-  안 깨져야 한다는 게 계약이다. 여기서 에러·경고를 내지 마라.
+- `SectionRenderer` 의 `default:` 는 **조용히 null** 이다. 계약이 스큐 내성이라 타입이 늘어도 옛 사이트가
+  안 깨지고, **타입이 빠져도**(rev 6) 그 값을 적어 둔 옛 콘텐츠 파일이 페이지를 죽이지 않는다.
+  여기서 에러·경고를 내지 마라.
 - **섹션 이미지**는 레포 `public/` 루트 절대 경로(`"asset": "/images/hero.png"` → `assetPath()`),
   **상품 커버**는 DB 가 발급한 `coverAssetId` → `mediaSrc()` 프록시다(카탈로그는 레인 B).
   모든 href 는 `lib/safeUrl` 을 태운다(저장형 XSS 방어).
@@ -231,10 +237,11 @@ shadcn 소스는 자기 변수층(`--card`·`--muted-foreground` …)을 전제�
   이 id 를 지우면 간판 버튼이 **조용히 아무 데도 안 간다**.
 - `FAQ_LIST` 는 네이티브 `<details>/<summary>` 다 — JS 0·접근성 내장·**닫힌 답변도 SSR 마크업에 실린다**.
   아코디언 라이브러리로 바꾸지 마라. `FAQPage` JSON-LD 를 함께 낸다.
-- `SERVICE_MENU` 는 `ItemList` JSON-LD 를 함께 낸다(계약 `jsonLd: "ItemList"`·rev 2 이상). 그래프를 내는 두 번째
-  섹션이고 이유는 `FAQ_LIST` 와 같다 — **목록의 정본이 이 섹션의 상품 참조 배열**이라 다른 데서 다시
-  만들면 두 벌이 되고 갈라진다. 소스 방언에서는 `config.products` 의 **handle 배열 순서**를 그대로 지킨다
-  (그 순서가 원장이 정한 노출 순서다 — 정렬하지 마라).
+- **진열(상품 목록·예약 CTA)은 섹션이 아니다.** `ProductRail`(또는 그것을 본뜬 자기 컴포넌트)이
+  `listProducts()`·`listProductCategories()` 를 직접 부르고, **화면과 같은 배열**에서 `itemListJsonLd` 를
+  만들어 함께 낸다(그래프가 두 벌이 되면 갈라진다 — `FAQ_LIST` 와 같은 원리). **0건이면 `return null`**:
+  빈 진열대는 방문자에게 거짓이고, "상품을 등록하면 여기 표시됩니다" 같은 안내도 넣지 마라 — 그 문장의
+  독자는 사장이고 사장의 표면은 콘솔이다.
 - `TESTIMONIALS` 에 `Review`·`AggregateRating` 을 내지 않는다 — 자사 후기 별점은 정책 위반이다. 누락이 아니라 결정이다.
 
 ## 테마 주입 배선 — 지우지 마라 (L1 의 심장)

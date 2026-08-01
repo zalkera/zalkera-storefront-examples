@@ -11,8 +11,22 @@
  *
  *   presets/<code>/content/       → zip 의 `content/` (레포 상주 · 페이지·섹션·문구·내비)
  *   presets/<code>/public/        → zip 의 `public/`  (섹션 이미지 · 레포 상주)
- *   presets/<code>/seed.json      → zip 의 `.zalkera/seed.json` (**업무 데이터만** — 상품·테마 값)
- *   presets/<code>/assets/        → zip 의 `.zalkera/assets/`   (상품 이미지 — S3 media 로 착지)
+ *   presets/<code>/src/           → zip 의 `src/`     (**이 팩의 소스 전량** — 팩 v4)
+ *   presets/<code>/seed.json      → zip 의 `.zalkera/seed.json` (**테마색만**)
+ *   presets/<code>/assets/        → zip 의 `.zalkera/assets/`   (섹션 config 가 참조하는 전송 이미지)
+ *
+ * ── 팩 v3 (memo142) — **배송물은 업무 데이터를 만들지 않는다** ────────────────
+ * 시드가 고객 DB 에 상품·갈래를 만들던 경로가 닫혔다. `seed.json` 에 남는 최상위 키는 `themeColors`
+ * 하나이고, 콘텐츠 섹션은 업무 축(상품·갈래)을 **가리키지 않는다**.
+ *
+ * 경계는 **정본 값의 거처**로 긋는다(memo142 §1): 값이 콘텐츠 파일에 사는 저작물은 **선언 섹션**의
+ * 소관이고, 값이 업무 DB 에 살고 화면이 비추기만 하는 조회는 **소스가 `@zalkera/client` 를 직접 호출**해
+ * 그린다. 따름정리 — 배송물은 handle 이든 갈래 slug 든 **업무 축의 고유명사를 어디에도 박지 않는다**
+ * (`리빙`·`시술`은 사장이 정할 이름이다). 직접 호출이 배송 가능한 이유가 정확히 이것이다:
+ * `listProducts()` 는 이름을 하나도 안 박고 그 사장의 카탈로그가 있는 대로 내놓는다.
+ *
+ * 그래서 아래 게이트가 **타입 이름이 아니라 키 형상**으로 건다(BUSINESS_REF) — 어휘에서 조회형 타입
+ * 둘이 삭제됐지만, 같은 형태의 타입이 미래에 다시 생겨도 같은 자리에서 잡힌다.
  *
  * **변환기가 없다.** 프리셋 디렉터리가 처음부터 최종 형상을 갖고 있고 팩은 그것을 소스 트리에
  * 병합하기만 한다 — seed→content 변환 코드를 두면 그 변환기가 계약의 숨은 두 번째 정본이 된다.
@@ -25,6 +39,21 @@
  * 게이트는 **팩 시점에 미리 실패한다** — 백엔드 개시 경로(memo102 §3.2-a)가 같은 캡·같은 규칙으로
  * fail-closed 라서, 상한을 넘긴 프리셋은 애초에 적재조차 안 되는 게 맞다. 여기서 막으면 팩 결함이
  * 고객 개시 순간이 아니라 우리 터미널에서 드러난다.
+ *
+ * ── 팩 v4 (오너 확정 2026-08-01) — **팩마다 자기 소스** ──────────────────────
+ * **오버레이가 없어졌다.** 종전에는 정본 `src/` 한 벌을 전 팩이 공유하고 `presets/<code>/src/**` 가
+ * 파일 단위로 그것을 가렸는데, 그 기계가 개념째 걷혔다 — 실측하면 팩 둘의 오버레이 55줄 중 실차이가
+ * **카피 한 줄**이었고(제목·더보기 문구), 그런 것은 애초에 `content/` 의 몫이다. 더 근본적으로는
+ * 수많은 개발자·사용자가 LLM 으로 **자기 얼굴 프론트엔드**를 갖게 되므로, 우리 소스는 최초 기준일 뿐
+ * "정본 한 벌 + 가림"이라는 구성 자체가 거추장스럽다.
+ *
+ * 그래서 `presets/<code>/src/**` 가 **그 팩의 소스 전부**다(zip 의 `src/` 는 여기서만 온다 — 병합이
+ * 없으므로 어느 줄이 어디서 왔는지 묻는 일도 없다). 레포 루트의 `src/` 는 **새 팩이 복사해 가는 원본**
+ * 이자 CI(`validate`·`typecheck`·`test`·`build`)가 무는 대상이고, **zip 에는 안 실린다.**
+ *
+ * 정본이 넷이 되는 비용은 오너가 받아들였다(파괴적 변경은 오픈 전에 몰아 끝낸다). 대신 **틀리면 사고가
+ * 나는 배선**만 바이트로 잠근다 — `scripts/lib/wiring-parity.mjs`. 얼굴(홈·헤더·섹션 렌더·카피)이
+ * 갈리는 것은 **의도**라 방어 대상이 아니다.
  *
  * 사용:
  *   node scripts/pack-preset.mjs                    # 전체 테마, version=DEFAULT_VERSION
@@ -42,6 +71,7 @@ import {fileURLToPath} from "node:url";
 import {createRequire} from "node:module";
 import {deflateRawSync} from "node:zlib";
 import {crc32} from "./preset-canvas.mjs";
+import {checkWiringParity} from "./lib/wiring-parity.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const PRESETS_DIR = join(ROOT, "presets");
@@ -68,12 +98,8 @@ const CAPS = {
     navLinks: 30,
     sectionsPerPage: 50,
     configBytes: 64 * 1024,
-    /** 백엔드 `SiteSeedCaps.MAX_PRODUCTS`(memo119 §2.5). 20종을 넘으면 템플릿이 아니라 데이터 이관이다. */
-    products: 20,
-    /** 백엔드 `SiteSeedCaps.MAX_CATEGORIES`(memo139). */
-    categories: 10,
-    /** 백엔드 `SiteSeedCaps.MAX_CATEGORIES_PER_PRODUCT`. */
-    categoriesPerProduct: 3,
+    // ⚠ 상품·갈래 캡(products·categories·categoriesPerProduct·재고·텍스트 길이)은 memo142 에서
+    //    **축 자체가 사라져** 백엔드 `SiteSeedCaps` 와 함께 은퇴했다. 시드는 업무 데이터를 만들지 않는다.
 };
 
 /** 백엔드 `StorageFileService.putMediaObject` 의 화이트리스트와 같다 — 래스터만, svg·영상 없음. */
@@ -89,10 +115,14 @@ const SOURCE_EXCLUDES = [
     "presets/",
     // 템플릿 기본 콘텐츠(빈 매니페스트)는 빼고 **프리셋 것을 싣는다** — 아니면 두 벌이 겹친다.
     "content/",
+    // 팩 v4: zip 의 `src/` 는 **그 팩 것만** 온다. 루트 `src/` 는 새 팩이 복사해 가는 원본이자
+    // CI 대상이지 배송물이 아니다 — 실으면 두 벌이 겹쳐 어느 쪽이 그 사이트인지 말할 수 없게 된다.
+    "src/",
     "dist-presets/",
     "scripts/pack-preset.mjs",
     "scripts/gen-preset-assets.mjs",
     "scripts/preset-canvas.mjs",
+    "scripts/lib/wiring-parity.mjs",
 ];
 
 /**
@@ -111,12 +141,32 @@ const fail = (code, message) => problems.push(`[${code}] ${message}`);
 const isReferenceKey = (key) => key === "asset" || (key.length > 5 && key.endsWith("Asset"));
 
 /**
- * `product`/`*Product`(단수·문자열) · `products`/`*Products`(복수·문자열 배열) = `products[].handle` 참조
- * (memo119 §2.3). 백엔드 `SeedProductReferences` 와 **같은 판정**이어야 한다 — 갈라지면 팩은 통과하는데
- * 개시가 중단된다.
+ * **업무 참조 키 형상**(memo142 §1 기계 판정). `product`/`*Product`(단수) · `products`/`*Products`(복수) ·
+ * `categorySlug`. 종전에는 이 판정이 "이 handle 이 시드에 있는가"를 묻는 **해석기**였는데, 이제는
+ * **금지 판정**이다 — 섹션 config 에 이 형상의 키가 있으면 그 섹션은 조회형이고, 조회의 자리는 선언이
+ * 아니라 소스다.
+ *
+ * **타입 이름이 아니라 키 형상으로 거는 이유**: 어휘에서 `SERVICE_MENU`·`BOOKING_CTA` 가 삭제됐지만,
+ * 같은 성격의 타입이 다시 생기면 이름만 다를 뿐 같은 위반이다. 형상으로 걸면 미래의 조회형도 잡힌다.
+ * (판정 자체는 백엔드 `SeedProductReferences` 가 쓰던 것과 **같은 형태**를 그대로 재사용한다 — 그 규칙이
+ * 이미 "무엇이 업무 참조인가"를 정확히 정의해 뒀다.)
  */
 const isProductRefKey = (key) => key === "product" || (key.length > 7 && key.endsWith("Product"));
 const isProductsRefKey = (key) => key === "products" || (key.length > 8 && key.endsWith("Products"));
+const isBusinessRefKey = (key) => key === "categorySlug" || isProductRefKey(key) || isProductsRefKey(key);
+
+/** 섹션 config 안의 업무 참조 키 **경로 전수**(사람이 고칠 재료라 경로로 돌려준다). */
+function collectBusinessRefKeys(node, path = "", into = []) {
+    if (Array.isArray(node)) node.forEach((v, i) => collectBusinessRefKeys(v, `${path}[${i}]`, into));
+    else if (node && typeof node === "object") {
+        for (const [key, value] of Object.entries(node)) {
+            const here = path ? `${path}.${key}` : key;
+            if (isBusinessRefKey(key)) into.push(here);
+            else collectBusinessRefKeys(value, here, into);
+        }
+    }
+    return into;
+}
 
 /**
  * 참조 키가 재작성된 뒤의 **id 형** 키(`assetId`·`photoAssetId`·`productId`·`productIds`…).
@@ -138,33 +188,8 @@ const isRewrittenIdKey = (key) => {
     return ID_STEMS.some((s) => stem === s || stem.endsWith(s));
 };
 
-/** 계약이 요구하는 id 형 키(`productIds`)를 시드가 쓰는 참조형 키(`products`)로 되돌린다. */
+/** 계약이 요구하는 id 형 키(`*AssetId`)를 소스가 쓰는 참조형 키(`*Asset`)로 되돌린다. */
 const seedKeyOf = (idKey) => (idKey.endsWith("Ids") ? `${idKey.slice(0, -3)}s` : idKey.replace(/Id$/, ""));
-
-function collectRefs(node, into = new Set()) {
-    if (Array.isArray(node)) node.forEach((v) => collectRefs(v, into));
-    else if (node && typeof node === "object") {
-        for (const [key, value] of Object.entries(node)) {
-            if (isReferenceKey(key) && typeof value === "string") into.add(value);
-            else collectRefs(value, into);
-        }
-    }
-    return into;
-}
-
-/** 상품 handle 참조 전수 수집. 최상위 `products`(상품 정의 배열)가 아니라 **섹션 config** 안만 훑는다. */
-function collectProductRefs(node, into = new Set()) {
-    if (Array.isArray(node)) node.forEach((v) => collectProductRefs(v, into));
-    else if (node && typeof node === "object") {
-        for (const [key, value] of Object.entries(node)) {
-            if (isProductRefKey(key) && typeof value === "string") into.add(value);
-            else if (isProductsRefKey(key) && Array.isArray(value) && value.every((v) => typeof v === "string")) {
-                value.forEach((v) => into.add(v));
-            } else collectProductRefs(value, into);
-        }
-    }
-    return into;
-}
 
 /** 시드 config 에 재작성된 id 형 키가 있으면 그 경로를 모은다(§2.6-5 — 숫자 직기입 금지). */
 function collectIdKeys(node, path = "", into = []) {
@@ -253,191 +278,14 @@ function assertGuaranteesCarried() {
 }
 
 /**
- * 시드 상품(memo119 §2.2). 백엔드 `SeedProduct`·`SiteSeedPlanner` 와 **같은 규칙**이다 — 캡·형식이 갈리면
- * 팩은 통과하는데 개시가 중단되는, 가장 늦게 발견되는 종류의 결함이 된다(CAPS 와 같은 관례).
- */
-const HANDLE_FORMAT = /^[a-z0-9-]+$/;
-
-/**
- * 시드에 개방된 상품 유형. **화이트리스트다** — 새 유형이 자동으로 열리지 않는다.
- *
- * `DIGITAL` 이 빠진 것은 누락이 아니라 결정이다(memo137 §5-3): 이행 엔진(다운로드·라이선스 전달)이
- * 후속 페이즈라, 열면 "결제는 됐는데 아무것도 안 오는" 조용한 실패가 즉시 상용 가능해진다.
- * `PHYSICAL` 은 2026-08-01 오너 확정으로 열렸다(memo119 §2.2 의 "오너 결정 1" 소진).
- */
-const SEED_PRODUCT_TYPES = new Set(["SERVICE", "PHYSICAL"]);
-
-/**
- * 초기 재고를 명시로 요구하는 유형 — 백엔드가 `ProductType.defaultTrackInventory` 로 판별하는 그 집합이다.
- * 여기에 드는 유형은 재고추적이 켜진 채 태어나므로, `stock` 이 없거나 0 이면 **전 상품 품절 진열 +
- * JSON-LD `OutOfStock`** 이 된다(memo137 §2 D2).
- *
- * ⚠ **여기는 리터럴이고 백엔드는 파생이다**(심의 기능 축 W2). 추적 ON 인 신유형이 추가되면 백엔드는
- * 자동으로 재고를 요구하는데 이 목록은 안 따라오므로, 팩은 green 인데 개시가 중단된다 — 시끄러운
- * 실패라 사고는 아니지만 **갈림 지점**이다. 유형이 늘면 이 줄을 같이 고쳐라.
- */
-const STOCK_REQUIRED_TYPES = new Set(["PHYSICAL"]);
-
-/**
- * 착지 컬럼이 `varchar(255)` 인 텍스트의 상한 — 백엔드 `SiteSeedCaps.MAX_TEXT_COLUMN` 과 **동수**.
- * 길이를 팩에서도 재는 이유는 백엔드와 같다: 안 재면 S3 적재 뒤 DB 제약에서 터져 미디어 고아가 남는다.
- *
- * ⚠ **커버리지는 상품 축뿐이다**(심의 지적 — 커밋 서사가 이보다 컸다). 백엔드는 페이지 slug(100)·
- * title(255)·메뉴 label(100)·url(500)까지 재는데, 현 팩들이 시드에 pages/menus 를 안 실어 여기서는
- * 잠재적이다. 시드가 그것들을 싣기 시작하면 이 게이트도 같이 넓혀야 한다.
- */
-const MAX_TEXT_COLUMN = 255;
-
-/** 상품 1건 초기 재고 상한. 백엔드 `SiteSeedCaps.MAX_STOCK_PER_PRODUCT` 와 **동수 유지**(갈리면 검출이 죽는다). */
-const MAX_STOCK_PER_PRODUCT = 999;
-
-/**
- * 시드 갈래 검증(memo139) — 백엔드 `SiteSeedPlanner.validateCategories` 와 **같은 규칙**이다.
- * 갈라지면 팩은 통과하는데 개시가 중단되는, 가장 늦게 발견되는 종류의 결함이 된다.
- *
- * **아무 상품도 안 드는 갈래를 막는 이유**: 데모의 빈 진열대는 거짓이다(고객 사이트의 빈 갈래는
- * 정상이고, 여기 걸리는 것은 **우리 팩**뿐이다).
- */
-function validateCategories(code, categories, products) {
-    if (!Array.isArray(categories)) {
-        fail("SEED_CATEGORIES", `${code}: categories 는 배열이어야 합니다`);
-        return new Set();
-    }
-    if (categories.length > CAPS.categories) {
-        fail("CAP_CATEGORIES", `${code}: 갈래 ${categories.length} > ${CAPS.categories} — 데모가 아니라 데이터 이관입니다`);
-    }
-    const slugs = new Set();
-    for (const category of categories) {
-        const slug = category?.slug;
-        if (!slug || !category?.name) {
-            fail("SEED_CATEGORY", `${code}: 갈래 slug·name 은 필수 — ${JSON.stringify(category)}`);
-            continue;
-        }
-        if (!HANDLE_FORMAT.test(slug)) {
-            fail("HANDLE_FORMAT", `${code}: 갈래 slug "${slug}" — 소문자·숫자·하이픈만 씁니다`);
-        }
-        if (slugs.has(slug)) fail("SEED_CATEGORY", `${code}: 갈래 slug 중복 — ${slug}`);
-        slugs.add(slug);
-        for (const [field, value] of [["slug", slug], ["name", category.name]]) {
-            if (typeof value === "string" && value.length > MAX_TEXT_COLUMN) {
-                fail("SEED_CATEGORY", `${code}/${slug}: ${field} 길이 ${value.length} > ${MAX_TEXT_COLUMN}`);
-            }
-        }
-    }
-
-    const used = new Set();
-    for (const product of products) {
-        const refs = product?.categories;
-        if (refs == null) continue;
-        if (!Array.isArray(refs)) {
-            fail("SEED_CATEGORY", `${code}/${product?.handle}: categories 는 배열이어야 합니다`);
-            continue;
-        }
-        if (refs.length > CAPS.categoriesPerProduct) {
-            fail("CAP_CATEGORIES", `${code}/${product.handle}: 갈래 ${refs.length} > ${CAPS.categoriesPerProduct}`);
-        }
-        for (const ref of refs) {
-            if (!slugs.has(ref)) {
-                fail("REF_MISSING", `${code}/${product.handle}: 미정의 갈래를 가리킵니다 — ${ref}`);
-            }
-            used.add(ref);
-        }
-    }
-    for (const slug of slugs) {
-        if (!used.has(slug)) {
-            fail("REF_UNUSED", `${code}: 아무 상품도 안 드는 갈래 — ${slug}. 데모의 빈 진열대는 거짓입니다`);
-        }
-    }
-    return slugs;
-}
-
-function validateProducts(code, products) {
-    if (!Array.isArray(products)) {
-        fail("SEED_PRODUCTS", `${code}: products 는 배열이어야 합니다`);
-        return new Set();
-    }
-    if (products.length > CAPS.products) {
-        fail("CAP_PRODUCTS", `${code}: 상품 ${products.length} > ${CAPS.products} — 이건 템플릿이 아니라 데이터 이관입니다`);
-    }
-
-    const handles = new Set();
-    for (const product of products) {
-        const handle = product?.handle;
-        if (!handle || !product?.name || product?.price == null) {
-            fail("SEED_PRODUCT", `${code}: 상품 handle·name·price 는 필수 — ${JSON.stringify(product)}`);
-            continue;
-        }
-        if (!HANDLE_FORMAT.test(handle)) {
-            fail("HANDLE_FORMAT", `${code}: handle "${handle}" — 소문자·숫자·하이픈만 씁니다(콘솔과 달리 시드는 ASCII 만)`);
-        }
-        if (handles.has(handle)) fail("SEED_PRODUCT", `${code}: handle 중복 — ${handle}`);
-        handles.add(handle);
-
-        // 길이 — 백엔드와 동수. 넘치면 개시가 S3 적재 뒤 DB 제약에서 터진다(미디어 고아).
-        for (const [field, value] of [["handle", handle], ["name", product.name]]) {
-            if (typeof value === "string" && value.length > MAX_TEXT_COLUMN) {
-                fail("SEED_PRODUCT", `${code}/${handle}: ${field} 길이 ${value.length} > ${MAX_TEXT_COLUMN}`);
-            }
-        }
-
-        if (!SEED_PRODUCT_TYPES.has(product.type)) {
-            fail(
-                "PRODUCT_TYPE",
-                `${code}/${handle}: type "${product.type}" 은 아직 개방 전입니다 — 시드 v1 은 ${[...SEED_PRODUCT_TYPES].join("·")} 만 받습니다`,
-            );
-        }
-        // 가격은 **문자열**이다(BigDecimal — 부동소수 회피). 숫자로 적으면 백엔드 strict 파싱이 개시를 중단한다.
-        // 자릿수까지 백엔드와 동수다 — 착지 컬럼이 `decimal(12,2)` 라, 소수 3자리는 조용히 반올림되고
-        // 정수 11자리는 S3 적재 뒤 DB 제약에서 터진다(memo137 보안 재검수 W-a).
-        if (typeof product.price !== "string" || !/^\d{1,10}(\.\d{1,2})?$/.test(product.price)) {
-            fail(
-                "PRODUCT_PRICE",
-                `${code}/${handle}: price 는 정수 10자리·소수 2자리 이하의 **문자열**이어야 합니다 — ${JSON.stringify(product.price)}`,
-            );
-        }
-        // 초기 재고(memo137). 백엔드 `SiteSeedPlanner.validateStock` 과 **같은 규칙**이다 — 갈리면
-        // 팩은 통과하는데 개시가 중단된다.
-        if (STOCK_REQUIRED_TYPES.has(product.type)) {
-            if (product.stock == null) {
-                fail(
-                    "PRODUCT_STOCK",
-                    `${code}/${handle}: ${product.type} 은 초기 재고(stock) 명시가 필수입니다 — 없으면 재고추적이 켜진 채` +
-                        ` onHand 0 으로 태어나 전 상품이 품절로 진열됩니다`,
-                );
-            } else if (!Number.isInteger(product.stock)) {
-                // 문자열 "40" 은 백엔드가 관용 수용할 수 있으나, 팩에서 정수로 못박아야 형식이 안 흔들린다.
-                fail("PRODUCT_STOCK", `${code}/${handle}: stock 은 **정수**여야 합니다 — ${JSON.stringify(product.stock)}`);
-            } else if (product.stock <= 0) {
-                fail("PRODUCT_STOCK", `${code}/${handle}: stock 0 은 곧 품절 진열입니다 — 견본 재고를 명시하십시오`);
-            } else if (product.stock > MAX_STOCK_PER_PRODUCT) {
-                fail(
-                    "PRODUCT_STOCK",
-                    `${code}/${handle}: stock ${product.stock} > ${MAX_STOCK_PER_PRODUCT} — 네 자리 재고는 견본이 아니라 데이터 이관입니다`,
-                );
-            }
-        } else if (product.stock != null) {
-            fail(
-                "PRODUCT_STOCK",
-                `${code}/${handle}: ${product.type} 은 무한재고라 stock 이 무의미합니다 — 적으면 백엔드가 개시를 중단합니다`,
-            );
-        }
-        // 섹션 config 와 같은 규칙 — 상품의 커버도 `imageAsset`(파일명)이지 `imageAssetId`(숫자)가 아니다(§2.6-5).
-        for (const path of collectIdKeys(product)) {
-            fail("NUMERIC_ID", `${code}/${handle}: 상품에 id 형 키 "${path}" — 시드는 참조형(파일명)으로 씁니다`);
-        }
-    }
-    // 상품 0 은 정상이다 — 상품을 안 쓰는 테마(biz-*)가 다수다. 필수 참조 게이트가 "쓰겠다고 선언해 놓고
-    // 안 가리킨" 경우만 잡는다.
-    return handles;
-}
-
-/**
  * 정적 라우트 세그먼트(`src/app/<seg>/page.tsx`). Next 규칙상 정적 세그먼트가 `[slug]` 보다 **우선**하므로,
  * 같은 이름의 시드 페이지는 그려지지 않는다 — 데이터는 들어갔는데 아무도 못 보는 고아가 된다.
  * 조용한 그림자라 사람 눈으로는 안 잡힌다. 레포에서 직접 세어 시드 slug 와 대조한다.
  */
-function reservedSlugs() {
-    const appDir = join(ROOT, "src/app");
+function reservedSlugs(code) {
+    // ⚠ 팩 v4: **그 팩의 라우트**를 본다(팩마다 소스가 다르므로 루트 `src/` 를 보면 틀린 답이 나온다 —
+    //    커머스를 지운 팩에서 `products` 를 예약어로 잡거나, 반대로 그 팩만 가진 라우트를 놓친다).
+    const appDir = join(PRESETS_DIR, code, "src/app");
     return new Set(
         readdirSync(appDir, {withFileTypes: true})
             .filter((e) => e.isDirectory() && !e.name.startsWith("[") && !e.name.startsWith("_"))
@@ -445,9 +293,9 @@ function reservedSlugs() {
     );
 }
 
-/** 큐레이션 아이콘 맵은 레포 안에 있으니 항상 대조한다 — 미지 아이콘은 렌더에서 조용히 사라진다(§4.4). */
-function iconKeys() {
-    const src = readFileSync(join(ROOT, "src/components/ui/Icon.tsx"), "utf8");
+/** 큐레이션 아이콘 맵은 **그 팩의 소스** 안에 있으니 항상 대조한다 — 미지 아이콘은 렌더에서 조용히 사라진다(§4.4). */
+function iconKeys(code) {
+    const src = readFileSync(join(PRESETS_DIR, code, "src/components/ui/Icon.tsx"), "utf8");
     const body = src.slice(src.indexOf("export const ICONS"), src.indexOf("export const ICON_KEYS"));
     return new Set([...body.matchAll(/"([a-z0-9-]+)":/g)].map((m) => m[1]));
 }
@@ -459,11 +307,14 @@ function iconKeys() {
 const HOME_SLUG = "home";
 
 /**
- * 시드 v2 검증 — **업무 데이터만** 남았다(테마 값 슬롯 + 상품). `pages`·`menus` 는 팩 v2 에서 탈락했고
- * 그 자리를 `content/` 가 받는다(아래 [validateContent]).
+ * 시드 v3 검증(memo142) — 남은 최상위 키는 **`themeColors` 하나**다.
  *
- * v1 잔재(`pages`/`menus` 키)를 조용히 무시하지 않고 **실패**시키는 이유: 무시하면 그 프리셋은
- * "페이지를 넣었는데 사이트에 안 나오는" 상태로 나가고, 그 원인이 파일 어디에도 안 적혀 있다.
+ * `pages`·`menus` 는 팩 v2 에서 탈락했고(그 자리를 `content/` 가 받는다 — 아래 [validateContent]),
+ * `products`·`categories` 는 팩 v3 에서 탈락했다(그 자리를 **소스의 직접 호출**이 받는다).
+ *
+ * **잔재 키를 조용히 무시하지 않고 실패시키는 이유는 두 세대가 같다**: 무시하면 그 프리셋은
+ * "상품을 넣었는데 안 생기는"·"페이지를 넣었는데 안 나오는" 상태로 나가고, 그 원인이 파일 어디에도
+ * 안 적혀 있다. 백엔드도 같은 판정이다(strict 파싱이 미지 키로 개시를 중단한다) — 갈리면 안 되는 축이다.
  */
 function validateSeed(code, seedBytes, assetNames) {
     if (seedBytes.length > CAPS.seedJsonBytes) {
@@ -483,29 +334,41 @@ function validateSeed(code, seedBytes, assetNames) {
         fail(
             "SEED_V1",
             `${code}: seed.json 에 ${legacy.join("·")} 가 남아 있습니다 — 팩 v2 에서 사이트의 얼굴은 ` +
-                `presets/${code}/content/ 로 갔습니다(seed 는 업무 데이터 전송 포맷). 옮기고 지우십시오`,
+                `presets/${code}/content/ 로 갔습니다. 옮기고 지우십시오`,
         );
     }
-    const unknownTop = Object.keys(seed).filter((k) => !["themeColors", "products", "categories"].includes(k));
-    if (unknownTop.length) fail("SEED_STRICT", `${code}: 최상위 미지 키 — ${unknownTop.join(", ")}`);
-
-    const categorySlugs = validateCategories(code, seed.categories ?? [], seed.products ?? []);
-    const handles = validateProducts(code, seed.products ?? []);
-
-    // 참조 무결성 — 양방향. `.zalkera/assets/` 는 **상품 이미지 전용 풀**이 됐다(섹션 이미지는 public/).
-    const refs = collectRefs(seed.products ?? []);
-    for (const ref of refs) if (!assetNames.has(ref)) fail("REF_MISSING", `${code}: 상품이 참조한 에셋 없음 — ${ref}`);
-    for (const name of assetNames) {
-        if (!refs.has(name)) {
-            fail(
-                "REF_UNUSED",
-                `${code}: 아무 상품도 안 쓰는 에셋 — .zalkera/assets/${name}. 섹션 이미지라면 ` +
-                    `presets/${code}/public/ 로 옮기십시오(레포 상주가 정위치입니다)`,
-            );
-        }
+    // ⚠ **팩 v3 의 핵심 게이트**(memo142). 상품·갈래를 시드에 실으면 그것은 우리가 고객 DB 에 업무
+    //    데이터를 만드는 것이고, 갈래 이름(`리빙`·`시술`)은 애초에 **사장이 정할 이름**이다.
+    //    카탈로그의 입구는 콘솔·MCP 이고, 화면에 비추는 일은 소스가 `listProducts()` 로 한다.
+    const business = ["products", "categories"].filter((k) => k in seed);
+    if (business.length) {
+        fail(
+            "SEED_BUSINESS_DATA",
+            `${code}: seed.json 에 ${business.join("·")} 가 있습니다 — 시드는 업무 데이터를 만들지 않습니다` +
+                `(memo142 §1). 카탈로그는 콘솔·MCP 가 채우고, 화면은 소스가 listProducts()·` +
+                `listProductCategories() 를 직접 불러 그립니다. 견본 카탈로그가 필요하면 ` +
+                `qa/fixtures/${code}/catalog.json 으로 옮겨 파트너 API 로 적재하십시오`,
+        );
+    }
+    const unknownTop = Object.keys(seed).filter((k) => k !== "themeColors");
+    if (unknownTop.length && !unknownTop.every((k) => ["pages", "menus", "products", "categories"].includes(k))) {
+        const rest = unknownTop.filter((k) => !["pages", "menus", "products", "categories"].includes(k));
+        fail("SEED_STRICT", `${code}: 최상위 미지 키 — ${rest.join(", ")}. 남은 키는 themeColors 뿐입니다`);
     }
 
-    return {seed, handles, categorySlugs};
+    // `.zalkera/assets/` 는 **전송 이미지 풀**이다. 팩 v3 에서 그 유일한 소비자(상품 커버)가 사라져
+    // 현행 팩들은 이 디렉터리가 아예 없다 — 파일을 두면 아무도 안 쓰는 채로 배송된다.
+    // 섹션 이미지의 정위치는 레포 상주(`presets/<code>/public/`)이고 그건 아래 [validateContent] 가 센다.
+    for (const name of assetNames) {
+        fail(
+            "REF_UNUSED",
+            `${code}: 아무도 안 쓰는 전송 에셋 — .zalkera/assets/${name}. 섹션 이미지라면 ` +
+                `presets/${code}/public/ 로 옮기고(레포 상주가 정위치입니다), 상품 이미지라면 ` +
+                `qa/fixtures/${code}/assets/ 로 옮기십시오(카탈로그는 콘솔이 채웁니다)`,
+        );
+    }
+
+    return {seed};
 }
 
 /**
@@ -519,7 +382,7 @@ function validateSeed(code, seedBytes, assetNames) {
  * 새로 생긴 축 둘: ⑴ 에셋이 `public/` 루트 절대 경로이고 그 파일이 실재하는가 ⑵ `sortOrder` 잔존
  * (배열이 순서인데 키가 남으면 순서의 원장이 둘이 된다).
  */
-function validateContent(code, contentDir, publicNames, contract, icons, reserved, handles, categorySlugs) {
+function validateContent(code, contentDir, publicNames, contract, icons, reserved) {
     const pagesDir = join(contentDir, "pages");
     let files;
     try {
@@ -617,16 +480,22 @@ function validateContent(code, contentDir, publicNames, contract, icons, reserve
                 }
             }
 
-            // 콘텐츠의 갈래 참조 ↔ 시드 갈래 대조.
+            // ⚠ **업무 참조 키 금지**(memo142 §1 기계 판정 · 팩 v3 의 핵심 게이트).
             //
-            // ⚠ **이 대조는 팩 게이트에만 설 수 있다.** 팩 v2 에서 페이지는 시드 밖(소스 `content/`)이라
-            //    백엔드 Planner 가 구조적으로 볼 수 없다. "팩은 위생이고 Planner 가 방어"라는 memo137 의
-            //    규율에 대한 **명시적 예외**이고, 그래서 여기가 유일한 검출 지점이다.
-            const catRef = typeof config.categorySlug === "string" ? config.categorySlug : null;
-            if (catRef && !categorySlugs.has(catRef)) {
+            //    종전에는 여기서 "이 갈래가 시드에 있는가"를 대조했다. 이제 묻는 것이 다르다 —
+            //    **선언이 업무 축을 가리키는 것 자체**가 경계 위반이다. 값이 업무 DB 에 살고 화면이
+            //    비추기만 하는 조회는 선언이 아니라 소스의 소관이고(`ProductRail` 이 본보기), 절반 선언은
+            //    "어디에"만 선언에 두고 "어떻게"를 공유 렌더러에 얼려 버린다.
+            //
+            //    **타입 이름이 아니라 키 형상으로 건다** — 어휘에서 조회형 둘이 삭제됐지만 같은 성격의
+            //    타입이 다시 생겨도 여기서 잡힌다. 이 게이트는 **우리 산출물인 팩에만** 선다(요건 1:
+            //    고객 zip·고객 레포의 어휘를 우리가 강제하지 않는다).
+            for (const path of collectBusinessRefKeys(config)) {
                 fail(
-                    "REF_MISSING",
-                    `${at}: 시드에 없는 갈래를 가리킵니다 — "${catRef}". 개시하면 이 섹션이 조용히 빕니다`,
+                    "BUSINESS_REF",
+                    `${at}: 섹션 config 에 업무 참조 키 "${path}" — 배송물은 업무 축의 고유명사(상품 handle·` +
+                        `갈래 slug)를 박지 않습니다(받은 사람 카탈로그에는 그 이름이 없어 영구히 빕니다). ` +
+                        `진열은 소스에서 listProducts()·listProductCategories() 를 직접 부르십시오`,
                 );
             }
 
@@ -667,12 +536,6 @@ function validateContent(code, contentDir, publicNames, contract, icons, reserve
                 usedAssets.add(value);
             }
 
-            // 상품 참조 — 시드 상품 handle 로 해결돼야 한다(레인 A ↔ 레인 B 의 통신 키).
-            for (const ref of collectProductRefs(config)) {
-                if (!handles.has(ref)) {
-                    fail("PRODUCT_REF_MISSING", `${at}: 참조한 상품 없음 — handle "${ref}" 가 seed.json products 에 없습니다`);
-                }
-            }
         }
     }
 
@@ -750,12 +613,13 @@ function validateAssets(code, assets) {
  * 이미지 — 새 거처)** · 템플릿 자신의 `public/`. 새 거처를 빠뜨리면 라이선스 기록 없는 이미지가
  * 레포 상주로 나가는데, 그게 정확히 이 게이트가 막으려던 것이다.
  */
-function validateLicense(code, manifest, assets, presetPublicImages, overlayImages = []) {
+function validateLicense(code, manifest, assets, presetPublicImages, packSrcImages = []) {
     const templateImages = listImages(join(ROOT, "public"));
-    // ⚠ 오버레이 이미지도 센다(보안 심의 W1). 종전 대상은 `.zalkera/assets`·프리셋 `public/`·템플릿
-    //    `public/` 뿐이라, `presets/<code>/src/` 밑에 둔 이미지가 **기록 없이 zip 에 실렸다**(실측).
-    //    §7 게이트의 "기록 없는 이미지는 나갈 수 없다"가 오버레이에서 거짓이었다.
-    for (const name of [...assets.map((a) => a.name), ...presetPublicImages, ...templateImages, ...overlayImages]) {
+    // ⚠ **팩 소스 안의 이미지도 센다**(보안 심의 W1). 종전 대상은 `.zalkera/assets`·프리셋 `public/`·
+    //    템플릿 `public/` 뿐이라, `presets/<code>/src/` 밑에 둔 이미지가 **기록 없이 zip 에 실렸다**
+    //    (실측). §7 게이트의 "기록 없는 이미지는 나갈 수 없다"가 거기서 거짓이었다. 오버레이가 걷힌
+    //    뒤에도 그 디렉터리는 그대로 배송되므로 이 축은 그대로 유효하다.
+    for (const name of [...assets.map((a) => a.name), ...presetPublicImages, ...templateImages, ...packSrcImages]) {
         if (!manifest.includes(name)) fail("LICENSE", `${code}: ASSETS-LICENSE.md 에 없는 이미지 — ${name}`);
     }
 }
@@ -836,7 +700,13 @@ function zip(entries) {
     return Buffer.concat([...locals, centralBuf, end]);
 }
 
-/** 정본 소스 = git 추적 파일. `node_modules`·빌드 산출물이 자동으로 빠지고 목록이 사람 손을 안 탄다. */
+/**
+ * **공용 프로젝트 배선** = git 추적 파일 − 제외 목록. `node_modules`·빌드 산출물이 자동으로 빠지고
+ * 목록이 사람 손을 안 탄다.
+ *
+ * 팩 v4 에서 `src/` 가 제외로 들어가 이 함수가 싣는 것은 **소스가 아닌 것**들이다: `package.json`·
+ * `tsconfig`·`next.config`·`.github/`·문서·고객용 스크립트. 팩마다 갈릴 이유가 없어 공유한다.
+ */
 function sourceEntries() {
     const tracked = execFileSync("git", ["ls-files", "-z"], {cwd: ROOT, maxBuffer: 32 * 1024 * 1024})
         .toString("utf8")
@@ -844,7 +714,14 @@ function sourceEntries() {
         .filter(Boolean)
         .filter((p) => !SOURCE_EXCLUDES.some((x) => (x.endsWith("/") ? p.startsWith(x) : p === x)))
         .sort();
-    return tracked.map((path) => ({path, bytes: readFileSync(join(ROOT, path))}));
+    return tracked.flatMap((path) => {
+        // 심링크 거부는 팩 소스와 같은 이유다(레포 밖 내용이 zip 에 실린다) — 대상만 다르다.
+        if (lstatSync(join(ROOT, path)).isSymbolicLink()) {
+            fail("SOURCE_SYMLINK", `${path}: 소스에 심링크를 둘 수 없습니다 — 대상 내용이 zip 에 실립니다`);
+            return [];
+        }
+        return [{path, bytes: readFileSync(join(ROOT, path))}];
+    });
 }
 
 /**
@@ -904,98 +781,74 @@ function validateSource(source) {
 
 // ── 팩 ───────────────────────────────────────────────────────────────────────
 
-/** 프리셋 `public/` 아래 전 파일을 `{zip 경로, public 루트 경로, bytes}` 로 모은다. */
 /**
- * `presets/<code>/src/**` — **정본 소스를 파일 단위로 가리는 오버레이.**
+ * `presets/<code>/src/**` — **이 팩의 소스 전량**(팩 v4). zip 의 `src/` 는 여기서만 온다.
  *
- * 왜 필요한가: 사이트의 정체는 선언이 아니라 **`@zalkera/client` 를 어떻게 부르는가**로 구성된다
- * (오너 확정 2026-08-01). 그런데 정본 `src/` 는 전 팩 공유라, 커머스 호출을 쓰지 않는 팩(홍보·소개)이
- * 자기 구성을 만들 방법이 규칙상 없었다 — 헤더에 장바구니·로그인이 남는 것이 그 증상이다.
- * 그것을 `commerce: boolean` 같은 **렌더를 바꾸는 선언**으로 우회하려던 시도는 기각됐다
- * (정본이 허용하는 선언은 *검증을 켜는* 선언뿐이다 — memo125 요건 1 "계약 준수는 선언으로 자발적이다").
+ * 종전에는 이 함수가 "정본을 파일 단위로 가리는 오버레이"를 모았고, 무엇을 못 가리는지를 정하는
+ * 목록(`PROTECTED_WIRING`)이 옆에 있었다. **오버레이가 없어지면서 둘 다 걷혔다** — 가릴 정본이
+ * 없으니 "가리면 안 되는 것"도 없다. 그 목록이 지키던 값어치는 죽지 않고 **뜻이 바뀌어**
+ * `scripts/lib/wiring-parity.mjs` 로 갔다: 이제 묻는 것은 "가렸는가"가 아니라
+ * **"넷이 갈렸는가"**(바이트 동일)다.
  *
- * **포크가 아닌 이유**: memo102 "테마마다 소스를 포크하지 않는다"의 실질은 유지보수였다(정본 패치가
- * 전 팩에 전파되어야 한다). 오버레이는 가리는 파일이 **유한하고 기계로 열거된다** — 팩이 매번
- * 목록을 찍으므로, 정본 패치가 가려진 파일을 건드릴 때 사람이 안다. 전면 포크의 비가시 드리프트와 다르다.
- * 가려진 파일에 정본 패치가 안 닿는 비용은 **정체 차이의 본질 비용**이라 없앨 수 없고, 가시화로 관리한다.
+ * 남은 가드 둘은 오버레이와 무관하게 유효해서 그대로 있다:
  *
- * v1 은 `src/**` 전체를 허용한다(추가·교체만 — 삭제는 짓지 않는다). `components/` 로만 좁히면 홍보 팩이
- * 자기 라우트를 못 만들어 같은 결함이 라우트 축에서 재발한다.
+ * ⑴ **git 원장만 싣는다.** `readdirSync` 로 걸으면 `.gitignore` 에 걸린 파일이 **`git status` 가 깨끗한
+ *    채** zip 에 실린다 — 실측으로 `presets/<code>/src/.env.local` 이 그랬다(DIRTY_TREE 도 ignored
+ *    파일은 못 본다). 프리셋 zip 은 그 프리셋으로 개시하는 **전 테넌트**에 복제되므로 파급이 크다.
+ * ⑵ **심링크 거부.** `readFileSync` 는 대상 내용을 그대로 읽으므로, 레포 밖 파일이 `.tsx` 이름을 쓰고
+ *    zip 에 실릴 수 있다(이름 기반 시크릿 스캔도 못 잡는다). 실측 재현됨.
  */
-function presetSourceOverlay(code) {
-    const rel = `presets/${code}/src`;
-    const dir = join(PRESETS_DIR, code, "src");
-    if (!existsSync(dir)) return [];
+const packSourceCache = new Map();
+function packSourceEntries(code) {
+    // 두 번 불린다(보안 불변식 검사 · inspect). 캐시가 없으면 같은 결함이 두 번 보고되고 파일도 두 번 읽는다.
+    if (!packSourceCache.has(code)) packSourceCache.set(code, collectPackSource(code));
+    return packSourceCache.get(code);
+}
 
-    // ── ⑴ **git 원장만 싣는다**(보안 심의 B1). `sourceEntries()` 가 `git ls-files` 를 쓰는 이유가
-    //    "목록이 사람 손을 안 탄다"인데, 오버레이가 `readdirSync` 로 걸으면 그 원장을 우회한다.
-    //    실측: `presets/<code>/src/.env.local` 은 `.gitignore` 에 걸려 **`git status` 가 깨끗한 채**
-    //    zip 에 실렸다(DIRTY_TREE 도 ignored 파일은 못 본다). 프리셋 zip 은 그 프리셋으로 개시하는
-    //    **전 테넌트**에 복제되므로 파급이 테넌트 수만큼이다.
-    const tracked = new Set(
-        execFileSync("git", ["ls-files", "-z", "--", rel], {cwd: ROOT, maxBuffer: 32 * 1024 * 1024})
-            .toString("utf8")
-            .split("\0")
-            .filter(Boolean),
-    );
+function collectPackSource(code) {
+    const rel = `presets/${code}/src`;
+    if (!existsSync(join(PRESETS_DIR, code, "src"))) {
+        fail(
+            "PACK_SRC_MISSING",
+            `${code}: ${rel} 가 없습니다 — 팩 v4 부터 소스는 팩마다 온전히 갖습니다. ` +
+                `새 팩이면 원본을 통째로 복사해 시작하십시오: cp -r src ${rel}`,
+        );
+        return [];
+    }
+    const tracked = trackedUnder(rel);
     if (tracked.size === 0) {
-        fail("OVERLAY_UNTRACKED", `${code}: ${rel} 에 git 추적 파일이 없습니다 — 커밋 후 팩하십시오`);
+        fail("PACK_SRC_UNTRACKED", `${code}: ${rel} 에 git 추적 파일이 없습니다 — 커밋 후 팩하십시오`);
         return [];
     }
 
     const out = [];
     for (const path of [...tracked].sort()) {
         const abs = join(ROOT, path);
-        // ── ⑵ **심링크 거부**(B2). `readFileSync` 는 대상 내용을 그대로 읽으므로, 레포 밖 파일이
-        //    `.tsx` 이름을 쓰고 zip 에 실릴 수 있다(이름 기반 시크릿 스캔도 못 잡는다). 실측 재현됨.
+        // 원장에는 있는데 워킹트리에 없다 = 지워 놓고 커밋 안 한 상태. 평소엔 DIRTY_TREE 가 먼저 잡지만
+        // `--allow-dirty` 로 우회하면 여기까지 온다 — 던지지 말고 무슨 일인지 말한다(실측으로 ENOENT
+        // 스택트레이스가 났고, 그건 게이트 메시지가 아니다).
+        if (!existsSync(abs)) {
+            fail("PACK_SRC_DELETED", `${path}: git 원장에는 있는데 파일이 없습니다 — 삭제를 커밋하거나 되돌리십시오`);
+            continue;
+        }
         if (lstatSync(abs).isSymbolicLink()) {
-            fail("OVERLAY_SYMLINK", `${path}: 오버레이에 심링크를 둘 수 없습니다 — 대상 내용이 zip 에 실립니다`);
+            fail("SOURCE_SYMLINK", `${path}: 소스에 심링크를 둘 수 없습니다 — 대상 내용이 zip 에 실립니다`);
             continue;
         }
-        // ── ⑶ **중립 배선은 가릴 수 없다**(B3). 이 파일들은 능력 구성이 아니라 **플랫폼 계약**이다
-        //    (memo140 §3 표). 실측: `crossOrigin.ts` 를 `return true` 스텁으로 가려도 팩·validate·
-        //    verify-zip 이 전부 green 이었다 — X1 은 "호출했는가"만 보고 `npm test` 는 정본 src 만 본다.
-        //    그래서 여기가 그 자물쇠의 유일한 자리다.
-        const inner = path.slice(`presets/${code}/`.length);
-        if (PROTECTED_WIRING.some((g) => inner === g || inner.startsWith(g))) {
-            fail(
-                "OVERLAY_PROTECTED",
-                `${path}: 중립 배선은 오버레이로 가릴 수 없습니다(${inner}) — 능력 구성이 아니라 플랫폼 계약입니다. ` +
-                    "표현을 바꾸려면 그 파일이 아니라 화면 컴포넌트를 가리십시오.",
-            );
-            continue;
-        }
-        out.push({path: `src/${inner.slice("src/".length)}`, bytes: readFileSync(abs)});
+        out.push({path: path.slice(`presets/${code}/`.length), bytes: readFileSync(abs)});
     }
     return out;
 }
 
-/**
- * 오버레이로 **가릴 수 없는** 정본 파일(보안 심의 B3). memo140 §3 의 "중립 배선"을 기계화한 것이다 —
- * 지우거나 갈아치우면 플랫폼 계약이 죽는데, 죽어도 어떤 검사기도 못 잡는 자리들이다.
- *
- * 능력 구성(커머스·예약·게시판)은 여기 없다 — 그것은 빼고 더하는 것이 자유다.
- */
-const PROTECTED_WIRING = [
-    "src/lib/crossOrigin.ts", // memo118 교차사이트 위조 가드 — **판정**
-    // ⚠ 판정만 지키면 소용없다(보안 심의 차단 2). 실제로 403 을 만드는 것은 **전송층**이라,
-    //    `http.ts` 의 `assertSameOrigin` 을 `return null` 스텁으로 가리면 **변이 라우트 18개의 가드가
-    //    전부 죽은 zip 이 팩·validate 를 그린으로 통과한다**(E2E 재현). 판정/전송을 가른 뒤 이 목록이
-    //    따라오지 않은 것이 결함이었다.
-    "src/lib/http.ts",
-    "src/lib/session.ts", // 쿠키 httpOnly·secure 정책, state 소각
-    "src/lib/oauth.ts", // safeNextPath — 오픈 리다이렉트 판정
-    "src/lib/safeUrl.ts", // 오픈 리다이렉트 소독
-    "src/lib/oauthState.ts", // OAuth state 대조(fail-closed)
-    "src/lib/env.ts",
-    "src/lib/buildEnv.ts",
-    "src/lib/theme.ts", // L1 테마 주입의 심장
-    "src/lib/zalkera.ts", // 클라이언트 싱글턴(baseUrl·시크릿 주입 지점)
-    "src/app/api/revalidate/", // ISR 무효화 — 시크릿 헤더 가드
-    "src/app/media/", // 미디어 프록시
-    "src/app/robots.ts",
-    "src/app/sitemap.ts",
-];
+/** `git ls-files` 원장 — 경로 하나 아래의 추적 파일 집합. */
+function trackedUnder(rel) {
+    return new Set(
+        execFileSync("git", ["ls-files", "-z", "--", rel], {cwd: ROOT, maxBuffer: 32 * 1024 * 1024})
+            .toString("utf8")
+            .split("\0")
+            .filter(Boolean),
+    );
+}
 
 /**
  * `llms.txt` 를 **설치본에서 바이트 그대로** 실어 zip 루트에 둔다(Fable 설계 2026-08-01).
@@ -1052,12 +905,19 @@ function presetPublicFiles(dir, base = "") {
 }
 
 /** 검증만 — 부작용 0. 한 테마라도 걸리면 아무 zip 도 안 쓴다(부분 산출물 금지). */
-function inspect(code, contract, icons, reserved) {
+function inspect(code, contract) {
     const dir = join(PRESETS_DIR, code);
+    // ⚠ 팩 소스를 **먼저** 모은다 — 아이콘 맵·예약 라우트가 그 팩 소스에서 나오므로(팩 v4),
+    //    소스가 없으면 콘텐츠 검증의 잣대 자체가 없다.
+    const packSource = packSourceEntries(code);
+    if (packSource.length === 0) return null;
+    const icons = iconKeys(code);
+    const reserved = reservedSlugs(code);
     const seedBytes = readFileSync(join(dir, "seed.json"));
     const manifest = readFileSync(join(dir, "ASSETS-LICENSE.md"), "utf8");
 
-    // `.zalkera/assets/` = **상품 이미지 전용**이 됐다. 상품을 안 쓰는 테마는 이 디렉터리가 아예 없다.
+    // `.zalkera/assets/` = 전송 이미지 풀. 팩 v3 에서 그 유일한 소비자(상품 커버)가 사라져
+    // **현행 팩은 전부 이 디렉터리가 없다** — 있으면 validateSeed 가 미사용으로 막는다.
     const assetDir = join(dir, "assets");
     let assets = [];
     try {
@@ -1072,7 +932,7 @@ function inspect(code, contract, icons, reserved) {
     const publicFiles = presetPublicFiles(join(dir, "public"));
 
     validateAssets(code, assets);
-    const seedResult = validateSeed(code, seedBytes, new Set(assets.map((a) => a.name)));
+    validateSeed(code, seedBytes, new Set(assets.map((a) => a.name)));
     const content = validateContent(
         code,
         join(dir, "content"),
@@ -1080,14 +940,27 @@ function inspect(code, contract, icons, reserved) {
         contract,
         icons,
         reserved,
-        seedResult?.handles ?? new Set(),
-        seedResult?.categorySlugs ?? new Set(),
     );
-    const overlayImages = presetSourceOverlay(code)
+    const packSrcImages = packSource
         .map((o) => o.path.split("/").pop())
         .filter((n) => /\.(png|jpe?g|webp|gif|svg|avif)$/i.test(n));
-    validateLicense(code, manifest, assets, publicFiles.map((f) => f.name), overlayImages);
-    return {code, seedBytes, manifest, assets, publicFiles, content};
+    validateLicense(code, manifest, assets, publicFiles.map((f) => f.name), packSrcImages);
+
+    // **git 원장 밖의 배송물이 없어야 한다.** 팩 소스는 위에서 이미 `git ls-files` 로 모으지만
+    // `content/`·`public/` 은 디렉터리를 걸어서 모으므로, `.gitignore` 에 걸린 파일이 `git status` 가
+    // 깨끗한 채 실릴 수 있다 — 오버레이에서 `.env.local` 로 실제 겪은 그 구멍이 이쪽에도 있었다.
+    const tracked = trackedUnder(`presets/${code}`);
+    const shipped = [
+        ...publicFiles.map((f) => `presets/${code}/public${f.route}`),
+        ...content.pages.map((p) => relative(ROOT, p.path)),
+        ...(content.nav ? [relative(ROOT, content.nav.path)] : []),
+    ];
+    for (const path of shipped) {
+        if (!tracked.has(path)) {
+            fail("PRESET_UNTRACKED", `${path}: git 이 추적하지 않는 파일이 배송 대상입니다 — 커밋하거나 지우십시오`);
+        }
+    }
+    return {code, seedBytes, manifest, assets, publicFiles, content, packSource};
 }
 
 /**
@@ -1127,20 +1000,13 @@ function identifierOf(slug) {
 }
 
 function write(inspected, version, source, manual) {
-    const {code, seedBytes, manifest, assets, publicFiles, content} = inspected;
+    const {code, seedBytes, manifest, assets, publicFiles, content, packSource} = inspected;
     const slugs = content.pages.map((p) => p.slug);
-    // 오버레이가 같은 경로를 가지면 **팩 것이 이긴다** — 정본을 먼저 깔고 뒤에서 덮는다.
-    const overlay = presetSourceOverlay(code);
-    const overlaid = new Set(overlay.map((o) => o.path));
-    if (overlay.length) {
-        const shadowed = source.filter((e) => overlaid.has(e.path)).map((e) => e.path);
-        console.log(`    · 소스 오버레이 ${overlay.length}개 — 정본 가림 ${shadowed.length}개`);
-        for (const p of shadowed) console.log(`      ↳ ${p}`);
-        for (const o of overlay) if (!shadowed.includes(o.path)) console.log(`      + ${o.path} (신규)`);
-    }
+    // 팩 v4: `src/` 는 **이 팩 것만** 들어간다(병합 없음 — 어느 줄이 어디서 왔는지 묻는 일이 없다).
+    console.log(`    · 팩 소스 ${packSource.length}개 파일 (presets/${code}/src)`);
     const entries = [
-        ...source.filter((e) => !overlaid.has(e.path)),
-        ...overlay,
+        ...source,
+        ...packSource,
         manual,
         // ── 레포 상주(사이트의 얼굴) ────────────────────────────────────────
         {path: "content/index.ts", bytes: Buffer.from(contentManifest(slugs), "utf8")},
@@ -1182,10 +1048,20 @@ const targets = codes.length
 console.log(`프리셋 팩 — version=${version}, 대상 ${targets.join(", ")}`);
 const head = sourceProvenance();
 const source = sourceEntries();
-console.log(`  정본 소스 ${source.length}개 파일(git 추적 − 팩 도구·시드 원본) · HEAD ${head}`);
-// ⚠ 오버레이도 같은 규칙에 넣는다(보안 심의 B4). 종전에는 `source` 만 받아, fail-open OAuth 콜백을
-// 오버레이로 넣으면 규칙이 멀쩡한데도 **대상이 안 들어가** 통과했다(실측 재현).
-validateSource([...source, ...targets.flatMap((code) => presetSourceOverlay(code))]);
+console.log(`  공용 프로젝트 배선 ${source.length}개 파일(git 추적 − src/·팩 도구·시드 원본) · HEAD ${head}`);
+
+// ⚠ 소스 보안 불변식은 **실제로 배송되는 것**에 걸어야 한다(보안 심의 B4). 팩 v4 에서 그것은 각 팩의
+//    `src/` 다 — 루트 `src/` 만 보면 규칙이 멀쩡한데도 대상이 안 들어가 통과한다(오버레이 시절 실측).
+//    루트 `src/`(새 팩이 복사해 갈 원본)도 같이 본다 — 원본이 썩으면 다음 팩이 그것을 물려받는다.
+validateSource([
+    ...targets.flatMap((code) => packSourceEntries(code)),
+    ...[...trackedUnder("src")].sort().map((path) => ({path, bytes: readFileSync(join(ROOT, path))})),
+]);
+
+// **배선 동일성**(오너 확정 2026-08-01) — 팩이 소스를 따로 갖는 대신, *틀리면 사고가 나는* 파일만
+// 바이트로 잠근다. 얼굴이 갈리는 것은 의도이므로 재지 않는다. 판정은 `scripts/lib/wiring-parity.mjs`
+// 한 곳에만 있다(`npm run check:wiring` 이 같은 함수를 부른다 — 검사기 사본이 갈리는 병의 재발 방지).
+problems.push(...checkWiringParity(ROOT));
 
 const contract = sectionContract();
 assertGuaranteesCarried();
@@ -1194,9 +1070,8 @@ assertGuaranteesCarried();
 //    않았다** — exit 0 · zip 산출 · 메시지조차 미출력(실측 재현). 이 파일이 스스로 경고하는 그
 //    "조용히 꺼지는 게이트"를 내가 만들었다. 게이트는 게이트가 소진되기 전에 서야 한다.
 const llmsManual = llmsManualEntry();
-const icons = iconKeys();
-const reserved = reservedSlugs();
-const inspected = targets.map((code) => inspect(code, contract, icons, reserved));
+// 아이콘 맵·예약 라우트는 **그 팩의 소스**에서 읽으므로 inspect 안에서 팩마다 구한다(팩 v4).
+const inspected = targets.map((code) => inspect(code, contract));
 
 if (problems.length) {
     console.error("\n팩 실패 — 게이트 위반(zip 을 하나도 쓰지 않았습니다):");
@@ -1205,6 +1080,7 @@ if (problems.length) {
 }
 
 const packed = inspected.map((item) => write(item, version, source, llmsManual));
+
 
 // 레지스트리는 DB(theme + theme_artifact)다. 종전의 backend `site.presets` yaml 은 memo105 T3 에서
 // 은퇴했는데 이 안내만 남아 있었다 — 운영자가 마지막으로 읽는 줄이라 틀린 채로 두면 그대로 따라 한다.
