@@ -920,7 +920,11 @@ function check(file) {
 
     // S2: JSX 인라인 style. CSS 변수 주입(style={{"--)은 정당 용례라 면제. 마커로도 억제 가능(모든 모드).
     const s2 = styleSink("S2");
-    if (s2 && /style=\{\{(?!\s*["'`]--)/.test(text) && !/\/\/\s*(?:zalkera|oneque)-allow-inline-style:/.test(text)) {
+    // ⚠ 마커는 **원문(`src`)에서 찾는다.** `text` 는 `stripComments(src)` 라 `//` 주석 마커가
+    //    원리적으로 매치될 수 없었다 — 이 규칙이 안내하는 탈출구가 **한 번도 작동한 적이 없다**
+    //    (2026-08-01 첫 사용자가 발견). 형제 규칙 `allow-dynamic`(§S1)은 `readFileSync` 원문을 보므로
+    //    처음부터 옳았다 — 같은 관례를 두 곳이 다르게 구현하고 있었다.
+    if (s2 && /style=\{\{(?!\s*["'`]--)/.test(text) && !/\/\/\s*(?:zalkera|oneque)-allow-inline-style:/.test(src)) {
         s2.push(
             `[S2] ${rel}: JSX 인라인 style={{…}} 사용 — 스타일은 Tailwind 유틸리티 클래스로 표현하라. ` +
                 `정당한 동적 스타일이면 \`// zalkera-allow-inline-style: <이유>\` 마커로 억제하라.`,
