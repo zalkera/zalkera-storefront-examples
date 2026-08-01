@@ -129,6 +129,35 @@ function detectStyleMode(srcDir) {
     return "none";
 }
 
+/**
+ * **관문 모드** — 이 검사기가 권고인지 관문인지.
+ *
+ * 기준(오너 확정 2026-08-01): **검사기는 권고하고, 우리가 책임지는 자리에서만 막는다.**
+ *
+ * 근거는 "선언했는가"도 "우리 어휘를 썼는가"도 아니라 **누가 서빙하는가**다. 실측으로 갈린다 —
+ * 백엔드는 `Origin` 을 **안 본다**(테넌트를 시크릿 키로 정한다). 즉 사이트의 CSRF 가 뚫려도
+ * **우리 백엔드는 안 뚫리고 그 사이트의 방문자가 다친다.** 자체 호스팅(BYO)이면 그건 그들의 위험이고
+ * 우리가 막을 근거가 없다(요건 1 — 어휘를 강제할 수 없다). 우리가 서빙하면 우리 박스에서 우리가
+ * 주입한 키를 들고 도는 것이라 운영 책임이 우리에게 온다 — 그 자리에서만 막는다.
+ *
+ * 그래서 도구가 모드를 정한다:
+ *  · `npm run validate`(개발자가 자기 손으로) → **권고**. X·C·E 가 경고로 내려간다.
+ *  · 팩 게이트(우리 예제·프리셋) → **관문**. 우리 자산이다.
+ *  · `verify-zip`(우리가 서빙할 납품물 검수) → **관문**. 서빙 책임을 지는 자리다.
+ *
+ * 종전에는 셋이 갈라져 있었다 — 발주 스펙은 "선언 없으면 경고", `verify-zip` 주석은 "선언 없으면
+ * 스킵", 실제 동작은 "선언 무관 error". 세 문서가 서로 다른 약속을 하고 있었고 이 모드가 그것을 하나로 합친다.
+ */
+const GATE_MODE = process.argv.includes("--gate") || process.env.ZALKERA_VALIDATE_GATE === "1";
+
+/**
+ * 서빙 책임 축(X 교차사이트 가드 · C 동적 렌더 강등 · E 시크릿 노출)의 목적지.
+ * 관문 모드면 error, 아니면 경고. **선언 여부와 무관하다** — 이 축의 근거는 선언이 아니라 서빙이다.
+ */
+function servingSink() {
+    return GATE_MODE ? errors : warnings;
+}
+
 const STYLE_MODE = detectStyleMode(root);
 
 /**
@@ -547,7 +576,7 @@ function checkLayoutBlastRadius() {
             if (allow) {
                 warnings.push(`[C1b] ${detail} — 예외 허용(zalkera-allow-dynamic: ${allow[1].trim()}).`);
             } else {
-                errors.push(
+                servingSink().push(
                     `[C1b] ${detail}(memo31 §0-1). ${remedyFor(why)}. 꼭 필요하면 ` +
                         `${relative(process.cwd(), file)} 에 \`// zalkera-allow-dynamic: <이유>\` 마커로 정당화하라 ` +
                         `(마커는 layout 이 아니라 **이 파일**에 붙어야 듣는다).`,
@@ -644,7 +673,7 @@ function checkSectionCoverage() {
     const cases = new Set([...src.matchAll(/case\s+"([A-Z_]+)"/g)].map((m) => m[1]));
     const missing = contract.map((c) => c.type).filter((t) => !cases.has(t));
     if (missing.length > 0) {
-        errors.push(
+        servingSink().push(
             `[C2] SectionRenderer 가 계약의 ${missing.join("·")} 를 안 그린다 — 미지 타입은 조용히 스킵되므로 ` +
                 `콘솔에서 넣어도 화면에 안 나온다. case 를 추가하거나, 의도적 미지원이면 그 사유를 커밋에 남겨라.`,
         );
@@ -895,18 +924,18 @@ function check(file) {
     // 서버 클라이언트 싱글턴 존재 확인 — create{Zalkera,Oneque}Client 호출(구 심볼 수용).
     if (/create(?:Zalkera|Oneque)Client\s*\(/.test(src)) {
         singletonFound = true;
-        if (isClient) errors.push(`[E1] ${rel}: "use client" 파일에서 createZalkeraClient 를 만든다 — baseUrl 노출.`);
+        if (isClient) servingSink().push(`[E1] ${rel}: "use client" 파일에서 createZalkeraClient 를 만든다 — baseUrl 노출.`);
     }
 
     if (isClient) {
         // E1: 값 import(= import type 아님)로 @zalkera/client 를 들여옴(구 @oneque/client 도 잡는다).
         const valueImport = /^import\s+(?!type\s)[^;]*from\s+["']@(?:zalkera|oneque)\/client["']/m.test(src);
         if (valueImport) {
-            errors.push(`[E1] ${rel}: "use client" 파일에서 @zalkera/client 를 값으로 import 한다 (타입은 \`import type\` 으로).`);
+            servingSink().push(`[E1] ${rel}: "use client" 파일에서 @zalkera/client 를 값으로 import 한다 (타입은 \`import type\` 으로).`);
         }
         // E2: 서버 싱글턴(lib/zalkera) import(구 lib/oneque 도 잡는다).
         if (/from\s+["'][^"']*lib\/(?:zalkera|oneque)["']/.test(src)) {
-            errors.push(`[E2] ${rel}: "use client" 파일에서 서버 클라이언트 싱글턴(lib/zalkera)을 import 한다.`);
+            servingSink().push(`[E2] ${rel}: "use client" 파일에서 서버 클라이언트 싱글턴(lib/zalkera)을 import 한다.`);
         }
     }
 
@@ -919,7 +948,7 @@ function check(file) {
             if (allow) {
                 warnings.push(`[C1] ${detail} — 예외 허용(zalkera-allow-dynamic: ${allow[1].trim()}).`);
             } else {
-                errors.push(
+                servingSink().push(
                     `[C1] ${detail}. SEO 페이지는 ISR(export const revalidate = N) 또는 static 이어야 한다. ` +
                         `실시간·개인화 값은 클라이언트 컴포넌트(아일랜드)로, 상태 변경은 BFF route handler 로 옮겨라. ` +
                         `동적 SSR 이 꼭 필요하면 \`// zalkera-allow-dynamic: <이유>\` 마커로 정당화하라(memo31 §0-12).`,
@@ -1325,7 +1354,7 @@ function checkCrossOriginGuards() {
             if (h.body === null) {
                 // 재export·간접 참조는 본문을 못 따라간다. 추측으로 통과시키면 그 형태가 곧
                 // 우회로가 되므로, **핸들러를 이 파일에 직접 선언하라**고 요구한다.
-                errors.push(
+                servingSink().push(
                     `${where} 가 본문을 따라갈 수 없는 형태로 export 됩니다(재export·간접 참조·중괄호 없는` +
                         ` 화살표) — 가드 위치를 기계로 확인할 수 없습니다. 핸들러를 이 파일에 중괄호 본문으로` +
                         ` 직접 선언하세요(memo118 §4).`,
@@ -1333,7 +1362,7 @@ function checkCrossOriginGuards() {
                 continue;
             }
             const verdict = judgeGuardPlacement(h.body);
-            if (verdict) errors.push(`${where} ${verdict}`);
+            if (verdict) servingSink().push(`${where} ${verdict}`);
         }
     }
     if (exempted.length) {
@@ -1345,7 +1374,7 @@ function checkCrossOriginGuards() {
     for (const file of routes) {
         const code = readFileSync(file, "utf8");
         if (/Access-Control-Allow-Origin/i.test(code)) {
-            errors.push(
+            servingSink().push(
                 `[X2] ${relative(root, file)} 가 CORS 헤더를 답니다 — 읽기 GET 을 가드에서 빼는 근거가` +
                     ` "교차 오리진 JS 가 응답을 못 읽는다"인데, 그 전제가 무너집니다(memo118 §7-2).`,
             );
@@ -1389,7 +1418,7 @@ function checkCrossOriginGuards() {
     }
 
     if (usesStateCookie && !consumeDef) {
-        errors.push(
+        servingSink().push(
             `[X3] consumeOAuthState 를 부르는 곳은 있는데 **정의를 찾지 못했습니다** — state 쿠키 소각을` +
                 ` 기계로 확인할 수 없습니다. 정의를 \`src/**\` 안에 두세요(검사가 조용히 사라지지 않게).`,
         );
@@ -1411,7 +1440,7 @@ function checkCrossOriginGuards() {
             }
         }
         if (!/\.delete\s*\(/.test(fnBody)) {
-            errors.push(
+            servingSink().push(
                 `[X3] ${relative(root, consumeDef.file)} 의 consumeOAuthState 가 state 쿠키를 소각하지` +
                     ` 않습니다 — 대조 통과 여부와 무관하게 지워야 1회용이 됩니다. 남기면 유효기간 동안` +
                     ` 리플레이가 가능합니다(memo118 §2).`,
@@ -1422,7 +1451,7 @@ function checkCrossOriginGuards() {
         //    죽어 있었고(실측: `strict` 로 바꿔도 통과), memo118 §2 는 그 사이 "X3 가 막는다"고
         //    적어 뒀다. 값 검사는 원문, 코드 구조 검사는 stripped — 이 구분을 지켜라.
         if (/sameSite:\s*["']strict["']/i.test(consumeDef.raw)) {
-            errors.push(
+            servingSink().push(
                 `[X3] ${relative(root, consumeDef.file)} 가 쿠키를 sameSite: "strict" 로 답니다 —` +
                     ` authorize 리다이렉트로 **돌아올 때** 쿠키가 안 실려 정상 로그인이 깨집니다. 이 쿠키의` +
                     ` 방어력은 SameSite 가 아니라 httpOnly + 서버 대조에서 나옵니다.`,
