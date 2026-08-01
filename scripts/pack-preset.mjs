@@ -36,7 +36,7 @@
  */
 import {execFileSync} from "node:child_process";
 import {createHash} from "node:crypto";
-import {existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync} from "node:fs";
+import {existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync} from "node:fs";
 import {dirname, join, relative} from "node:path";
 import {fileURLToPath} from "node:url";
 import {createRequire} from "node:module";
@@ -750,9 +750,12 @@ function validateAssets(code, assets) {
  * 이미지 — 새 거처)** · 템플릿 자신의 `public/`. 새 거처를 빠뜨리면 라이선스 기록 없는 이미지가
  * 레포 상주로 나가는데, 그게 정확히 이 게이트가 막으려던 것이다.
  */
-function validateLicense(code, manifest, assets, presetPublicImages) {
+function validateLicense(code, manifest, assets, presetPublicImages, overlayImages = []) {
     const templateImages = listImages(join(ROOT, "public"));
-    for (const name of [...assets.map((a) => a.name), ...presetPublicImages, ...templateImages]) {
+    // ⚠ 오버레이 이미지도 센다(보안 심의 W1). 종전 대상은 `.zalkera/assets`·프리셋 `public/`·템플릿
+    //    `public/` 뿐이라, `presets/<code>/src/` 밑에 둔 이미지가 **기록 없이 zip 에 실렸다**(실측).
+    //    §7 게이트의 "기록 없는 이미지는 나갈 수 없다"가 오버레이에서 거짓이었다.
+    for (const name of [...assets.map((a) => a.name), ...presetPublicImages, ...templateImages, ...overlayImages]) {
         if (!manifest.includes(name)) fail("LICENSE", `${code}: ASSETS-LICENSE.md 에 없는 이미지 — ${name}`);
     }
 }
@@ -920,19 +923,72 @@ function validateSource(source) {
  * 자기 라우트를 못 만들어 같은 결함이 라우트 축에서 재발한다.
  */
 function presetSourceOverlay(code) {
+    const rel = `presets/${code}/src`;
     const dir = join(PRESETS_DIR, code, "src");
     if (!existsSync(dir)) return [];
+
+    // ── ⑴ **git 원장만 싣는다**(보안 심의 B1). `sourceEntries()` 가 `git ls-files` 를 쓰는 이유가
+    //    "목록이 사람 손을 안 탄다"인데, 오버레이가 `readdirSync` 로 걸으면 그 원장을 우회한다.
+    //    실측: `presets/<code>/src/.env.local` 은 `.gitignore` 에 걸려 **`git status` 가 깨끗한 채**
+    //    zip 에 실렸다(DIRTY_TREE 도 ignored 파일은 못 본다). 프리셋 zip 은 그 프리셋으로 개시하는
+    //    **전 테넌트**에 복제되므로 파급이 테넌트 수만큼이다.
+    const tracked = new Set(
+        execFileSync("git", ["ls-files", "-z", "--", rel], {cwd: ROOT, maxBuffer: 32 * 1024 * 1024})
+            .toString("utf8")
+            .split("\0")
+            .filter(Boolean),
+    );
+    if (tracked.size === 0) {
+        fail("OVERLAY_UNTRACKED", `${code}: ${rel} 에 git 추적 파일이 없습니다 — 커밋 후 팩하십시오`);
+        return [];
+    }
+
     const out = [];
-    const walk = (cur, base) => {
-        for (const e of readdirSync(cur, {withFileTypes: true}).sort((a, b) => (a.name < b.name ? -1 : 1))) {
-            const abs = join(cur, e.name);
-            if (e.isDirectory()) walk(abs, `${base}${e.name}/`);
-            else out.push({path: `src/${base}${e.name}`, bytes: readFileSync(abs)});
+    for (const path of [...tracked].sort()) {
+        const abs = join(ROOT, path);
+        // ── ⑵ **심링크 거부**(B2). `readFileSync` 는 대상 내용을 그대로 읽으므로, 레포 밖 파일이
+        //    `.tsx` 이름을 쓰고 zip 에 실릴 수 있다(이름 기반 시크릿 스캔도 못 잡는다). 실측 재현됨.
+        if (lstatSync(abs).isSymbolicLink()) {
+            fail("OVERLAY_SYMLINK", `${path}: 오버레이에 심링크를 둘 수 없습니다 — 대상 내용이 zip 에 실립니다`);
+            continue;
         }
-    };
-    walk(dir, "");
+        // ── ⑶ **중립 배선은 가릴 수 없다**(B3). 이 파일들은 능력 구성이 아니라 **플랫폼 계약**이다
+        //    (memo140 §3 표). 실측: `crossOrigin.ts` 를 `return true` 스텁으로 가려도 팩·validate·
+        //    verify-zip 이 전부 green 이었다 — X1 은 "호출했는가"만 보고 `npm test` 는 정본 src 만 본다.
+        //    그래서 여기가 그 자물쇠의 유일한 자리다.
+        const inner = path.slice(`presets/${code}/`.length);
+        if (PROTECTED_WIRING.some((g) => inner === g || inner.startsWith(g))) {
+            fail(
+                "OVERLAY_PROTECTED",
+                `${path}: 중립 배선은 오버레이로 가릴 수 없습니다(${inner}) — 능력 구성이 아니라 플랫폼 계약입니다. ` +
+                    "표현을 바꾸려면 그 파일이 아니라 화면 컴포넌트를 가리십시오.",
+            );
+            continue;
+        }
+        out.push({path: `src/${inner.slice("src/".length)}`, bytes: readFileSync(abs)});
+    }
     return out;
 }
+
+/**
+ * 오버레이로 **가릴 수 없는** 정본 파일(보안 심의 B3). memo140 §3 의 "중립 배선"을 기계화한 것이다 —
+ * 지우거나 갈아치우면 플랫폼 계약이 죽는데, 죽어도 어떤 검사기도 못 잡는 자리들이다.
+ *
+ * 능력 구성(커머스·예약·게시판)은 여기 없다 — 그것은 빼고 더하는 것이 자유다.
+ */
+const PROTECTED_WIRING = [
+    "src/lib/crossOrigin.ts", // memo118 교차사이트 위조 가드
+    "src/lib/safeUrl.ts", // 오픈 리다이렉트 소독
+    "src/lib/oauthState.ts", // OAuth state 대조(fail-closed)
+    "src/lib/env.ts",
+    "src/lib/buildEnv.ts",
+    "src/lib/theme.ts", // L1 테마 주입의 심장
+    "src/lib/zalkera.ts", // 클라이언트 싱글턴(baseUrl·시크릿 주입 지점)
+    "src/app/api/revalidate/", // ISR 무효화 — 시크릿 헤더 가드
+    "src/app/media/", // 미디어 프록시
+    "src/app/robots.ts",
+    "src/app/sitemap.ts",
+];
 
 /**
  * `llms.txt` 를 **설치본에서 바이트 그대로** 실어 zip 루트에 둔다(Fable 설계 2026-08-01).
@@ -1020,7 +1076,10 @@ function inspect(code, contract, icons, reserved) {
         seedResult?.handles ?? new Set(),
         seedResult?.categorySlugs ?? new Set(),
     );
-    validateLicense(code, manifest, assets, publicFiles.map((f) => f.name));
+    const overlayImages = presetSourceOverlay(code)
+        .map((o) => o.path.split("/").pop())
+        .filter((n) => /\.(png|jpe?g|webp|gif|svg|avif)$/i.test(n));
+    validateLicense(code, manifest, assets, publicFiles.map((f) => f.name), overlayImages);
     return {code, seedBytes, manifest, assets, publicFiles, content};
 }
 
@@ -1060,7 +1119,7 @@ function identifierOf(slug) {
     return slug.replace(/-/g, "_");
 }
 
-function write(inspected, version, source) {
+function write(inspected, version, source, manual) {
     const {code, seedBytes, manifest, assets, publicFiles, content} = inspected;
     const slugs = content.pages.map((p) => p.slug);
     // 오버레이가 같은 경로를 가지면 **팩 것이 이긴다** — 정본을 먼저 깔고 뒤에서 덮는다.
@@ -1075,7 +1134,7 @@ function write(inspected, version, source) {
     const entries = [
         ...source.filter((e) => !overlaid.has(e.path)),
         ...overlay,
-        ...[llmsManualEntry()].filter(Boolean),
+        manual,
         // ── 레포 상주(사이트의 얼굴) ────────────────────────────────────────
         {path: "content/index.ts", bytes: Buffer.from(contentManifest(slugs), "utf8")},
         {
@@ -1117,10 +1176,17 @@ console.log(`프리셋 팩 — version=${version}, 대상 ${targets.join(", ")}`
 const head = sourceProvenance();
 const source = sourceEntries();
 console.log(`  정본 소스 ${source.length}개 파일(git 추적 − 팩 도구·시드 원본) · HEAD ${head}`);
-validateSource(source);
+// ⚠ 오버레이도 같은 규칙에 넣는다(보안 심의 B4). 종전에는 `source` 만 받아, fail-open OAuth 콜백을
+// 오버레이로 넣으면 규칙이 멀쩡한데도 **대상이 안 들어가** 통과했다(실측 재현).
+validateSource([...source, ...targets.flatMap((code) => presetSourceOverlay(code))]);
 
 const contract = sectionContract();
 assertGuaranteesCarried();
+// ⚠ **게이트 이전에** 확인한다(기능 심의 차단 1). 초판은 존재 확인이 `write()` 안에 있었는데
+//    `problems` 게이트는 그 전에 소진되므로, `fail("LLMS_MISSING")` 이 push 돼도 **아무도 다시 보지
+//    않았다** — exit 0 · zip 산출 · 메시지조차 미출력(실측 재현). 이 파일이 스스로 경고하는 그
+//    "조용히 꺼지는 게이트"를 내가 만들었다. 게이트는 게이트가 소진되기 전에 서야 한다.
+const llmsManual = llmsManualEntry();
 const icons = iconKeys();
 const reserved = reservedSlugs();
 const inspected = targets.map((code) => inspect(code, contract, icons, reserved));
@@ -1131,7 +1197,7 @@ if (problems.length) {
     process.exit(1);
 }
 
-const packed = inspected.map((item) => write(item, version, source));
+const packed = inspected.map((item) => write(item, version, source, llmsManual));
 
 // 레지스트리는 DB(theme + theme_artifact)다. 종전의 backend `site.presets` yaml 은 memo105 T3 에서
 // 은퇴했는데 이 안내만 남아 있었다 — 운영자가 마지막으로 읽는 줄이라 틀린 채로 두면 그대로 따라 한다.
