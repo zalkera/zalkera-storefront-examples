@@ -1,48 +1,36 @@
-"use client";
-
 import Link from "next/link";
 import type {NavLink} from "@/lib/content";
-import {useAuthHint} from "@/lib/useAuthHint";
-import {LogoutButton} from "./LogoutButton";
 
 /**
- * 사이트 헤더 (클라이언트 컴포넌트). 헤더 내비는 `content/nav.json` 이고 layout 이 읽어 props 로 준다
- * (SDK 를 직접 안 부른다 — baseUrl 노출·ISR 강등 없음). 로그인 ↔ 마이페이지/로그아웃 토글을 **낙관적 힌트 쿠키**
- * (`useAuthHint`, 비-httpOnly `zalkera_authed`)로 클라이언트에서 판정한다.
+ * 이 사이트의 헤더 — **`skeleton` 의 것**(이 팩의 소스는 이 팩의 것이다 · 오너 확정 2026-08-01).
  *
- * 예전엔 async RSC 로 서버에서 `getAccessToken()`(=`cookies()`)을 읽었는데, 그러면 이 헤더가 실린
- * 루트 레이아웃이 전 라우트를 요청마다 동적 렌더로 강제해 SEO 페이지(홈·상세)가 정적/ISR 로 CDN
- * 캐시될 수 없었다(memo31 §0-1). 세션 판정을 클라이언트로 내려 페이지는 static/ISR 로 남는다.
- * (토큰 유효성까지는 확인하지 않는다 — 만료라면 마이페이지 진입 시 백엔드 401 로 로그인으로 보낸다.)
+ * 왜 커머스 표면이 없는가: 씨앗은 *"가장 단순한 시작점 — 필요한 것만 남긴 뼈대"* 다. 그런데 헤더가
+ * 장바구니·로그인을 기본으로 달고 있으면, 아무것도 안 만든 사람의 사이트가 **쇼핑몰인 척**한다.
+ * 눌러도 늘 비어 있는 장바구니는 사용자에게 참이 아니다(CONVENTIONS §13 · 빈 선반 금지).
+ * 카탈로그가 "필요한 것만 남긴 뼈대"라고 파는데 실물이 커머스 껍데기면 그 말 자체가 거짓이 된다.
+ *
+ * **커머스가 사라진 것이 아니라 헤더에서 내려온 것뿐이다.** `/cart`·`/login`·`/products` 라우트와
+ * SDK 배선은 그대로 있다 — 상점을 만들 사람은 이 파일에 링크 두 줄을 더하면 되고, 그편이 지운 것을
+ * 되살리는 것보다 훨씬 쉽다. 상점이 처음부터 필요하면 **열매**(`shop-goods`)가 있다.
+ *
+ * 헤더는 사이트가 소유하는 외양이라 **하드코딩이 정답인 자리다** — `commerce: false` 같은 선언으로
+ * 끄면 우리가 정한 유형 중에서 고르게 하는 것이라 자유가 아니라 메뉴가 된다(memo140 §1).
+ * 그래서 이 파일은 마음대로 고쳐도 된다. 드로어·스티키·메가메뉴 무엇이든 여기서 만든다.
+ * 클라이언트 훅을 안 쓰므로 `"use client"` 도 없다(정적/ISR 그대로).
  */
 export function SiteHeader({menus = []}: {menus?: NavLink[]}) {
-    const loggedIn = useAuthHint();
-
     return (
         <header className="flex items-center gap-4 border-b border-border pb-3 mb-8">
             <Link href="/" className="font-semibold no-underline">
                 홈
             </Link>
-            {/* content/nav.json 의 header 배열 — 배열 순서가 노출 순서다. 비면 종전과 동일한 헤더다.
-                href 는 loadNav 가 이미 safeLinkUrl 로 소독했다(소독 지점을 한 곳으로 모은다). */}
+            {/* content/nav.json 의 header 배열 — 배열 순서가 노출 순서다.
+                href 는 loadNav 가 이미 safeLinkUrl 로 소독했다. */}
             {menus.map((m, i) => (
                 <Link key={i} href={m.href}>
                     {m.label}
                 </Link>
             ))}
-            <Link href="/cart">장바구니</Link>
-            {loggedIn ? (
-                <>
-                    <Link href="/mypage" className="ms-auto">
-                        마이페이지
-                    </Link>
-                    <LogoutButton />
-                </>
-            ) : (
-                <Link href="/login" className="ms-auto">
-                    로그인
-                </Link>
-            )}
         </header>
     );
 }

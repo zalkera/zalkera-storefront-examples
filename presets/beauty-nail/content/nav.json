@@ -1,21 +1,17 @@
 {
-  "header": [
-    {
-      "label": "홈",
-      "href": "/"
-    },
-    {
-      "label": "시술 메뉴",
-      "href": "/products"
-    },
-    {
-      "label": "매장 소개",
-      "href": "/about"
-    },
-    {
-      "label": "예약 안내",
-      "href": "/visit"
-    }
-  ],
-  "footer": []
+    "header": [
+        {
+            "label": "시술 메뉴",
+            "href": "/products"
+        },
+        {
+            "label": "매장 소개",
+            "href": "/about"
+        },
+        {
+            "label": "예약 안내",
+            "href": "/visit"
+        }
+    ],
+    "footer": []
 }
