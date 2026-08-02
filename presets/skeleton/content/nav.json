@@ -1,13 +1,4 @@
 {
-    "header": [
-        {
-            "label": "홈",
-            "href": "/"
-        },
-        {
-            "label": "전체 상품",
-            "href": "/products"
-        }
-    ],
+    "header": [],
     "footer": []
 }
