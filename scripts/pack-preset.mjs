@@ -67,6 +67,16 @@
  *   node scripts/pack-preset.mjs --version 1.1.0
  *   node scripts/pack-preset.mjs --no-verify        # 산출물 검수 생략(권장하지 않음)
  *
+ * ── 팩 신원 (memo150 §8.1) — **버전은 파일이 말한다** ──────────────────────────
+ * zip 마다 `.zalkera/pack.json`(`{rev, code, version}`)을 싣는다. 종전에는 팩 버전이 사는 곳이
+ * **파일명뿐**이라, 적재 폼에 사람이 버전을 쳤고 그 거짓이 INSERT 전용 원장과 S3 키에 영구히 박혔다.
+ * 이제 신원이 바이트 안에 있으므로 서버가 스스로 읽고(백엔드 `PackManifestReader`), 폼 입력이 사라져
+ * **틀릴 자리가 없다.** 덤으로 **다른 버전 = 반드시 다른 바이트**가 구조적 참이 된다 — 종전에는 같은
+ * 소스를 3.0.4·3.0.5 로 팩하면 바이트가 동일했다(원장의 1:1 이 반쪽이었다는 뜻이다).
+ *
+ * 매니페스트에 **sha·타임스탬프·git head 는 넣지 않는다**(memo150 §3.1): 자기 해시는 순환이고, 시각·head 는
+ * 결정론을 깨서 *"내용이 같은데 바이트가 달라 같은 버전이 거부되는"* 반대편 결함을 만든다.
+ *
  * 출력: dist-presets/{code}-{version}.zip + sha256(적재 API 의 `expectedSha256` 로 그대로 보낸다).
  * zip 은 결정론적이다(고정 타임스탬프·경로 정렬) — 같은 입력이면 같은 sha 가 나온다.
  */
@@ -138,6 +148,31 @@ const SOURCE_EXCLUDES = [
  * 여기 상수로 두는 이유: 고객에게 나가는 package.json 에 우리 배포 메타를 심지 않기 위해서다.
  */
 const DEFAULT_VERSION = "1.0.0";
+
+/**
+ * 팩 신원 매니페스트 계약(memo150 §3.1) — **백엔드 `PackManifestReader` 의 거울**이다.
+ *
+ * 이 상수들이 백엔드와 갈리면 팩은 성공하는데 적재가 400 으로 죽는다(`SiteTypeDetector.LOCKFILES` 거울과
+ * 같은 종류의 자리). 계약 확장은 **rev 상향으로만** — 서버가 strict 파싱이라 키를 하나 더 넣는 순간
+ * 배포된 백엔드가 그 zip 을 통째로 거부한다.
+ */
+const MANIFEST_PATH = ".zalkera/pack.json";
+const MANIFEST_REV = 1;
+/** `theme_code varchar(40)` 합치. */
+const CODE_REGEX = /^[a-z0-9][a-z0-9-]{0,39}$/;
+/** semver **core** 만 — 프리릴리스·빌드 메타는 rev 2 후보다. */
+const VERSION_REGEX = /^[0-9]+\.[0-9]+\.[0-9]+$/;
+
+/**
+ * 매니페스트 바이트. **키 순서·들여쓰기·개행이 고정**이라 같은 (code, version) 이면 같은 바이트다 —
+ * 결정론이 이 파일의 계약이므로 `JSON.stringify(obj)` 의 키 순서에 기대지 않고 직접 쓴다.
+ */
+function packManifestBytes(code, version) {
+    return Buffer.from(
+        `{\n    "rev": ${MANIFEST_REV},\n    "code": ${JSON.stringify(code)},\n    "version": ${JSON.stringify(version)}\n}\n`,
+        "utf8",
+    );
+}
 
 const problems = [];
 const fail = (code, message) => problems.push(`[${code}] ${message}`);
@@ -1023,6 +1058,8 @@ function write(inspected, version, source, manual) {
         },
         ...content.pages.map((p) => ({path: `content/pages/${p.slug}.json`, bytes: p.bytes})),
         ...publicFiles.map((f) => ({path: `public${f.route}`, bytes: f.bytes})),
+        // ── 신원(팩이 자기 이름·버전을 말한다 · memo150 §8.1) ──────────────
+        {path: MANIFEST_PATH, bytes: packManifestBytes(code, version)},
         // ── 전송(업무 데이터) ──────────────────────────────────────────────
         {path: ".zalkera/seed.json", bytes: seedBytes},
         {path: ".zalkera/ASSETS-LICENSE.md", bytes: Buffer.from(manifest, "utf8")},
@@ -1051,6 +1088,22 @@ const targets = codes.length
           .filter((e) => e.isDirectory())
           .map((e) => e.name)
           .sort();
+
+// **버전·코드는 팩 시작 전에 잰다**(memo150 §3.1). 종전에는 `--version` 이 무엇이든 파일명에만 찍혀서
+// `--version 3.0.6-rc1` 같은 값이 그대로 zip 이름이 됐고, 그 오류가 적재 순간에야 드러났다. 이제 그 값은
+// **바이트 안으로 들어가므로** 여기서 틀리면 그 zip 은 어차피 서버가 거부한다 — 몇 분짜리 게이트·빌드를
+// 돌리기 전에 말하는 것이 맞다.
+if (!VERSION_REGEX.test(version)) {
+    console.error(`--version "${version}" 은 semver core(x.y.z)가 아닙니다 — 팩 매니페스트·원장이 받지 않는 형식입니다.`);
+    console.error("  프리릴리스 태그(-rc1·+build)는 지금 계약(rev 1)에서 안 받습니다.");
+    process.exit(1);
+}
+for (const code of targets) {
+    if (!CODE_REGEX.test(code)) {
+        console.error(`프리셋 디렉터리 이름 "${code}" 은 팩 코드 형식(${CODE_REGEX.source})이 아닙니다 — 이 이름은 매니페스트·테마 코드로 그대로 갑니다.`);
+        process.exit(1);
+    }
+}
 
 console.log(`프리셋 팩 — version=${version}, 대상 ${targets.join(", ")}`);
 const head = sourceProvenance();
@@ -1107,7 +1160,10 @@ if (!process.argv.includes("--no-verify")) {
     const rejected = [];
     for (const p of packed) {
         console.log(`\n── verify-zip ${relative(ROOT, p.path)} ${"─".repeat(20)}`);
-        const r = spawnSync(process.execPath, [join(ROOT, "scripts/verify-zip.mjs"), p.path], {stdio: "inherit"});
+        // `--pack` — **카탈로그에 올릴 우리 산출물**이라는 선언(memo150 §8.2). 그 모드에서만 매니페스트가
+        // 필수가 되고 파일명 대조가 선다. 외주 납품 zip 은 매니페스트 의무가 없으므로(§8.4) 플래그 없이
+        // 부르는 쪽은 종전과 같다 — 이 러너는 카탈로그 입장권이 아니라 납품 검수기다.
+        const r = spawnSync(process.execPath, [join(ROOT, "scripts/verify-zip.mjs"), p.path, "--pack"], {stdio: "inherit"});
         if (r.status !== 0) rejected.push(p);
     }
     if (rejected.length) {
@@ -1120,12 +1176,14 @@ if (!process.argv.includes("--no-verify")) {
 
 // 레지스트리는 DB(theme + theme_artifact)다. 종전의 backend `site.presets` yaml 은 memo105 T3 에서
 // 은퇴했는데 이 안내만 남아 있었다 — 운영자가 마지막으로 읽는 줄이라 틀린 채로 두면 그대로 따라 한다.
-console.log("\n적재(업로드) — 본사 SUPER_ADMIN 권한:");
+// ⚠ `-F "version=…"` 은 **일부러 없다**(memo150 §8.1). 버전의 정본은 zip 안 `.zalkera/pack.json` 이고,
+//    서버는 폼 version 이 함께 오면 매니페스트와 대조해 다르면 거부한다. 안내에 남겨 두면 운영자가
+//    "버전은 손으로 내는 것"이라는 틀린 심상을 계속 갖게 되는데, 그 심상이 이 트랜치가 죽인 결함군이다.
+console.log("\n적재(업로드) — 본사 SUPER_ADMIN 권한(버전은 zip 안 .zalkera/pack.json 이 말합니다):");
 for (const p of packed) {
     console.log(
         `  curl -X POST "$API/api/system/themes/${p.code}/artifacts" \\\n` +
             `    -H "Authorization: Bearer $TOKEN" \\\n` +
-            `    -F "version=${p.version}" \\\n` +
             `    -F "file=@${relative(ROOT, p.path)}" \\\n` +
             // 썸네일은 선택이다 — 이미지 0장인 프리셋(골격)에는 파일이 없고, 있는 줄 알고 복붙하면
             // curl 이 파일을 못 읽어 통째로 실패한다(심의 실측). 있는 것만 안내한다.
