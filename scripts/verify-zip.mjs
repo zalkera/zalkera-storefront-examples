@@ -35,14 +35,22 @@
  * lockfile 축도 같은 원리다 — 서빙 박스는 `npm ci` 뿐이라 yarn·pnpm lock 을 소비하지 못한다.
  * 넓게 받으면 "검사기는 통과했는데 업로드가 거절"이 만들어진다(백엔드 `SiteTypeDetector.LOCKFILES` 거울).
  *
+ * ── `--pack` — 카탈로그 팩 모드(memo150 §8.2) ────────────────────────────────────
+ * 기본은 **납품 검수기**다: 외주 zip 은 테넌트 사이트로 가므로 팩 신원 매니페스트(`.zalkera/pack.json`)를
+ * 낼 의무가 없고(memo150 §8.4 비목표 — 고객 소스에 우리 형식을 강제하지 않는다), 카탈로그 입장 판정은
+ * 서버가 한다. `--pack` 은 **이 zip 이 본사 카탈로그에 올라간다**는 선언이고, 그때만 매니페스트가 필수가
+ * 되며 파일명(`{code}-{version}.zip`)과 대조한다. `pack-preset.mjs` 는 자기 산출물을 이 모드로 잰다.
+ *
+ * 매니페스트가 **있으면** 모드와 무관하게 형상을 본다 — 있는데 틀린 것은 어느 경로에서든 결함이다.
+ *
  * 사용:
- *   node scripts/verify-zip.mjs <납품.zip> [--keep]
+ *   node scripts/verify-zip.mjs <납품.zip> [--keep] [--pack]
  *
  * 종료코드: 0=통과 · 1=반려(검사 실패) · 2=실행 불가(인자·환경 문제)
  */
 import {spawnSync} from "node:child_process";
-import {existsSync, mkdtempSync, readFileSync, readdirSync, rmSync} from "node:fs";
-import {join, resolve} from "node:path";
+import {existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync} from "node:fs";
+import {basename, join, resolve} from "node:path";
 import {tmpdir} from "node:os";
 import {fileURLToPath} from "node:url";
 
@@ -52,9 +60,11 @@ const VALIDATOR = join(HERE, "validate-storefront.mjs");
 const args = process.argv.slice(2);
 const zipPath = args.find((a) => !a.startsWith("--"));
 const keep = args.includes("--keep");
+/** 이 zip 이 본사 카탈로그(theme_artifact)에 올라간다는 선언 — 머리말 `--pack` 참조. */
+const packMode = args.includes("--pack");
 
 if (!zipPath) {
-    console.error("사용: node scripts/verify-zip.mjs <납품.zip> [--keep]");
+    console.error("사용: node scripts/verify-zip.mjs <납품.zip> [--keep] [--pack]");
     process.exit(2);
 }
 if (!existsSync(zipPath)) {
@@ -132,6 +142,84 @@ function effectiveRoot(dir) {
     return cur;
 }
 
+/**
+ * 팩 신원 매니페스트 계약(memo150 §3.1) — **백엔드 `PackManifestReader` 의 거울**이다.
+ *
+ * 여기 규칙이 서버와 갈리면 이 러너가 ✅ 를 준 zip 이 적재에서 400 으로 죽는다(`SiteTypeDetector.LOCKFILES`
+ * 거울과 같은 자리). 그래서 서버가 거부하는 것을 **여기서 같은 사유로** 먼저 말한다 — 판정의 정본은 서버이고
+ * 이것은 싼 조기 경보다.
+ *
+ * ⚠ **이 파일은 외주에게 단일 파일로 건네지므로**(`backend/doc/vendor/verify-zip.mjs` 바이트 사본) 공용
+ *   모듈을 import 하지 않는다. 사본이 아니라 거울인 이유를 주석이 지고, 갈림은 서버 400 이 잡는다.
+ */
+const PACK_MANIFEST_PATH = ".zalkera/pack.json";
+const PACK_MANIFEST_REV = 1;
+const PACK_MANIFEST_MAX_BYTES = 4 * 1024;
+const PACK_CODE_REGEX = /^[a-z0-9][a-z0-9-]{0,39}$/;
+const PACK_VERSION_REGEX = /^[0-9]+\.[0-9]+\.[0-9]+$/;
+const PACK_VERSION_MAX_LENGTH = 40;
+
+/**
+ * `.zalkera/pack.json` 판독. 던지지 않고 판정 재료만 돌려준다(백엔드 판독기와 같은 규율):
+ * `{state: "absent"}` · `{state: "ok", manifest}` · `{state: "invalid", reason}`.
+ *
+ * **부재와 위반을 가르는 것이 요점**이다 — 조치가 다르다(팩 도구로 다시 팩 / 매니페스트 수리).
+ */
+function readPackManifest(root) {
+    const file = join(root, PACK_MANIFEST_PATH);
+    if (!existsSync(file) || !statSync(file).isFile()) return {state: "absent"};
+
+    // 캡은 **파싱 전에** 잰다 — 매니페스트는 신원 선언이지 데이터 운반체가 아니다.
+    const bytes = readFileSync(file);
+    if (bytes.length > PACK_MANIFEST_MAX_BYTES) {
+        return {state: "invalid", reason: `크기 초과 — ${bytes.length}B > ${PACK_MANIFEST_MAX_BYTES}B`};
+    }
+    let raw;
+    try {
+        raw = JSON.parse(bytes.toString("utf8"));
+    } catch (e) {
+        return {state: "invalid", reason: `JSON 파싱 실패 — ${e.message}`};
+    }
+    if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+        return {state: "invalid", reason: "최상위가 객체여야 합니다"};
+    }
+    // **strict** — 서버가 미지 키로 거부한다. 오타 키(`verison`)를 조용히 무시하면 그 파일은 "필수 키 부재"로
+    // 미끄러지고, 사람은 무엇을 고쳐야 하는지 모른 채 400 을 본다.
+    const unknown = Object.keys(raw).filter((k) => !["rev", "code", "version"].includes(k));
+    if (unknown.length) {
+        return {state: "invalid", reason: `미지 키 ${unknown.join(", ")} — 이 계약(rev ${PACK_MANIFEST_REV})의 키는 rev·code·version 뿐입니다`};
+    }
+    // rev 를 **가장 먼저** 본다 — 모르는 계약으로 쓰인 파일을 우리 rev 1 의 잣대로 재는 것 자체가 틀린 판정이다.
+    if (raw.rev === undefined) return {state: "invalid", reason: "rev 없음(필수)"};
+    if (!Number.isInteger(raw.rev)) return {state: "invalid", reason: `rev 는 정수여야 합니다 — ${JSON.stringify(raw.rev)}`};
+    if (raw.rev !== PACK_MANIFEST_REV) {
+        return {state: "invalid", reason: `모르는 rev ${raw.rev} — 이 도구가 아는 계약은 rev ${PACK_MANIFEST_REV} 뿐입니다(fail-closed)`};
+    }
+    if (typeof raw.code !== "string") return {state: "invalid", reason: "code 없음(필수·문자열)"};
+    if (!PACK_CODE_REGEX.test(raw.code)) {
+        return {state: "invalid", reason: `code 형식 — "${raw.code}" 는 ${PACK_CODE_REGEX.source} 에 맞지 않습니다`};
+    }
+    if (typeof raw.version !== "string") return {state: "invalid", reason: "version 없음(필수·문자열)"};
+    if (!PACK_VERSION_REGEX.test(raw.version)) {
+        return {state: "invalid", reason: `version 형식 — "${raw.version}" 은 semver core(x.y.z)가 아닙니다`};
+    }
+    if (raw.version.length > PACK_VERSION_MAX_LENGTH) {
+        return {state: "invalid", reason: `version 길이 — ${raw.version.length}자 > ${PACK_VERSION_MAX_LENGTH}자`};
+    }
+    return {state: "ok", manifest: {rev: raw.rev, code: raw.code, version: raw.version}};
+}
+
+/**
+ * 파일명에서 신원을 읽는다(`{code}-{version}.zip`). **매니페스트와 대조할 두 번째 진술**이라 의미가 있다 —
+ * 둘이 갈리면 그 zip 은 이름과 내용이 다른 물건이고, 사람은 이름을 보고 올린다(S3 키·원장은 내용을 따른다).
+ * 코드에 하이픈이 있으므로(`beauty-nail`) 뒤에서부터 잘라야 옳게 갈린다.
+ */
+function identityFromFilename(path) {
+    const m = /^(.+)-([0-9]+\.[0-9]+\.[0-9]+)\.zip$/.exec(basename(path));
+    if (!m || !PACK_CODE_REGEX.test(m[1])) return null;
+    return {code: m[1], version: m[2]};
+}
+
 const work = mkdtempSync(join(tmpdir(), "zalkera-verify-"));
 let failed = false;
 
@@ -183,6 +271,57 @@ try {
             record("에셋 라이선스 매니페스트", true, "동봉 이미지 없음 — 해당 없음");
         } else if (!record("에셋 라이선스 매니페스트", existsSync(manifest), existsSync(manifest) ? `이미지 ${images}개 — 내용 대조는 사람이` : `이미지 ${images}개인데 .zalkera/ASSETS-LICENSE.md 가 없습니다`)) {
             failed = true;
+        }
+
+        // ⑨ 팩 신원 매니페스트(memo150 §3·§8.2). **번호는 도입 순서이고 실행 순서가 아니다**(⑦⑧이 ⑥ 안에
+        //    있는 것과 같다) — 신원은 싸게 읽히므로 몇 분짜리 설치·빌드 앞에 둔다.
+        //
+        //    두 모드가 재는 것이 다르다:
+        //     · 기본(납품 검수) — 매니페스트는 **의무가 아니다**. 외주 zip 은 테넌트 사이트로 가고 카탈로그
+        //       입장 판정은 서버가 한다(§8.4 — 고객 소스에 우리 형식을 강제하지 않는다). 다만 **있으면**
+        //       형상이 옳아야 한다: 있는데 틀린 것은 어느 경로에서든 결함이다.
+        //     · `--pack`(카탈로그 팩) — **없으면 반려**. 서버가 어차피 `THEME_PACK_MANIFEST_MISSING` 으로
+        //       거부하므로 여기서 잡는 것이 싸고, `pack-preset` 이 자기 산출물을 이 모드로 재므로 팩 도구
+        //       자신의 매니페스트 회귀가 우리 터미널에서 잡힌다.
+        const packRead = readPackManifest(root);
+        const fromName = identityFromFilename(zipPath);
+        if (packRead.state === "invalid") {
+            record("팩 신원(.zalkera/pack.json)", false, `${packRead.reason}\n   → 서버도 같은 사유로 적재를 거부합니다(memo150 §3.1 · rev·code·version 세 키뿐).`);
+            failed = true;
+        } else if (packRead.state === "absent") {
+            if (packMode) {
+                record(
+                    "팩 신원(.zalkera/pack.json)",
+                    false,
+                    "카탈로그 팩에는 필수입니다 — 서버가 THEME_PACK_MANIFEST_MISSING 으로 거부합니다.\n" +
+                        '   → 형식: {"rev": 1, "code": "<팩코드>", "version": "<x.y.z>"} (팩 도구가 자동으로 씁니다)',
+                );
+                failed = true;
+            } else {
+                record("팩 신원(.zalkera/pack.json)", true, "없음 — 납품 zip 은 의무가 아닙니다(카탈로그 팩만 필수)");
+            }
+        } else {
+            const {code, version} = packRead.manifest;
+            // 파일명 대조. 매니페스트가 있는데 이름이 그 형식이 아니면 **팩 모드에서만** 반려한다 —
+            // 외주가 자기 관례로 이름을 붙이는 것은 자유이고, 그 zip 의 신원 판정은 서버가 내용으로 한다.
+            if (!fromName) {
+                if (packMode) {
+                    record("팩 신원(.zalkera/pack.json)", false, `${code}@${version} 인데 파일명이 {code}-{version}.zip 형식이 아닙니다 — ${basename(zipPath)}`);
+                    failed = true;
+                } else {
+                    record("팩 신원(.zalkera/pack.json)", true, `${code}@${version} (rev ${packRead.manifest.rev}) · 파일명 대조 생략`);
+                }
+            } else if (fromName.code !== code || fromName.version !== version) {
+                record(
+                    "팩 신원(.zalkera/pack.json)",
+                    false,
+                    `이름과 내용이 다릅니다 — 파일명은 ${fromName.code}@${fromName.version} 인데 매니페스트는 ${code}@${version} 입니다.\n` +
+                        "   → 원장·S3 키는 **내용**을 따르고 사람은 **이름**을 보고 올립니다. 이름을 고치거나 다시 팩하십시오.",
+                );
+                failed = true;
+            } else {
+                record("팩 신원(.zalkera/pack.json)", true, `${code}@${version} (rev ${packRead.manifest.rev}) · 파일명 일치`);
+            }
         }
 
         // ⑤ 규약 검사 — **정본 참조 실행**(사본 0).

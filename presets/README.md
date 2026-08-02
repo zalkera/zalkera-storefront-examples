@@ -166,6 +166,7 @@ presets/<code>/
   assets/*.png           # 선택 — 전송 이미지 풀. **현행 팩은 전부 없음**(소비자가 사라졌습니다)
   ASSETS-LICENSE.md      # **필수** — 파일별 출처·라이선스.           → zip 의 .zalkera/ASSETS-LICENSE.md
   thumbnail.png          # 선택 — 콘솔 카드 썸네일. **zip 밖**(고객 소스가 아니라 우리 카탈로그 자산)
+                         # (팩이 생성) `{rev, code, version}`         → zip 의 .zalkera/pack.json
 ```
 
 `presets/` 자체는 zip 에 **안 들어갑니다**(팩 입력이지 고객 소스가 아님). 정본 `content/`(빈 매니페스트)도
@@ -175,6 +176,38 @@ zip 에서 빠지고 **프리셋 것이 대신 실립니다** — 아니면 두 
 
 zip 루트에는 `llms.txt` 도 실립니다 — 설치된 `@zalkera/client` 의 것을 **바이트 그대로** 복사합니다
 (레포에 사본을 두면 두 번째 정본이 되어 드리프트합니다). 그래서 `npm ci` 가 팩의 선행 조건입니다.
+
+### 팩 신원 — `.zalkera/pack.json` (memo150)
+
+팩은 **자기 이름과 버전을 파일 안에 적습니다**. 프리셋 디렉터리에 두지 않고 팩이 생성합니다(`code` =
+디렉터리 이름 · `version` = `--version`):
+
+```json
+{
+    "rev": 1,
+    "code": "skeleton",
+    "version": "3.0.6"
+}
+```
+
+**왜**: 종전에 팩 버전이 사는 곳은 **파일명뿐**이라, 적재 폼에 사람이 버전을 쳤고 그 거짓이 INSERT 전용
+원장과 S3 키에 영구히 박혔습니다. 엇갈린 팩(beauty-nail zip 을 skeleton 에 적재)도 대조할 원본이 없어
+200 으로 들어갔습니다. 이제 신원이 바이트 안에 있어 **서버가 스스로 읽고**(백엔드 `PackManifestReader`),
+폼 입력이 사라져 **틀릴 자리가 없습니다.** 덤으로 **다른 버전 = 반드시 다른 바이트**가 됩니다 — 종전에는
+같은 소스를 `--version 3.0.4` 와 `3.0.5` 로 팩하면 sha 가 **같았습니다**(원장의 1:1 이 반쪽이었다는 뜻입니다).
+
+계약은 **strict** 입니다(서버와 갈리면 안 되는 축):
+
+- 키는 `rev`·`code`·`version` **셋뿐** — 하나라도 더 넣으면 서버가 zip 을 통째로 거부합니다. 키 추가는
+  **rev 상향과 동행**합니다.
+- `rev` 정수 `1` · `code` `^[a-z0-9][a-z0-9-]{0,39}$` · `version` semver core(`x.y.z` — 프리릴리스 불가) ·
+  파일 4KB 이하.
+- **sha·팩 시각·git head 는 넣지 않습니다.** 자기 해시는 순환이고, 시각·head 는 결정론을 깨서 *"내용이
+  같은데 바이트가 달라 같은 버전이 거부되는"* 반대편 결함을 만듭니다. 출처(HEAD)는 팩 터미널 출력과
+  git 원장이 담당합니다.
+
+`--version` 이 semver core 가 아니면 **팩이 시작조차 하지 않습니다**(그 값은 이제 바이트로 들어가므로
+어차피 서버가 거부합니다 — 몇 분짜리 게이트·빌드 앞에서 말하는 것이 맞습니다).
 
 ### 팩 소스 (`presets/<code>/src/**`)
 
@@ -227,7 +260,7 @@ node scripts/pack-preset.mjs --version 2.8.0  # 게이트 통과 시 dist-preset
 
 `--version` 을 빼면 `1.0.0` 으로 찍힙니다 — **적재용으로 팩할 때는 반드시 주십시오.** 특정 테마만 팩하려면
 `node scripts/pack-preset.mjs shop-goods` 처럼 code 를 붙입니다. zip 은 결정론적입니다(고정 타임스탬프·
-경로 정렬) — 같은 입력이면 같은 sha 가 나옵니다.
+경로 정렬) — 같은 입력·같은 버전이면 같은 sha 가 나옵니다. **버전이 다르면 sha 도 다릅니다**(위 "팩 신원").
 
 게이트가 하나라도 걸리면 **zip 을 하나도 쓰지 않습니다**(부분 산출물 금지). 계약을 못 읽으면 건너뛰지 않고
 실패합니다 — 조용히 꺼지는 게이트는 게이트가 아닙니다.
@@ -245,8 +278,14 @@ node scripts/pack-preset.mjs --version 2.8.0  # 게이트 통과 시 dist-preset
 팩한 zip 이 **받아도 되는 물건인지**는 별도 러너가 봅니다(외주 zip 에도 같은 것을 씁니다):
 
 ```bash
-node scripts/verify-zip.mjs dist-presets/shop-goods-2.8.0.zip
+node scripts/verify-zip.mjs dist-presets/shop-goods-2.8.0.zip          # 납품 검수(기본)
+node scripts/verify-zip.mjs dist-presets/shop-goods-2.8.0.zip --pack   # 카탈로그 팩 — 팩이 자동으로 붙입니다
 ```
+
+`--pack` 은 **이 zip 이 본사 카탈로그에 올라간다**는 선언입니다. 그때만 `.zalkera/pack.json` 이 **필수**가
+되고 파일명(`{code}-{version}.zip`)과 대조합니다. 외주 납품 zip 은 테넌트 사이트로 가므로 매니페스트
+의무가 없고(고객 소스에 우리 형식을 강제하지 않습니다), 카탈로그 입장 판정은 서버가 합니다. 다만
+**있으면** 모드와 무관하게 형상을 봅니다 — 있는데 틀린 것은 어느 경로에서든 결함입니다.
 
 시크릿 스캔 · 소스 규약 검사(`zalkera-validate`) · `npm ci --ignore-scripts` · `npm run build` · **서빙 산출물
 (`.next/standalone/server.js`) 실물 확인**까지 돌립니다. 설치 플래그가 샌드박스 `build.sh` 와 같은 이유는
@@ -295,6 +334,7 @@ node scripts/verify-zip.mjs dist-presets/shop-goods-2.8.0.zip
 | 커밋 | 워킹 트리에 미커밋 변경이 있으면 **실패**(`--allow-dirty` 로만 우회). zip 이 어느 커밋의 산출물인지 말할 수 없게 되기 때문입니다 |
 | OAuth | 소셜 콜백의 state 대조가 fail-open(`if (saved && …)`)이면 **실패**. 검사가 있는 것처럼 보이지만 사실상 없는 형태입니다 |
 | llms.txt | 설치된 `@zalkera/client` 가 `llms.txt` 를 안 나르면 **팩 실패** — 그 버전으로는 명세 없는 zip 이 나갑니다 |
+| 팩 신원 | `--version` 이 semver core 가 아니거나 프리셋 디렉터리 이름이 코드 형식이 아니면 **팩 시작 전에 실패**. 산출 직후 `verify-zip --pack` 이 zip 안 `.zalkera/pack.json` 을 다시 읽어 형상·파일명 대조까지 봅니다(팩 도구 자신의 회귀를 우리 터미널에서 잡는 자리) |
 
 캡 숫자 중 `seedJsonBytes`·`assets`·`assetTotalBytes`·`assetFileBytes` 는 백엔드
 `SiteSeedCaps` 와 **같은 값**이어야 합니다(상품·갈래 캡은 축이 사라져 양쪽에서 함께 은퇴했습니다). 갈라지면 팩은 통과하는데 개시가 중단되는, 가장 늦게 발견되는
@@ -318,9 +358,9 @@ zip 은 커밋하지 않습니다(`dist-presets/` 는 gitignore). 정본 기록�
 
 ```bash
 # ① 업로드 — 본사(SUPER_ADMIN) 권한. zip·썸네일·기대 sha256 을 한 번에 보낸다.
+#    **버전 필드가 없습니다** — 버전은 zip 안 .zalkera/pack.json 이 말합니다(memo150).
 curl -X POST "$API/api/system/themes/beauty-nail/artifacts" \
   -H "Authorization: Bearer $TOKEN" \
-  -F "version=2.8.0" \
   -F "file=@dist-presets/beauty-nail-2.8.0.zip" \
   -F "thumbnail=@presets/beauty-nail/thumbnail.png" \
   -F "expectedSha256=<팩 출력값>"
@@ -332,6 +372,11 @@ curl -X POST "$API/api/system/themes/beauty-nail/artifacts/2.8.0/promote" \
 
 `thumbnail` 은 그 테마에 `thumbnail.png` 가 있을 때만 붙습니다(`skeleton` 은 없어서 팩이 그 줄을 빼고
 찍습니다).
+
+`version` 을 폼으로 **보낼 수는 있지만**(이행기 하위호환) 매니페스트와 다르면 적재가 거부됩니다
+(`THEME_PACK_VERSION_INPUT_MISMATCH`) — 조용한 덮어쓰기는 오퍼레이터의 틀린 심상을 숨깁니다.
+매니페스트가 아예 없는 zip 은 `THEME_PACK_MANIFEST_MISSING` 으로 거부됩니다(3.0.5 이전 팩이 그렇습니다 —
+그 버전들은 이미 원장에 있어 재적재할 실익이 없습니다).
 
 `expectedSha256` 은 백엔드가 받은 바이트로 다시 계산해 대조합니다 — 안 맞으면 적재가 거부됩니다
 (오적재·전송 손상 fail-closed). 넣지 않아도 적재는 되지만, **넣으십시오**: 팩이 출력한 값과 서버가 저장한
