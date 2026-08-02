@@ -14,7 +14,7 @@ import {nav, pages} from "../../content";
  * 사이트 전체가 500 이 나면 "말로 고친다"가 성립하지 않는다.
  */
 
-/** 콘텐츠 파일의 섹션 1건. `config` 는 **객체**다(DB 방언의 JSON 문자열이 아니다). */
+/** 콘텐츠 파일의 섹션 1건. `config` 는 **객체**다(문자열로 감싸지 않는다). */
 export interface ContentSection {
     type: string;
     config: unknown;
@@ -97,8 +97,8 @@ function normalizeNav(value: unknown): NavLink[] {
 
 /**
  * `content/nav.json`. 파일이 없거나 비어도 정상이다 — 내비가 비는 것이지 오류가 아니다.
- * 헤더·푸터를 따로 두는 이유는 위치가 곧 다른 목록이기 때문이고, DB 메뉴의 `position` 축을
- * 파일 두 키로 옮긴 것이 전부다.
+ * 헤더·푸터를 따로 두는 이유는 위치가 곧 다른 목록이기 때문이다 — 한 배열에 `position` 을 섞어
+ * 적고 렌더가 걸러내는 형상보다, 파일이 두 키를 갖는 편이 읽고 고치기 쉽다.
  */
 export function loadNav(): {header: NavLink[]; footer: NavLink[]} {
     const raw: unknown = nav;
