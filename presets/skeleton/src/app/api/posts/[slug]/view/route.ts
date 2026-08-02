@@ -2,6 +2,7 @@ import {NextResponse} from "next/server";
 import {zalkera} from "@/lib/zalkera";
 import {assertSameOrigin, errorResponse} from "@/lib/http";
 import {isPreview} from "@/lib/preview";
+import {visitorIp} from "@zalkera/client";
 
 /**
  * 조회수 비콘 BFF — **공개(인증 없음)**. 브라우저 아일랜드(ViewBeacon)가 이걸 친다.
@@ -17,7 +18,7 @@ export async function POST(req: Request, {params}: {params: Promise<{slug: strin
         return NextResponse.json({counted: false}, {status: 403});
     }
     const {slug} = await params;
-    const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+    const ip = visitorIp(req.headers);
     try {
         const counted = await zalkera.recordPostView(slug, {clientIp: ip});
         return NextResponse.json({counted});
