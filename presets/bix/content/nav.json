@@ -1,0 +1,25 @@
+{
+  "header": [
+    {
+      "label": "에브리페이",
+      "href": "/solution"
+    },
+    {
+      "label": "포잉크",
+      "href": "/poink"
+    },
+    {
+      "label": "샵큐브",
+      "href": "/shopcube"
+    },
+    {
+      "label": "회사소개",
+      "href": "/about"
+    },
+    {
+      "label": "상담문의",
+      "href": "/contact"
+    }
+  ],
+  "footer": []
+}

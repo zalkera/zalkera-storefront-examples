@@ -1,0 +1,65 @@
+{
+  "title": "샵큐브",
+  "sections": [
+    {
+      "type": "HERO",
+      "config": {
+        "eyebrow": "성장을 돕는 올인원 플랫폼",
+        "title": "수수료는 합리적으로, 수익은 압도적으로",
+        "subtitle": "전문가 ‘샵코디’를 통한 쉬운 이관, 낮은 수수료, 온·오프 통합결제로 샵큐브만의 수익성과 확장성을 동시에 경험하세요.",
+        "ctaLabel": "상담하기",
+        "ctaHref": "/contact",
+        "asset": "/images/home/home-shopcube-logo.png"
+      }
+    },
+    {
+      "type": "FEATURE_GRID",
+      "config": {
+        "title": "샵큐브로 수익성·편의성·확장성을 한 번에",
+        "items": [
+          {
+            "icon": "line-chart",
+            "title": "합리적인 수수료",
+            "body": "매출이 늘수록 수수료 부담이 커지지 않도록 설계했습니다."
+          },
+          {
+            "icon": "clock",
+            "title": "원클릭 이전",
+            "body": "기존 쇼핑몰의 데이터 이전을 한 번의 클릭으로 시작합니다."
+          },
+          {
+            "icon": "credit-card",
+            "title": "스마트 통합결제",
+            "body": "온라인과 오프라인 결제를 한 정산 흐름으로 묶습니다."
+          }
+        ]
+      }
+    },
+    {
+      "type": "FEATURE_GRID",
+      "config": {
+        "title": "쇼핑몰 창업·이전 고민 끝",
+        "items": [
+          {
+            "icon": "sparkles",
+            "title": "신규 사업자",
+            "body": "샵큐브만의 디자인, 기능 및 제작 방법이 궁금하시다면 빠르게 알려 드리겠습니다."
+          },
+          {
+            "icon": "truck",
+            "title": "쇼핑몰 이전 사업자",
+            "body": "데이터 이전부터 최적화까지, 복잡한 쇼핑몰 이전을 샵큐브가 도와 드리겠습니다."
+          }
+        ]
+      }
+    },
+    {
+      "type": "LEAD_CTA",
+      "config": {
+        "title": "지금 빅스와 상담하세요",
+        "body": "결제·단말·선정산·포인트·쇼핑몰 이전 등 빅스 서비스에 대해 안내해 드립니다.",
+        "interest": "빅스 서비스 상담"
+      }
+    }
+  ]
+}
