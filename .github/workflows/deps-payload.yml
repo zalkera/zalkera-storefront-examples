@@ -1,0 +1,276 @@
+# 의존성 페이로드 굽기 (memo146 §13.10 · T-D2b).
+#
+# 고객 기계에서 `npm install` 을 도는 대신, **CI 클린 러너가 미리 구운 node_modules 트리**를 받아 쓰게 한다.
+# 신뢰 사슬: `npm ci` 가 lockfile 의 sha512 로 전건 검증 → 그 트리를 봉인 → sha256 을 매니페스트에 커밋.
+# 페이로드는 npm 의 검증을 상속한다. 검증 지점이 **고객 기계**(MITM 프록시·strict-ssl off 관행이 있는 자리)
+# 에서 **우리 CI** 로 옮겨 오므로, `npm install` 대비 위험이 오히려 줄어든다(§13.6).
+#
+# ■ 순서가 곧 안전이다
+#   3플랫폼을 병렬로 굽고, **전부 성공했을 때만** finalize 가 매니페스트를 마지막에 1번 쓴다.
+#   매니페스트가 그 세대의 **완결 표식**이므로, 하나라도 실패하면 그 세대는 세상에 없는 것이 되고
+#   클라이언트는 조용히 `npm install` 폴백으로 내려간다. 반쪽 세대가 구조적으로 생기지 않는다.
+#
+# ■ cron 이 이 파일의 절반이다
+#   S3 수명주기는 **세대를 셀 수 없다**(시간 기반뿐). 그래서 120일 만료만 걸면 lockfile 이 오래 안 바뀔 때
+#   **살아 있는 현행 세대가 지워진다.** 30일 재굽기가 그것을 막는다(같은 키 덮어쓰기 → 만료 시계 갱신).
+#   ⚠ **그래서 이 워크플로가 조용히 실패하면 안 된다** — 실패는 120일 뒤 기능 소멸로 나타나고,
+#   폴백이 있어 장애로 보이지도 않는다(§13.10.5 ⑤). 아래 notify 잡이 그 침묵을 깬다.
+name: deps-payload
+
+on:
+  push:
+    branches: [main]
+    paths: ["package-lock.json"]
+  schedule:
+    # 30일 재굽기(120일 만료의 4배 여유). GitHub cron 에 "매월"이 없어 1일·15일로 근사한다 —
+    # 넉넉한 쪽이 안전하다(굽기가 싸고, 못 구우면 세대가 죽는다).
+    - cron: "17 18 1,15 * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write # OIDC → IAM. **장수 시크릿 0**(§13.10.4)
+
+concurrency:
+  # 같은 세대를 두 번 겹쳐 굽지 않는다. 취소하지 않는 이유: 진행 중 굽기를 죽이면 고아 tar.gz 만 남는다.
+  group: deps-payload
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ap-northeast-2
+  BUCKET: oneque-prod-deps
+  KEY_PREFIX: deps/v1
+  ROLE_ARN: arn:aws:iam::657681889248:role/zalkera-deps-payload-ci
+
+jobs:
+  lockfile:
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.hash.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: hash
+        # 주소 키는 **`package-lock.json` 원본 바이트의 sha256** 이다(§13.3). node major 는 넣지 않는다 —
+        # 네이티브가 전건 N-API 프리빌드이고 install 스크립트가 0 이라 트리가 node 버전 무관이기 때문이다.
+        # (클라이언트의 **로컬 캐시 키**는 이것과 다른 복합 해시다. 혼용하면 적중률이 0 이 된다 — §13.10.1)
+        run: echo "sha=$(sha256sum package-lock.json | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+  bake:
+    needs: lockfile
+    strategy:
+      fail-fast: false # 한 플랫폼이 죽어도 나머지 진단은 보고 싶다. 어차피 finalize 가 안 돈다.
+      matrix:
+        include:
+          - platform: linux-x64
+            runner: ubuntu-latest
+          - platform: darwin-arm64
+            runner: macos-14
+          - platform: win32-x64
+            runner: windows-latest
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install (npm ci — lockfile sha512 전건 검증)
+        run: npm ci
+
+      - name: 가드 — install 스크립트가 0 인가
+        shell: bash
+        # 이 설계 전체가 "고객 기계에서 스크립트가 안 돈다"에 기대고 있다(§13.6). 새 의존성이 postinstall 을
+        # 들고 들어오면 그 전제가 조용히 깨지므로, **사람 심의 없이 굽지 않는다.**
+        run: |
+          COUNT=$(node -e '
+            const {execSync} = require("child_process");
+            const tree = JSON.parse(execSync("npm ls --all --json --long", {maxBuffer: 256*1024*1024}));
+            let n = 0;
+            const walk = (d) => {
+              for (const [name, dep] of Object.entries(d.dependencies ?? {})) {
+                const s = dep.scripts ?? {};
+                for (const k of ["preinstall", "install", "postinstall"]) {
+                  if (s[k]) { console.error(`install script: ${name} → ${k}`); n++; }
+                }
+                walk(dep);
+              }
+            };
+            walk(tree);
+            console.log(n);
+          ')
+          echo "install 스크립트 $COUNT 건"
+          if [ "$COUNT" != "0" ]; then
+            echo "::error::install 스크립트가 들어왔다. 굽기 중단 — 사람이 심의해야 한다(memo146 §13.6)."
+            exit 1
+          fi
+
+      - name: 스모크 — 굽는 트리가 실제로 빌드되는가
+        # **인수 기준이다.** tar 를 만들 수 있다는 것과 그 트리로 next build 가 된다는 것은 다르고,
+        # win/mac 트리는 이 스텝 말고는 아무도 재지 않는다(우리 개발·CI 는 리눅스다).
+        env:
+          ZALKERA_API_BASE: http://localhost:8100
+          ZALKERA_TENANT: ci-placeholder
+          ZALKERA_OFFLINE_BUILD: "1"
+        run: npm run build
+
+      - name: 가드 — 이 러너의 tar 가 결정성 플래그를 지원하는가
+        shell: bash
+        # 재굽기 바이트 동일성이 30일 cron 안전의 근거인데(§13.10.4), Windows 러너의 `tar` 는 bsdtar 일 수
+        # 있고 bsdtar 엔 `--sort` 가 없다. 없는 채로 구우면 **조용히 비결정적**이 되어, 재굽기마다 sha 가
+        # 바뀌고 다운로드 중인 클라이언트가 불일치로 폐기당한다. 가정을 두지 말고 **여기서 재고 죽는다.**
+        run: |
+          tar --version | head -1
+          for f in --sort --mtime --numeric-owner; do
+            if ! tar --help 2>&1 | grep -q -- "$f"; then
+              echo "::error::이 러너의 tar 가 $f 를 모른다(GNU tar 가 아니다). 결정적 굽기가 불가능하다 — 중단."
+              exit 1
+            fi
+          done
+
+      - name: 결정적 tar.gz
+        shell: bash
+        # **재굽기가 바이트 동일해야 한다**(§13.10.4). 그래야 30일 cron 이 같은 키를 덮어써도 sha 가 불변이고,
+        # 그 순간 다운로드 중이던 클라이언트와의 경합이 원천 소멸한다. 미학이 아니라 안전 요구다.
+        #   --sort=name  이름 정렬(디렉터리 순회 순서 의존 제거)
+        #   --mtime      고정 시각(파일 타임스탬프 제거)
+        #   --owner/group=0 --numeric-owner  러너 사용자 차이 제거
+        run: |
+          TARBALL="payload-${{ matrix.platform }}.tar.gz"
+          tar --sort=name --mtime='2020-01-01 00:00:00Z' \
+              --owner=0 --group=0 --numeric-owner \
+              -czf "$TARBALL" node_modules
+          echo "SHA=$(sha256sum "$TARBALL" | cut -d' ' -f1)" >> "$GITHUB_ENV"
+          echo "BYTES=$(wc -c < "$TARBALL" | tr -d ' ')" >> "$GITHUB_ENV"
+          echo "TARBALL=$TARBALL" >> "$GITHUB_ENV"
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: 업로드 (S3 가 체크섬으로 거부권을 갖게 한다)
+        shell: bash
+        # --checksum-algorithm SHA256: 러너→S3 구간 손상을 S3 가 **거부**로 잡는다(우리가 나중에 대조하는
+        # 것이 아니라 애초에 안 받는다). Cache-Control immutable 은 내용 주소라 안전하다.
+        run: |
+          aws s3api put-object \
+            --bucket "$BUCKET" \
+            --key "$KEY_PREFIX/${{ needs.lockfile.outputs.sha }}/${{ matrix.platform }}.tar.gz" \
+            --body "$TARBALL" \
+            --checksum-algorithm SHA256 \
+            --cache-control "public, max-age=31536000, immutable" \
+            --content-type application/gzip
+
+      - name: 이 플랫폼 결과를 finalize 로 넘긴다
+        shell: bash
+        run: |
+          mkdir -p out
+          printf '{"platform":"%s","key":"%s","sha256":"%s","bytes":%s}' \
+            "${{ matrix.platform }}" \
+            "$KEY_PREFIX/${{ needs.lockfile.outputs.sha }}/${{ matrix.platform }}.tar.gz" \
+            "$SHA" "$BYTES" > "out/${{ matrix.platform }}.json"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: entry-${{ matrix.platform }}
+          path: out/${{ matrix.platform }}.json
+
+  finalize:
+    # `needs` 는 전 matrix 성공을 요구한다. **하나라도 실패하면 매니페스트가 안 써진다** — 그 세대는
+    # 세상에 없는 것이 되고 클라이언트는 폴백한다. 고아 tar.gz 는 무해하고 수명주기가 치운다.
+    needs: [lockfile, bake]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: entry-*
+          merge-multiple: true
+          path: entries
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: 업로드된 객체를 다시 확인한다 (믿지 않고 잰다)
+        run: |
+          for f in entries/*.json; do
+            KEY=$(node -p "require('./$f').key")
+            SHA=$(node -p "require('./$f').sha256")
+            REMOTE=$(aws s3api head-object --bucket "$BUCKET" --key "$KEY" \
+                       --checksum-mode ENABLED --query 'ChecksumSHA256' --output text)
+            # S3 의 ChecksumSHA256 은 base64 다. 우리 hex 와 맞춰 본다.
+            EXPECT=$(node -p "Buffer.from('$SHA','hex').toString('base64')")
+            if [ "$REMOTE" != "$EXPECT" ]; then
+              echo "::error::$KEY 체크섬 불일치 (s3=$REMOTE expect=$EXPECT)"; exit 1
+            fi
+            echo "OK $KEY"
+          done
+
+      - name: 매니페스트 조립 + **마지막에 1번** PUT
+        run: |
+          node -e '
+            const fs = require("fs");
+            const platforms = {};
+            for (const f of fs.readdirSync("entries")) {
+              const e = JSON.parse(fs.readFileSync("entries/" + f, "utf8"));
+              platforms[e.platform] = { key: e.key, sha256: e.sha256, bytes: e.bytes };
+            }
+            const expected = ["linux-x64", "darwin-arm64", "win32-x64"];
+            const missing = expected.filter((p) => !platforms[p]);
+            if (missing.length) {
+              // needs 가 이미 막지만, 여기서도 잰다 — 매니페스트는 "완결 표식"이라 반쪽이면 의미가 뒤집힌다.
+              console.error("::error::플랫폼 누락: " + missing.join(", "));
+              process.exit(1);
+            }
+            fs.writeFileSync("manifest.json", JSON.stringify({
+              schemaVersion: 1,
+              lockfileSha256: process.env.LOCKFILE_SHA,
+              createdAt: new Date().toISOString(),
+              source: { repo: process.env.GITHUB_REPOSITORY, commit: process.env.GITHUB_SHA, runId: process.env.GITHUB_RUN_ID },
+              platforms,
+            }, null, 2));
+          '
+          cat manifest.json
+          aws s3api put-object \
+            --bucket "$BUCKET" \
+            --key "$KEY_PREFIX/$LOCKFILE_SHA/manifest.json" \
+            --body manifest.json \
+            --checksum-algorithm SHA256 \
+            --cache-control "no-cache" \
+            --content-type application/json
+        env:
+          LOCKFILE_SHA: ${{ needs.lockfile.outputs.sha }}
+
+  notify:
+    # **이 잡이 §13.10.5 ⑤ 의 답이다.** 이 워크플로의 실패는 사용자에게 장애로 보이지 않는다(전부 폴백).
+    # 조용히 실패하면 120일 뒤 현행 세대가 만료되어 기능이 사라지는데, 그때도 아무도 모른다.
+    # 성공 시엔 침묵한다 — 늘 울리는 알림은 아무도 안 본다.
+    needs: [lockfile, bake, finalize]
+    if: failure()
+    runs-on: ubuntu-latest
+    # 워크플로 기본 권한은 contents:read 다 — 이슈를 못 만든다. **여기서만** 올린다(굽는 잡엔 주지 않는다).
+    permissions:
+      issues: write
+    steps:
+      - name: 실패를 이슈로 남긴다
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = `deps-payload 굽기 실패 (${context.runId})`;
+            const body = [
+              `**의존성 페이로드 굽기가 실패했다.** 지금 당장 사용자에게 보이는 장애는 없다 —`,
+              `클라이언트는 \`npm install\` 폴백으로 내려간다(느려질 뿐).`,
+              ``,
+              `⚠ **그러나 방치하면 안 된다.** S3 수명주기(120일)는 세대를 못 세므로, 이 재굽기가 계속 실패하면`,
+              `**살아 있는 현행 세대가 만료되어 기능이 사라진다**(memo146 §13.10.5 ③⑤). 그때도 폴백이라`,
+              `장애로 보이지 않는다.`,
+              ``,
+              `- 런: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              `- 흔한 원인: 레지스트리 장애 · 패키지 언퍼블리시 · 러너 이미지 변화로 \`next build\` 깨짐 ·`,
+              `  **새 의존성이 install 스크립트를 들고 들어옴**(가드가 일부러 막는다 — 사람 심의가 필요하다)`,
+              ``,
+              `현행 세대의 마지막 굽기 시각은 핸드셰이크 응답의 \`deps.payload.bakedAt\` 으로도 볼 수 있다.`,
+            ].join("\n");
+            await github.rest.issues.create({ owner: context.repo.owner, repo: context.repo.repo, title, body });
