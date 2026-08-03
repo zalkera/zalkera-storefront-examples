@@ -24,6 +24,13 @@ on:
   schedule:
     # 30일 재굽기(120일 만료의 4배 여유). GitHub cron 에 "매월"이 없어 1일·15일로 근사한다 —
     # 넉넉한 쪽이 안전하다(굽기가 싸고, 못 구우면 세대가 죽는다).
+    #
+    # 🔴 **이 스케줄은 조용히 꺼질 수 있다**(심의 B3). 공개 레포는 **60일 무활동 시 GitHub 가 schedule 을
+    #    자동 비활성**한다. 그러면 워크플로가 아예 안 돌아 아래 notify 잡도 발화하지 않는다.
+    #    나쁜 것은 상관관계다 — **lockfile 이 오래 안 바뀌는 상태가 아사 조건이자 자동 비활성 조건**이다.
+    #    그래서 GitHub 바깥에 관측자를 뒀다: 백엔드가 매니페스트의 `createdAt` 나이를 재서
+    #    45일을 넘으면 WARN + `deps.manifest.stale` 카운터를 올린다(DepsManifestReader.warnIfStale).
+    #    **그 경고가 뜨는데 실패 이슈가 없으면 = 실패한 게 아니라 안 돈 것** → Actions 탭에서 재활성한다.
     - cron: "17 18 1,15 * *"
   workflow_dispatch:
 
@@ -53,6 +60,7 @@ jobs:
         # 주소 키는 **`package-lock.json` 원본 바이트의 sha256** 이다(§13.3). node major 는 넣지 않는다 —
         # 네이티브가 전건 N-API 프리빌드이고 install 스크립트가 0 이라 트리가 node 버전 무관이기 때문이다.
         # (클라이언트의 **로컬 캐시 키**는 이것과 다른 복합 해시다. 혼용하면 적중률이 0 이 된다 — §13.10.1)
+        # 이 잡은 ubuntu 고정이라 `sha256sum` 이 있다(bake 잡은 러너가 갈려 도구를 골라 쓴다).
         run: echo "sha=$(sha256sum package-lock.json | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
 
   bake:
@@ -114,19 +122,44 @@ jobs:
           ZALKERA_OFFLINE_BUILD: "1"
         run: npm run build
 
-      - name: 가드 — 이 러너의 tar 가 결정성 플래그를 지원하는가
+      - name: 도구 고르기 — GNU tar 와 sha256 (러너마다 다르다)
         shell: bash
-        # 재굽기 바이트 동일성이 30일 cron 안전의 근거인데(§13.10.4), Windows 러너의 `tar` 는 bsdtar 일 수
-        # 있고 bsdtar 엔 `--sort` 가 없다. 없는 채로 구우면 **조용히 비결정적**이 되어, 재굽기마다 sha 가
-        # 바뀌고 다운로드 중인 클라이언트가 불일치로 폐기당한다. 가정을 두지 말고 **여기서 재고 죽는다.**
+        # 재굽기 바이트 동일성이 30일 cron 안전의 근거인데(§13.10.4), **러너마다 tar 가 다르다**:
+        #   ubuntu  → GNU tar          (--sort 있음)
+        #   macos   → **bsdtar**       (--sort 없음) · GNU tar 는 `gtar` 라는 이름으로만 있다
+        #   windows → Git Bash 의 tar  (구성에 따라 갈린다)
+        # bsdtar 로 구우면 **조용히 비결정적**이 되어 재굽기마다 sha 가 바뀌고, 다운로드 중인 클라이언트가
+        # 불일치로 폐기당한다. 그래서 ⑴ GNU tar 를 **찾고** ⑵ 못 찾으면 **시끄럽게 죽는다.**
+        # (첫 판에는 ⑵만 있었다 — macOS 에서 항상 죽어 매니페스트가 세상에 존재할 수 없었다. 심의 B1.)
+        #
+        # sha256 도구도 갈린다: 리눅스·Git Bash 는 `sha256sum`, macOS 는 `shasum -a 256` 이다.
         run: |
-          tar --version | head -1
-          for f in --sort --mtime --numeric-owner; do
-            if ! tar --help 2>&1 | grep -q -- "$f"; then
-              echo "::error::이 러너의 tar 가 $f 를 모른다(GNU tar 가 아니다). 결정적 굽기가 불가능하다 — 중단."
-              exit 1
-            fi
-          done
+          pick_tar() {
+            for c in tar gtar gnutar; do
+              command -v "$c" >/dev/null 2>&1 || continue
+              if "$c" --help 2>&1 | grep -q -- "--sort" &&
+                 "$c" --help 2>&1 | grep -q -- "--numeric-owner"; then
+                echo "$c"; return 0
+              fi
+            done
+            return 1
+          }
+          TAR=$(pick_tar) || {
+            echo "::error::이 러너에서 GNU tar 를 못 찾았다(tar/gtar/gnutar 전부 --sort 미지원). 결정적 굽기 불가 — 중단."
+            for c in tar gtar gnutar; do command -v "$c" >/dev/null 2>&1 && echo "  $c: $("$c" --version 2>&1 | head -1)"; done
+            exit 1
+          }
+          echo "TAR=$TAR" >> "$GITHUB_ENV"
+          echo "선택한 tar: $TAR — $("$TAR" --version 2>&1 | head -1)"
+
+          if command -v sha256sum >/dev/null 2>&1; then
+            echo "SHA256_CMD=sha256sum" >> "$GITHUB_ENV"
+          elif command -v shasum >/dev/null 2>&1; then
+            echo "SHA256_CMD=shasum -a 256" >> "$GITHUB_ENV"
+          else
+            echo "::error::sha256 도구가 없다(sha256sum·shasum 둘 다). 무결성 대조 불가 — 중단."
+            exit 1
+          fi
 
       - name: 결정적 tar.gz
         shell: bash
@@ -137,10 +170,10 @@ jobs:
         #   --owner/group=0 --numeric-owner  러너 사용자 차이 제거
         run: |
           TARBALL="payload-${{ matrix.platform }}.tar.gz"
-          tar --sort=name --mtime='2020-01-01 00:00:00Z' \
+          "$TAR" --sort=name --mtime='2020-01-01 00:00:00Z' \
               --owner=0 --group=0 --numeric-owner \
               -czf "$TARBALL" node_modules
-          echo "SHA=$(sha256sum "$TARBALL" | cut -d' ' -f1)" >> "$GITHUB_ENV"
+          echo "SHA=$($SHA256_CMD "$TARBALL" | cut -d' ' -f1)" >> "$GITHUB_ENV"
           echo "BYTES=$(wc -c < "$TARBALL" | tr -d ' ')" >> "$GITHUB_ENV"
           echo "TARBALL=$TARBALL" >> "$GITHUB_ENV"
 
