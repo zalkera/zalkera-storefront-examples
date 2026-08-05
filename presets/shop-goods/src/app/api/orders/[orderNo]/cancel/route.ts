@@ -1,3 +1,4 @@
+import {visitorIp} from "@zalkera/client";
 import {NextResponse} from "next/server";
 import {zalkera} from "@/lib/zalkera";
 import {assertJsonContentType, assertSameOrigin, errorResponse, readJsonBody} from "@/lib/http";
@@ -26,7 +27,7 @@ export async function POST(req: Request, {params}: {params: Promise<{orderNo: st
     if (!accessToken && !phone) return NextResponse.json({message: "로그인 또는 연락처가 필요합니다."}, {status: 401});
     const {orderNo} = await params;
     try {
-        const order = await zalkera.cancelOrder(orderNo, {accessToken, phone});
+        const order = await zalkera.cancelOrder(orderNo, {accessToken, phone, context: {clientIp: visitorIp(req.headers)}});
         const response = NextResponse.json(order);
         // 게스트(phone) 성공이 zalkera_authed 를 심으면 안 된다 — 회원 세션 성공에만 힌트를 갱신한다.
         if (accessToken) setAuthHint(response, true);
