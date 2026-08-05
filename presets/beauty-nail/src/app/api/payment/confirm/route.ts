@@ -1,3 +1,4 @@
+import {visitorIp} from "@zalkera/client";
 import {NextResponse} from "next/server";
 import {zalkera} from "@/lib/zalkera";
 import {assertJsonContentType, assertSameOrigin, errorResponse, invalidBody, readJsonBody} from "@/lib/http";
@@ -28,7 +29,11 @@ export async function POST(req: Request) {
     const {orderNo, phone, ...providerParams} = body;
     const session = await getShopSession();
     try {
-        await zalkera.confirmPayment(orderNo, providerParams, {accessToken: session.accessToken, phone});
+        await zalkera.confirmPayment(orderNo, providerParams, {
+            accessToken: session.accessToken,
+            phone,
+            context: {clientIp: visitorIp(req.headers)},
+        });
         return NextResponse.json({orderNo, confirmed: true});
     } catch (error) {
         return errorResponse(error);

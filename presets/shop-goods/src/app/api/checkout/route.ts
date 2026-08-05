@@ -1,3 +1,4 @@
+import {visitorIp} from "@zalkera/client";
 import {NextResponse} from "next/server";
 import {zalkera} from "@/lib/zalkera";
 import {assertJsonContentType, assertSameOrigin, errorResponse, invalidBody, readJsonBody} from "@/lib/http";
@@ -39,6 +40,7 @@ export async function POST(req: Request) {
         const payment = await zalkera.startPayment(order.orderNo, {
             accessToken: session.accessToken,
             phone: input.buyerPhone,
+            context: {clientIp: visitorIp(req.headers)},
         });
         const response = NextResponse.json({
             orderNo: order.orderNo,
