@@ -89,6 +89,7 @@ import {createRequire} from "node:module";
 import {deflateRawSync} from "node:zlib";
 import {crc32} from "./preset-canvas.mjs";
 import {checkWiringParity} from "./lib/wiring-parity.mjs";
+import {checkVisitorIp} from "./lib/visitor-ip-parity.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const PRESETS_DIR = join(ROOT, "presets");
@@ -140,6 +141,15 @@ const SOURCE_EXCLUDES = [
     "scripts/gen-preset-assets.mjs",
     "scripts/preset-canvas.mjs",
     "scripts/lib/wiring-parity.mjs",
+    // ⚠ **우리 인프라 워크플로는 배송물이 아니다**(심의 차단 2 · 2026-08-10). `ci.yml`·`client-upgrade.yml`
+    // 은 고객 레포에서 돌라고 주는 것이지만, 이것은 **자사 S3·IAM role·AWS 계정 ID** 를 담은 내부
+    // 굽기 파이프라인이다. 실려 나가면 ⑴ 고객 레포에서 lockfile push·cron 마다 3플랫폼 빌드가 돌고
+    // ⑵ OIDC 실패 뒤 notify 잡이 **고객 레포에 이슈를 자동 생성**한다(우리 인프라 좌표가 그 이슈에 남는다).
+    ".github/workflows/deps-payload.yml",
+    // 검수 적재 키트. `qa/fixtures/README.md` 첫 줄이 **"배송물이 아닙니다. zip 에 안 실립니다"**라고
+    // 적어 놓고 실제로는 실려 있었다(심의 경고 1). 자기 문서와 모순인 것도 문제지만, 그 안의 이미지
+    // 10장이 라이선스 계수 대상 밖이라 **"기록 없는 이미지는 나갈 수 없다"가 이 디렉터리에서 거짓**이었다.
+    "qa/",
 ];
 
 /**
@@ -1122,6 +1132,16 @@ validateSource([
 // 바이트로 잠근다. 얼굴이 갈리는 것은 의도이므로 재지 않는다. 판정은 `scripts/lib/wiring-parity.mjs`
 // 한 곳에만 있다(`npm run check:wiring` 이 같은 함수를 부른다 — 검사기 사본이 갈리는 병의 재발 방지).
 problems.push(...checkWiringParity(ROOT));
+
+// **방문자 IP 선언** — 배선 동일성이 못 보는 자리다(그쪽은 바이트 잠금이라 **얼굴**을 못 넣는다).
+// 그런데 얼굴 안에 안전 배선 한 줄이 산다: 2026-08-10 발행 심의에서 skeleton 주문 상세 페이지의
+// 선언이 빠진 채 팩이 구워졌고, 기계 검사도 CI 도 전부 초록이었다. **팩은 회수가 불가능**하므로
+// 그 소스로 개시한 사이트는 영구히 그 상태가 된다 — 그래서 발행 직전에 한 번 더 선다.
+problems.push(
+    ...checkVisitorIp(ROOT).violations.map(
+        (v) => `방문자 IP 선언 누락 — ${v.tree}/${v.file}: ${v.why}`,
+    ),
+);
 
 const contract = sectionContract();
 assertGuaranteesCarried();
