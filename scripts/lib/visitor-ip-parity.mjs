@@ -192,8 +192,10 @@ export function checkVisitorIp(root = join(HERE, "..", "..")) {
             // **위조값을 통과시킨 자리**다(`const clientIp = xff.split(",")[0]` 뒤 `{clientIp}`).
             // 값 표기만 보면 그 형태가 통째로 안 보인다 — 그래서 이름의 출처까지 따라간다.
             const values = [...text.matchAll(/clientIp\s*:\s*([^,}\n]+)/g)].map((m) => m[1]);
-            const shorthand = /\{[^}]*\bclientIp\b[^}:]*\}/.test(text) && !/clientIp\s*:/.test(text);
-            if (shorthand) {
+            // shorthand(`{clientIp}`)는 **정상 표기와 무관하게 따로 본다.** 종전엔 파일에 `clientIp:` 가
+            // 하나라도 있으면 이 분기가 통째로 꺼져, 정상 한 줄 옆에 위조 shorthand 를 두면 통과했다
+            // (5차 심의 관찰 O1 실측).
+            if (/\{[^}]*\bclientIp\b[^}:]*\}/.test(text)) {
                 const decl = /(?:const|let|var)\s+clientIp\s*=\s*([^;\n]+)/.exec(text);
                 values.push(decl ? decl[1] : "");
             }
@@ -223,8 +225,9 @@ if (isMain) {
         console.error("방문자 IP 선언 누락:");
         for (const v of violations) console.error(`  ${v.tree}/${v.file} — ${v.why}`);
         console.error("\n선언이 없으면 백엔드가 보는 IP 가 **테넌트 서버 하나**로 뭉친다. 축마다 결과가 다르다:");
-        console.error("  · 주문 인가(getOrder 등) — **실패만** 계수한다(성공은 절대 안 막힌다). 남의 오입력이");
-        console.error("    쌓이면 오타 한 번에 403 대신 429 를 받고, 스캐너 탐지가 주문번호 축 하나로 줄어든다.");
+        console.error("  · 주문 인가(getOrder 등) — **실패만** 계수한다. 남의 오입력이 쌓이면 오타 한 번에");
+        console.error("    403 대신 429 를 받고, 스캐너 탐지가 주문번호 축 하나로 줄어든다(IP 축은 성공을");
+        console.error("    안 막지만, **주문번호 축은 실패 5회/10분으로 정답 제시자도 선차단**한다).");
         console.error("  · 문의·리드(submitInquiry/submitLead) — **모든 호출을 계수한다.** 상용 문의 한도가");
         console.error("    60초에 3건이라, 뭉치면 그 사이트의 4번째 문의 제출이 429 다(성공도 막힌다).");
         process.exit(1);

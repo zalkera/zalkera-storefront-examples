@@ -74,11 +74,17 @@ jobs:
         # ■ 방문자 IP 선언 — 바이트 잠금이 못 보는 자리다(그 파일은 얼굴이라 목록 밖). 2026-08-10 에
         #   정확히 그 사각에서 skeleton 주문 상세 페이지의 선언이 빠진 채 CI 가 5일간 초록이었다.
         run: |
-          # 판별자는 **`presets/` 있음 + 팩 매니페스트 없음** 의 교집합이다(4차 심의 W4).
-          # `presets/` 단독으로 가르면 고객이 같은 이름 디렉터리를 만들었을 때 영구 적색이 된다 —
-          # 우리가 문서에서 가르치는 어휘라 실제로 만든다. 팩 zip 은 `.zalkera/pack.json` 을 **반드시**
-          # 싣고 우리 레포는 절대 싣지 않으므로, 이 교집합이 양쪽에서 참이다.
-          if [ -d presets ] && [ ! -f .zalkera/pack.json ]; then
+          # 판별자는 **존재 두 개의 교집합**이다: `presets/` + `scripts/pack-preset.mjs`.
+          #
+          # 부재(`! -f .zalkera/pack.json`)로 가르던 판을 뒤집었다(5차 심의 W1) — 같은 zip 안의
+          # `CUSTOMIZE.md` 가 고객에게 "`.zalkera/pack.json` 은 **지워도 된다**"고 가르치는데,
+          # 그 말을 따른 고객이 최상위 `presets/` 까지 갖게 되면 **영구 적색 + 조치 불가능한 오류 메시지**가
+          # 된다. 배송 문서와 배송 CI 가 서로 모순인 상태였다.
+          #
+          # 존재 기준이 더 강한 이유가 하나 더 있다: 부재 기준은 **파일을 하나 만들면 가드가 조용히 꺼진다**
+          # ("가드를 지우는 것이 고치는 것보다 쉬우면 안 된다"는 규약과 반대 방향 · 5차 관찰 O3).
+          # `pack-preset.mjs` 는 SOURCE_EXCLUDES 라 고객 zip 에 **구조적으로 절대 없다.**
+          if [ -d presets ] && [ -f scripts/pack-preset.mjs ]; then
             for checker in scripts/lib/wiring-parity.mjs scripts/lib/visitor-ip-parity.mjs; do
               if [ ! -f "$checker" ]; then
                 echo "::error::잘커라 레포인데 $checker 가 없습니다 — 가드가 지워졌습니다."
