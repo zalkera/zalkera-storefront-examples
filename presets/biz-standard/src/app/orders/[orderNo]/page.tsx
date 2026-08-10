@@ -19,8 +19,10 @@ export default async function OrderPage({
     const {orderNo} = await params;
     const {phone} = await searchParams;
     const accessToken = await getAccessToken();
-    // ⚠️ 서버 사이드(RSC)라 백엔드가 보는 IP 는 방문자가 아니라 이 서버다. 게스트 주문 인가에는
-    // 실패 rate-limit 이 걸려 있어, 선언하지 않으면 이 사이트의 게스트 전체가 한 IP 로 묶인다.
+    // ⚠️ 서버 사이드(RSC)라 백엔드가 보는 IP 는 방문자가 아니라 이 서버다. 선언하지 않으면 이 사이트의
+    // 게스트 요청이 전부 한 IP 로 뭉친다 — 게스트 주문 인가의 **실패** rate-limit 이 그 IP 축을 쓰므로,
+    // 남의 오입력이 쌓이면 내가 오타 한 번에 403 대신 429 를 받는다(성공한 조회는 막히지 않는다).
+    // 그리고 스캐너 탐지가 주문번호 축 하나로 줄어든다.
     const access = {accessToken, phone, context: {clientIp: visitorIp(await headers())}};
 
     let order;

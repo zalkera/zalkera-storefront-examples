@@ -56,6 +56,13 @@ const IP_SENSITIVE = [
 ];
 
 /**
+ * **우리 클라이언트를 쓰는 파일인가.** 이 문이 없으면 고객이 자기 코드에 같은 이름을 쓰는 것만으로
+ * 그 레포 CI 가 적색이 된다(`repo.getOrder(id)`). 실제 프리셋은 `@zalkera/client` 를 직접 import 하거나
+ * 공유 싱글턴(`@/lib/zalkera`)을 거치므로 둘 다 받는다.
+ */
+const IMPORTS_CLIENT = /from\s+["'](?:@zalkera\/client|[^"']*lib\/zalkera)["']/;
+
+/**
  * 방문자가 위조할 수 있는 값을 손으로 뽑는 형태.
  *
  * 대문자 표기(`X-Forwarded-For`)·`x-real-ip`·`substring`/`indexOf` 추출까지 덮는다 — 재심의가
@@ -95,6 +102,12 @@ function sourceTrees(root) {
     const trees = [];
     const rootSrc = join(root, "src");
     if (existsSync(rootSrc)) trees.push({name: "(원본) src", dir: rootSrc});
+    // Next.js 정식 배치는 루트 `app/`·`pages/` 도 허용한다. 고객이 그쪽으로 옮기면 종전 판정은
+    // **0개 스캔·조용히 초록**이었다(Opus 심의 경고 — 검사가 없는 것보다 나쁜 상태다).
+    for (const alt of ["app", "pages"]) {
+        const dir = join(root, alt);
+        if (existsSync(dir)) trees.push({name: `(원본) ${alt}`, dir});
+    }
     const presets = join(root, "presets");
     if (existsSync(presets)) {
         for (const e of readdirSync(presets, {withFileTypes: true})) {
@@ -116,17 +129,23 @@ export function checkVisitorIp(root = join(HERE, "..", "..")) {
             const text = stripComments(readFileSync(join(tree.dir, rel), "utf8"));
             // `.fn(` 뿐 아니라 **구조분해로 꺼내 쓴 것**도 잡는다(`const {getOrder} = client`) —
             // 재심의가 그 형태로 검사 시야를 벗어났다.
-            // 클라이언트를 쓰는 파일인가. **구조분해 탐지의 전제**다 — 이게 없으면 같은 이름의 지역
-            // 헬퍼(`const {cancelOrder} = helpers`)가 위반으로 잡혀 **고객 CI 를 적색으로** 만든다
-            // (3차 심의 거짓 양성 실측). 고객 코드에 우리가 낼 수 있는 가장 나쁜 오검이다.
-            const usesClient = /@zalkera\/client|zalkera/i.test(text);
-            const hits = IP_SENSITIVE.filter(
-                (fn) =>
-                    new RegExp(`\\.${fn}\\s*\\(`).test(text) ||
-                    // 대괄호 접근 — 종전엔 파일이 **스캔 대상조차 안 됐다**(3차 심의 실측).
-                    new RegExp(`\\[\\s*["'\`]${fn}["'\`]\\s*\\]`).test(text) ||
-                    (usesClient &&
-                        new RegExp(`(?:const|let|var)\\s*\\{[^}]*\\b${fn}\\b[^}]*\\}\\s*=`).test(text)),
+            // 🔴 **우리 클라이언트를 쓰는 파일만 본다**(Opus 심의 차단). 종전엔 `.getOrder(` 만 보고
+            // 판정해, 고객이 자기 DB 계층에 같은 이름을 쓰면(`repo.getOrder(id)` — 커머스 확장 코드에서
+            // 흔한 이름이다) **그 고객 CI 가 적색이 되고 BYO 테넌트의 코드 배포가 무환불로 종결**됐다.
+            // 우리가 남의 레포에 낼 수 있는 가장 나쁜 오검이라, 판정 자체를 클라이언트 바인딩으로 좁힌다.
+            if (!IMPORTS_CLIENT.test(text)) continue;
+
+            const hits = IP_SENSITIVE.filter((fn) =>
+                [
+                    // 평범한 호출 · 옵셔널 체이닝(`z?.getOrder?.(`)
+                    `(?:\\.|\\?\\.)\\s*${fn}\\s*(?:\\?\\.)?\\s*\\(`,
+                    // 대괄호 접근 — 종전엔 파일이 스캔 대상조차 안 됐다
+                    `\\[\\s*["'\`]${fn}["'\`]\\s*\\]`,
+                    // 구조분해로 꺼내 쓴 것
+                    `(?:const|let|var)\\s*\\{[^}]*\\b${fn}\\b[^}]*\\}\\s*=`,
+                    // 별칭(`const go = z.getOrder;`) — 호출부가 다른 줄이라도 이 파일이 책임진다
+                    `(?:const|let|var)\\s+\\w+\\s*=\\s*[\\w.$\\[\\]"'\`]*\\.${fn}\\b`,
+                ].some((pattern) => new RegExp(pattern).test(text)),
             );
             if (hits.length === 0) continue;
             scanned += 1;
@@ -140,17 +159,25 @@ export function checkVisitorIp(root = join(HERE, "..", "..")) {
                 continue;
             }
             declared += 1;
-            // **선언했으면 `visitorIp()` 를 불렀어야 한다.** 종전엔 "위조 형태가 보이면"만 잡아서,
-            // 헤더 이름을 계산해 만들면(템플릿 리터럴·`join("-")`) 통째로 빠져나갔다(3차 심의 실측).
-            // 형태를 열거하는 쪽은 항상 진다 — **계약을 요구하는 쪽으로 뒤집는다.**
-            // client 문서가 "값은 visitorIp 로 뽑아라"라고 명시하므로 이것이 계약 그대로다.
-            if (!/\bvisitorIp\s*\(/.test(text)) {
+            // **각 `clientIp` 가 `visitorIp()` 에서 왔는가**(Opus 심의 경고). 파일 어딘가에 visitorIp
+            // 호출이 하나 있으면 통과하던 종전 판정은, 그 호출이 **다른 용도**일 때 검사가 통째로 꺼졌다.
+            // 직접 호출과 변수 경유(`const ip = visitorIp(h); … clientIp: ip`) 둘 다 정상 형태이므로
+            // **출처를 따라간다** — 형태를 세는 대신 값이 어디서 왔는지를 본다.
+            const fromVisitorIp = new Set(
+                [...text.matchAll(/(?:const|let|var)\s+(\w+)\s*=\s*(?:await\s+)?visitorIp\s*\(/g)].map(
+                    (m) => m[1],
+                ),
+            );
+            const unresolved = [...text.matchAll(/clientIp\s*:\s*([^,}\n]+)/g)].filter((m) => {
+                const expr = m[1];
+                if (/\bvisitorIp\s*\(/.test(expr)) return false;
+                return ![...fromVisitorIp].some((v) => new RegExp(`\\b${v}\\b`).test(expr));
+            });
+            if (unresolved.length > 0) {
                 violations.push({
                     tree: tree.name,
                     file: rel,
-                    why: FORGEABLE.test(text)
-                        ? "clientIp 를 visitorIp() 없이 채운다 — 방문자가 위조할 수 있는 값이다"
-                        : "clientIp 를 선언했는데 visitorIp() 를 부르지 않는다 — 값의 출처를 보증할 수 없다",
+                    why: `clientIp 값이 visitorIp() 에서 오지 않는다(${unresolved.length}곳) — 출처를 보증할 수 없다`,
                 });
             }
         }
@@ -165,9 +192,10 @@ if (isMain) {
         console.error("방문자 IP 선언 누락:");
         for (const v of violations) console.error(`  ${v.tree}/${v.file} — ${v.why}`);
         console.error(
-            "\n선언이 없으면 백엔드가 보는 IP 가 **테넌트 서버 하나**로 뭉친다. 게스트 주문 인가는 실패를",
+            "\n선언이 없으면 백엔드가 보는 IP 가 **테넌트 서버 하나**로 뭉친다. 게스트 주문 인가는",
         );
-        console.error("테넌트×IP 로 계수하므로, 한 방문자의 오입력이 그 사이트 게스트 전체를 429 로 잠근다.");
+        console.error("**실패만** 테넌트×IP 로 계수하므로(성공은 절대 안 막힌다), 남의 오입력이 쌓이면");
+        console.error("오타 한 번에 403 대신 429 를 받고, 스캐너 탐지가 주문번호 축 하나로 줄어든다.");
         process.exit(1);
     }
     console.log(`방문자 IP 선언 통과 — IP 민감 호출 파일 ${scanned}개, 선언 ${declared}개`);

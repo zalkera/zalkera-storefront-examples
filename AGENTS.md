@@ -104,6 +104,30 @@ export async function POST(req: Request) {
 
 판정 규칙의 근거는 `src/lib/crossOrigin.ts` 주석에, 관용구는 `src/lib/http.ts` 에 있다.
 
+## 방문자 IP 선언 — 서버에서 주문·문의 API 를 부를 때 (지우지 마라)
+
+**서버 사이드(RSC·route handler)에서 부르면 백엔드가 보는 IP 는 방문자가 아니라 이 서버다.** 그래서
+`@zalkera/client` 의 IP 민감 호출 9종(`getOrder`·`getShipment`·`cancelOrder`·`startPayment`·`confirmPayment`·
+`completeOrder`·`submitInquiry`·`submitLead`·`recordPostView`)에는 **원 방문자 IP 를 선언**해야 한다.
+
+```ts
+import {visitorIp} from "@zalkera/client";
+import {headers} from "next/headers";
+
+const access = {accessToken, phone, context: {clientIp: visitorIp(await headers())}};
+```
+
+- **값은 반드시 `visitorIp()` 로 뽑아라.** `x-forwarded-for` 첫 홉을 직접 쓰면 **방문자가 위조할 수 있다**
+  — 선언이 있는 척하면서 값이 거짓이면 없느니만 못하다(로그·rate-limit 이 공격자가 고른 값을 믿는다).
+- 변수 경유도 정상이다: `const ip = visitorIp(await headers()); … context: {clientIp: ip}`.
+- 안 하면 무엇이 나빠지나: 게스트 주문 인가의 **실패** rate-limit 이 IP 축을 쓰므로, 이 사이트의 게스트가
+  한 IP 로 뭉쳐 남의 오입력이 쌓이면 내가 오타 한 번에 403 대신 429 를 받는다(**성공한 조회는 막히지
+  않는다**). 그리고 스캐너 탐지가 주문번호 축 하나로 줄어든다.
+
+검사기는 `npm run check:visitor-ip`(`scripts/lib/visitor-ip-parity.mjs`, CI 게이트). **`@zalkera/client` 나
+`@/lib/zalkera` 를 import 한 파일만** 본다 — 같은 이름의 자기 함수(`repo.getOrder(id)`)는 대상이 아니다.
+`clientIp` 를 선언했는데 값이 `visitorIp()` 에서 오지 않으면 그것도 위반이다.
+
 ## 능력 ↔ 구현 좌표 — **안 쓰는 것을 지우는 법**
 
 이 골격은 **최대 조합**으로 배선돼 있습니다(기업 홈페이지 + 쇼핑몰 + 예약). 사이트의 성격은 선언이 아니라
