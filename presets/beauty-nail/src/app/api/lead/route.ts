@@ -8,7 +8,7 @@ import {visitorIp} from "@zalkera/client";
  * 광고 랜딩 리드 접수 BFF — **공개(인증 없음)**. inquiry/route.ts 의 clientIp 관용구 복제.
  *
  * ⚠️ **clientIp 를 안 넘기면 방문자 전원이 레이트리밋에 걸린다.** 백엔드 리드 레이트리밋은
- * `X-Forwarded-For` 첫 홉을 테넌트×IP 로 센다(30건/60초 공유). clientIp 를 안 주면 백엔드가 보는 건
+ * **테넌트×IP** 로 센다(30건/60초 공유 · 성공·실패 무관 전 호출 계수). clientIp 를 안 주면 백엔드가 보는 건
  * 테넌트 서버 IP 하나뿐이라, 창당 31번째 방문자부터 **전원 429** 가 된다. 그래서 원 방문자 IP 를
  * `visitorIp(req.headers)` 로 뽑아 넘긴다(문의·조회수 비콘과 동일 관용구).
  *

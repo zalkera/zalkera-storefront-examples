@@ -7,9 +7,10 @@ import {visitorIp} from "@zalkera/client";
 /**
  * 조회수 비콘 BFF — **공개(인증 없음)**. 브라우저 아일랜드(ViewBeacon)가 이걸 친다.
  *
- * inquiry/route.ts 의 clientIp 관용구를 복제한다: 백엔드가 `X-Forwarded-For` 첫 홉으로 방문자별
- * dedup(sha256(IP|UA))을 하므로 원 방문자 IP 를 뽑아 넘긴다(안 넘기면 테넌트 서버 IP 하나로 뭉쳐
- * 모든 조회가 1건으로 접힌다). 프리뷰에서는 세지 않는다(초안 열람이 조회로 잡히면 안 됨).
+ * inquiry/route.ts 의 clientIp 관용구를 복제한다. 이 축은 **레이트리밋이 아니라 조회 dedup** 이다 —
+ * 키가 `sha256(방문자 IP|User-Agent)` 이고 **게시글별·UTC 하루** 단위라, 안 넘기면 IP 가 테넌트 서버
+ * 하나로 뭉쳐 **게시글마다 하루에 UA 종류 수만큼**으로 접힌다(429 가 아니라 집계가 죽고, 0 이 아니라서
+ * 눈치채기 어렵다). 프리뷰에서는 세지 않는다(초안 열람이 조회로 잡히면 안 됨).
  */
 export async function POST(req: Request, {params}: {params: Promise<{slug: string}>}) {
     const blocked = assertSameOrigin(req);

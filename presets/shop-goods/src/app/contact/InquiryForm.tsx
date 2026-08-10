@@ -4,7 +4,7 @@ import {useState, useTransition} from "react";
 import {Button} from "@/components/ui/Button";
 
 /**
- * 문의 폼 아일랜드 — `/api/inquiry` BFF 로 POST(clientIp 는 서버가 XFF 에서 붙인다).
+ * 문의 폼 아일랜드 — `/api/inquiry` BFF 로 POST(clientIp 는 BFF 라우트가 `visitorIp()` 로 뽑아 붙인다).
  *
  * 필수 4종(name·email·subject·message)은 SDK 계약(InquiryInput) 그대로. phone·company 는 선택.
  */

@@ -35,7 +35,8 @@
  *
  * ## 왜 첫 홉을 직접 쓰면 안 되나
  *
- * `visitorIp()` 를 안 쓰고 `x-forwarded-for` 첫 항목을 손으로 뽑는 코드도 잡는다 — 첫 엔트리는
+ * `visitorIp()` 를 안 쓰고 `x-forwarded-for` 첫 항목을 손으로 뽑는 코드도 잡는다(**출처 추적**이 잡는다 —
+ * 한때 헤더 이름을 열거하는 상수를 뒀는데, 형태를 세는 쪽은 계산된 이름에 늘 졌다). 첫 엔트리는
  * **방문자가 위조할 수 있다**(client 문서가 명시). 선언이 있는 척하면서 값이 거짓이면 IP 축 방어는
  * 없느니만 못하다(로그·rate-limit 이 공격자가 고른 값을 믿는다).
  */
@@ -72,14 +73,6 @@ const IP_SENSITIVE = [
  * 공유 싱글턴(`@/lib/zalkera`)을 거치므로 둘 다 받는다.
  */
 const IMPORTS_CLIENT = /from\s+["'](?:@zalkera\/client|[^"']*lib\/zalkera)["']/;
-
-/**
- * 방문자가 위조할 수 있는 값을 손으로 뽑는 형태.
- *
- * 대문자 표기(`X-Forwarded-For`)·`x-real-ip`·`substring`/`indexOf` 추출까지 덮는다 — 재심의가
- * 그 셋으로 우회에 성공했다. 헤더 이름을 직접 만지는 것 자체가 신호이므로 추출 방법은 안 따진다.
- */
-const FORGEABLE = /["'`](?:x-forwarded-for|x-real-ip|forwarded)["'`]/i;
 
 /** `clientIp: string` 같은 **타입 자리**. 값이 아니므로 출처를 물을 대상이 아니다. */
 const TYPE_POSITION =
@@ -196,10 +189,36 @@ export function checkVisitorIp(root = join(HERE, "..", "..")) {
             // 하나라도 있으면 이 분기가 통째로 꺼져, 정상 한 줄 옆에 위조 shorthand 를 두면 통과했다
             // (5차 심의 관찰 O1 실측).
             if (/\{[^}]*\bclientIp\b[^}:]*\}/.test(text)) {
+                // ⚠ **구조분해로 꺼내 쓴 것은 shorthand 가 아니다**(6차 심의 W-A · 실측 거짓 양성 2형태):
+                //   `const {clientIp} = access.context;`  ← 값을 만드는 게 아니라 이미 만들어진 것을 읽는다
+                //   `function log({clientIp}: {clientIp: string})`  ← 파라미터 표기
+                // 종전엔 `const clientIp = …` 선언을 못 찾으면 **빈 문자열**을 미해결로 밀어 무조건 실패시켰다.
+                // 이 검사기는 우리 레포 전용이라 고객 피해는 0 이고, **지금 레포에 그 형태가 0건**이라 오늘
+                //   막고 있는 것도 없다 — 선제 수정이다(심의 경고 A: 현재형으로 쓰면 거짓이 된다).
+                // ⚠ 예외는 **형태가 아니라 출처**로 판정한다(심의 차단 · 실측).
+                //
+                // 첫 판은 "구조분해가 파일에 있으면 면제"였다. 그런데 구조분해가 **값을 만드는** 경우가
+                // 있다 — `const {clientIp} = await req.json()` · `= Object.fromEntries(url.searchParams)`.
+                // 그건 방문자가 고른 값이고, 면제하면 정상 한 줄 옆에 두는 것만으로 통과한다
+                // (5차에 닫은 O1 계열의 부분 재개방이었다 — 실측 C1·C2·H 전부 통과했다).
+                //
+                // 그래서 읽기형은 **우변을 붙잡아** 출처를 묻고, 파라미터형은 **이 파일에 출처가 해소된
+                // `clientIp` 구성이 하나라도 있을 때만** 면제한다(그 파일이 값을 만들 줄 안다는 증거).
+                const readForm = /(?:const|let|var)\s*\{[^}]*\bclientIp\b[^}]*\}\s*=\s*([^;\n]+)/.exec(text);
+                const paramForm =
+                    /function\s+\w*\s*\(\s*\{[^}]*\bclientIp\b[^}]*\}/.test(text) ||
+                    /\(\s*\{[^}]*\bclientIp\b[^}]*\}\s*(?::[^)]*)?\)\s*=>/.test(text);
                 const decl = /(?:const|let|var)\s+clientIp\s*=\s*([^;\n]+)/.exec(text);
-                values.push(decl ? decl[1] : "");
+
+                if (decl) values.push(decl[1]);
+                else if (readForm) values.push(readForm[1]);
+                else if (!paramForm) values.push("");
+                // 파라미터형 면제의 전제: 이 파일이 어딘가에서 출처를 제대로 만든다.
+                else if (!/clientIp\s*:\s*[^,}\n]*visitorIp\s*\(/.test(text)) values.push("");
             }
             const unresolved = values.filter((expr) => {
+                // 우리 계약 안에서 이미 만들어진 값을 읽는 형태(`access.context` 경유)는 정상이다.
+                if (/\.context\b/.test(expr)) return false;
                 // 타입 표기(`clientIp: string`·`clientIp: string | undefined`)는 값이 아니다 —
                 // 정규식이 그것을 값으로 읽어 **완전히 올바른 코드**를 실패시켰다(4차 심의).
                 if (TYPE_POSITION.test(expr)) return false;

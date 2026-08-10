@@ -5,7 +5,7 @@ import type {LeadTracking} from "@zalkera/client";
 import {Button} from "@/components/ui/Button";
 
 /**
- * 광고 랜딩 리드 폼 아일랜드 — `/api/lead` BFF 로 POST(clientIp 는 서버가 XFF 에서 붙인다).
+ * 광고 랜딩 리드 폼 아일랜드 — `/api/lead` BFF 로 POST(clientIp 는 BFF 라우트가 `visitorIp()` 로 뽑아 붙인다).
  *
  * 문의(InquiryForm)와 다른 점: **연락처가 필수, 이메일이 선택**이고, 광고 유입 추적(UTM·클릭ID)을
  * `tracking` 으로 동봉한다. `interest`·`isQuick` 은 랜딩마다 다르므로 props 로 받아 본문에 싣는다.
