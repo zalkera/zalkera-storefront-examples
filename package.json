@@ -14,7 +14,9 @@
         "typecheck": "tsc --noEmit",
         "validate": "node scripts/validate-storefront.mjs",
         "check:aeo": "node scripts/check-aeo-surfaces.mjs",
-        "test": "node --experimental-strip-types --test 'src/**/*.test.ts'"
+        "test": "node --experimental-strip-types --test 'src/**/*.test.ts'",
+        "check:wiring": "node scripts/lib/wiring-parity.mjs",
+        "check:visitor-ip": "node scripts/lib/visitor-ip-parity.mjs"
     },
     "dependencies": {
         "@tosspayments/tosspayments-sdk": "^2.7.1",

@@ -84,7 +84,15 @@ jobs:
         # 배송용 ci.yml 을 따로 두지 않는 이유: 두 벌이 되는 순간 갈린다(이 레포가 내내 싸우는 병이다).
         # 파일이 있을 때만 도는 편이 한 벌을 지키면서 양쪽에서 옳다.
         run: |
-          if [ -f scripts/lib/wiring-parity.mjs ]; then
+          # 판별자는 **검사기 존재**가 아니라 `presets/` 다(3차 심의 경고 1). 검사기 유무로 가르면
+          # 우리 레포에서 그 파일을 지웠을 때 CI 가 **조용히 초록**이 된다 —
+          # "가드를 지우는 것이 가드를 고치는 것보다 쉬우면 안 된다"는 이 레포 규약과 정면으로 어긋난다.
+          # 고객 zip 에는 `presets/` 가 **구조적으로 절대 없으므로**(SOURCE_EXCLUDES) 양쪽에서 옳다.
+          if [ -d presets ]; then
+            if [ ! -f scripts/lib/wiring-parity.mjs ]; then
+              echo "::error::presets/ 가 있는데 배선 동일성 검사기가 없습니다 — 가드가 지워졌습니다."
+              exit 1
+            fi
             node scripts/lib/wiring-parity.mjs
           else
             echo "배선 동일성은 잘커라 레포 전용 검사입니다(팩 4벌 대조) — 건너뜁니다."

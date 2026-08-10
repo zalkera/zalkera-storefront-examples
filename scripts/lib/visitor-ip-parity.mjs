@@ -69,7 +69,14 @@ const FORGEABLE = /["'`](?:x-forwarded-for|x-real-ip|forwarded)["'`]/i;
  * (선언을 못 본 것으로 쳐서 실패시킨다) 안전하다.
  */
 function stripComments(text) {
-    return text.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/^\s*\/\/.*$/gm, " ");
+    return (
+        text
+            .replace(/\/\*[\s\S]*?\*\//g, " ")
+            // **후행 주석까지** 지운다. 종전엔 행 전체 주석만 지워서 `getOrder(...); // clientIp` 가
+            // 선언 보유로 통과했다(3차 심의 실측 — "주석 제거 후 판정"이 절반만 참이었다).
+            // `:` 앞선 것은 남긴다 — `https://` 를 지우면 URL 이 든 정상 줄이 통째로 사라진다.
+            .replace(/(^|[^:])\/\/.*$/gm, "$1 ")
+    );
 }
 
 function walk(dir, base = "") {
@@ -109,10 +116,17 @@ export function checkVisitorIp(root = join(HERE, "..", "..")) {
             const text = stripComments(readFileSync(join(tree.dir, rel), "utf8"));
             // `.fn(` 뿐 아니라 **구조분해로 꺼내 쓴 것**도 잡는다(`const {getOrder} = client`) —
             // 재심의가 그 형태로 검사 시야를 벗어났다.
+            // 클라이언트를 쓰는 파일인가. **구조분해 탐지의 전제**다 — 이게 없으면 같은 이름의 지역
+            // 헬퍼(`const {cancelOrder} = helpers`)가 위반으로 잡혀 **고객 CI 를 적색으로** 만든다
+            // (3차 심의 거짓 양성 실측). 고객 코드에 우리가 낼 수 있는 가장 나쁜 오검이다.
+            const usesClient = /@zalkera\/client|zalkera/i.test(text);
             const hits = IP_SENSITIVE.filter(
                 (fn) =>
                     new RegExp(`\\.${fn}\\s*\\(`).test(text) ||
-                    new RegExp(`(?:const|let|var)\\s*\\{[^}]*\\b${fn}\\b[^}]*\\}\\s*=`).test(text),
+                    // 대괄호 접근 — 종전엔 파일이 **스캔 대상조차 안 됐다**(3차 심의 실측).
+                    new RegExp(`\\[\\s*["'\`]${fn}["'\`]\\s*\\]`).test(text) ||
+                    (usesClient &&
+                        new RegExp(`(?:const|let|var)\\s*\\{[^}]*\\b${fn}\\b[^}]*\\}\\s*=`).test(text)),
             );
             if (hits.length === 0) continue;
             scanned += 1;
@@ -126,13 +140,17 @@ export function checkVisitorIp(root = join(HERE, "..", "..")) {
                 continue;
             }
             declared += 1;
-            // `visitorIp` 가 **불린 적이 있는지**를 본다. 문자열만 있으면(죽은 import·이름만 언급)
-            // 위조 검사가 통째로 꺼졌다(재심의 우회 ⑤).
-            if (!/\bvisitorIp\s*\(/.test(text) && FORGEABLE.test(text)) {
+            // **선언했으면 `visitorIp()` 를 불렀어야 한다.** 종전엔 "위조 형태가 보이면"만 잡아서,
+            // 헤더 이름을 계산해 만들면(템플릿 리터럴·`join("-")`) 통째로 빠져나갔다(3차 심의 실측).
+            // 형태를 열거하는 쪽은 항상 진다 — **계약을 요구하는 쪽으로 뒤집는다.**
+            // client 문서가 "값은 visitorIp 로 뽑아라"라고 명시하므로 이것이 계약 그대로다.
+            if (!/\bvisitorIp\s*\(/.test(text)) {
                 violations.push({
                     tree: tree.name,
                     file: rel,
-                    why: "clientIp 를 visitorIp() 없이 채운다 — 방문자가 위조할 수 있는 값이다",
+                    why: FORGEABLE.test(text)
+                        ? "clientIp 를 visitorIp() 없이 채운다 — 방문자가 위조할 수 있는 값이다"
+                        : "clientIp 를 선언했는데 visitorIp() 를 부르지 않는다 — 값의 출처를 보증할 수 없다",
                 });
             }
         }
