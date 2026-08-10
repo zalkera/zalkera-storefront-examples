@@ -120,13 +120,17 @@ const access = {accessToken, phone, context: {clientIp: visitorIp(await headers(
 - **값은 반드시 `visitorIp()` 로 뽑아라.** `x-forwarded-for` 첫 홉을 직접 쓰면 **방문자가 위조할 수 있다**
   — 선언이 있는 척하면서 값이 거짓이면 없느니만 못하다(로그·rate-limit 이 공격자가 고른 값을 믿는다).
 - 변수 경유도 정상이다: `const ip = visitorIp(await headers()); … context: {clientIp: ip}`.
-- 안 하면 무엇이 나빠지나: 게스트 주문 인가의 **실패** rate-limit 이 IP 축을 쓰므로, 이 사이트의 게스트가
-  한 IP 로 뭉쳐 남의 오입력이 쌓이면 내가 오타 한 번에 403 대신 429 를 받는다(**성공한 조회는 막히지
-  않는다**). 그리고 스캐너 탐지가 주문번호 축 하나로 줄어든다.
+- 안 하면 무엇이 나빠지나 — **축마다 결과가 다르다.**
+  - **주문 인가**(`getOrder`·`getShipment`·`cancelOrder`·결제·완료): 백엔드가 **실패만** 세고 성공은 절대
+    막지 않는다. 그래서 이 사이트 게스트가 한 IP 로 뭉치면, 남의 오입력이 쌓인 뒤 내가 오타 한 번에
+    403 대신 **429** 를 받는다. 그리고 스캐너 탐지가 주문번호 축 하나로 줄어든다.
+  - **문의·리드**(`submitInquiry`·`submitLead`): **모든 호출을 센다**(성공도). 문의 한도가 60초에 3건이라,
+    뭉치면 **그 사이트의 4번째 문의 제출이 429** 다 — 이쪽이 훨씬 날카롭다.
 
-검사기는 `npm run check:visitor-ip`(`scripts/lib/visitor-ip-parity.mjs`, CI 게이트). **`@zalkera/client` 나
-`@/lib/zalkera` 를 import 한 파일만** 본다 — 같은 이름의 자기 함수(`repo.getOrder(id)`)는 대상이 아니다.
-`clientIp` 를 선언했는데 값이 `visitorIp()` 에서 오지 않으면 그것도 위반이다.
+> 이 규칙을 검사하는 도구는 **잘커라 레포 전용**이라 이 소스에는 들어 있지 않다(있었던 적이 있는데,
+> 정규식 판정이 **정상 코드를 실패시키는** 형태를 다 못 막아 걷었다 — 남의 빌드를 막는 쪽이 못 잡는
+> 쪽보다 비싸다). 그러니 이 절이 곧 규칙이다: **IP 민감 호출 9종에는 `visitorIp()` 로 뽑은 `clientIp` 를
+> 넘긴다.** 값을 헬퍼로 빼도 되고 조건부로 채워도 된다 — **출처가 `visitorIp()` 이면 된다.**
 
 ## 능력 ↔ 구현 좌표 — **안 쓰는 것을 지우는 법**
 

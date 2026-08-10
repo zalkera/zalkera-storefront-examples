@@ -22,6 +22,17 @@
  * 넘긴다). 문장 단위로 좁히면 정상 코드가 걸리고, 그러면 검사기를 끄게 된다 — 끄이는 검사기는 없는
  * 검사기보다 나쁘다.
  *
+ * ## 이 검사기는 **우리 레포 전용**이다 (2026-08-10 · 4차 심의)
+ *
+ * 한때 고객 zip 에도 실었는데 네 라운드에 걸쳐 **거짓 양성이 닫히지 않았다**(타입 전용 import · 헬퍼
+ * 경유 `clientIp` · IP 무관 용도로 client 를 쓰는 파일의 동명 자기 함수). 위험이 비대칭이다 —
+ * 거짓 양성은 **고객 배포를 무환불로 막고** 주석 면제도 구조적으로 불가능한데(주석을 지우므로),
+ * 거짓 음성은 우리가 못 잡을 뿐이다. 게다가 이 게이트가 실제로 도는 유일한 고객 집단(BYO)이
+ * 거짓 실패를 먹는 집단과 같았다(관리형은 플랫폼이 워크플로를 덮어써 아예 안 돈다).
+ *
+ * 그래서 배송을 걷었다. **목적은 원래 우리 팩 4벌이 갈리는 것을 막는 것**이고, 그 목적은 여기서만
+ * 서면 달성된다. 고객에게는 규칙을 `AGENTS.md` 로 계속 준다(가드가 아니라 안내로).
+ *
  * ## 왜 첫 홉을 직접 쓰면 안 되나
  *
  * `visitorIp()` 를 안 쓰고 `x-forwarded-for` 첫 항목을 손으로 뽑는 코드도 잡는다 — 첫 엔트리는
@@ -69,6 +80,10 @@ const IMPORTS_CLIENT = /from\s+["'](?:@zalkera\/client|[^"']*lib\/zalkera)["']/;
  * 그 셋으로 우회에 성공했다. 헤더 이름을 직접 만지는 것 자체가 신호이므로 추출 방법은 안 따진다.
  */
 const FORGEABLE = /["'`](?:x-forwarded-for|x-real-ip|forwarded)["'`]/i;
+
+/** `clientIp: string` 같은 **타입 자리**. 값이 아니므로 출처를 물을 대상이 아니다. */
+const TYPE_POSITION =
+    /^\s*(?:string|number|boolean|any|unknown|null|undefined)(?:\s*\|\s*(?:string|number|boolean|any|unknown|null|undefined))*\s*;?\s*$/;
 
 /**
  * 주석을 지운 사본. **판정은 실행되는 코드에만** 걸어야 한다 — 재심의가 "주석 안의 `clientIp`" 하나로
@@ -133,7 +148,10 @@ export function checkVisitorIp(root = join(HERE, "..", "..")) {
             // 판정해, 고객이 자기 DB 계층에 같은 이름을 쓰면(`repo.getOrder(id)` — 커머스 확장 코드에서
             // 흔한 이름이다) **그 고객 CI 가 적색이 되고 BYO 테넌트의 코드 배포가 무환불로 종결**됐다.
             // 우리가 남의 레포에 낼 수 있는 가장 나쁜 오검이라, 판정 자체를 클라이언트 바인딩으로 좁힌다.
-            if (!IMPORTS_CLIENT.test(text)) continue;
+            // 타입만 가져다 쓰는 것은 바인딩이 아니다 — 그 파일의 `repo.getOrder(id)` 는 남의 함수다
+            // (4차 심의 실측: 이 레포 자신이 `import type {OrderSummary}` 형태를 쓴다).
+            const runtimeImports = text.replace(/import\s+type\s[^;]*;/g, " ");
+            if (!IMPORTS_CLIENT.test(runtimeImports)) continue;
 
             const hits = IP_SENSITIVE.filter((fn) =>
                 [
@@ -164,12 +182,25 @@ export function checkVisitorIp(root = join(HERE, "..", "..")) {
             // 직접 호출과 변수 경유(`const ip = visitorIp(h); … clientIp: ip`) 둘 다 정상 형태이므로
             // **출처를 따라간다** — 형태를 세는 대신 값이 어디서 왔는지를 본다.
             const fromVisitorIp = new Set(
-                [...text.matchAll(/(?:const|let|var)\s+(\w+)\s*=\s*(?:await\s+)?visitorIp\s*\(/g)].map(
+                // 선언+초기화(`const ip = visitorIp(h)`)와 **나중 대입**(`let ip; … ip = visitorIp(h)`)
+                // 둘 다 정상 형태다. 앞의 것만 인정하면 조건부 대입이 거짓 실패한다(4차 심의).
+                [...text.matchAll(/(?:(?:const|let|var)\s+)?(\w+)\s*=\s*(?:await\s+)?visitorIp\s*\(/g)].map(
                     (m) => m[1],
                 ),
             );
-            const unresolved = [...text.matchAll(/clientIp\s*:\s*([^,}\n]+)/g)].filter((m) => {
-                const expr = m[1];
+            // `clientIp: <식>` 과 shorthand `{clientIp}` 를 함께 본다. shorthand 는 4차 심의가
+            // **위조값을 통과시킨 자리**다(`const clientIp = xff.split(",")[0]` 뒤 `{clientIp}`).
+            // 값 표기만 보면 그 형태가 통째로 안 보인다 — 그래서 이름의 출처까지 따라간다.
+            const values = [...text.matchAll(/clientIp\s*:\s*([^,}\n]+)/g)].map((m) => m[1]);
+            const shorthand = /\{[^}]*\bclientIp\b[^}:]*\}/.test(text) && !/clientIp\s*:/.test(text);
+            if (shorthand) {
+                const decl = /(?:const|let|var)\s+clientIp\s*=\s*([^;\n]+)/.exec(text);
+                values.push(decl ? decl[1] : "");
+            }
+            const unresolved = values.filter((expr) => {
+                // 타입 표기(`clientIp: string`·`clientIp: string | undefined`)는 값이 아니다 —
+                // 정규식이 그것을 값으로 읽어 **완전히 올바른 코드**를 실패시켰다(4차 심의).
+                if (TYPE_POSITION.test(expr)) return false;
                 if (/\bvisitorIp\s*\(/.test(expr)) return false;
                 return ![...fromVisitorIp].some((v) => new RegExp(`\\b${v}\\b`).test(expr));
             });
@@ -191,11 +222,11 @@ if (isMain) {
     if (violations.length > 0) {
         console.error("방문자 IP 선언 누락:");
         for (const v of violations) console.error(`  ${v.tree}/${v.file} — ${v.why}`);
-        console.error(
-            "\n선언이 없으면 백엔드가 보는 IP 가 **테넌트 서버 하나**로 뭉친다. 게스트 주문 인가는",
-        );
-        console.error("**실패만** 테넌트×IP 로 계수하므로(성공은 절대 안 막힌다), 남의 오입력이 쌓이면");
-        console.error("오타 한 번에 403 대신 429 를 받고, 스캐너 탐지가 주문번호 축 하나로 줄어든다.");
+        console.error("\n선언이 없으면 백엔드가 보는 IP 가 **테넌트 서버 하나**로 뭉친다. 축마다 결과가 다르다:");
+        console.error("  · 주문 인가(getOrder 등) — **실패만** 계수한다(성공은 절대 안 막힌다). 남의 오입력이");
+        console.error("    쌓이면 오타 한 번에 403 대신 429 를 받고, 스캐너 탐지가 주문번호 축 하나로 줄어든다.");
+        console.error("  · 문의·리드(submitInquiry/submitLead) — **모든 호출을 계수한다.** 상용 문의 한도가");
+        console.error("    60초에 3건이라, 뭉치면 그 사이트의 4번째 문의 제출이 429 다(성공도 막힌다).");
         process.exit(1);
     }
     console.log(`방문자 IP 선언 통과 — IP 민감 호출 파일 ${scanned}개, 선언 ${declared}개`);
