@@ -42,16 +42,35 @@ const HERE = dirname(fileURLToPath(import.meta.url));
  * 트랜치에서 같이 본다.
  */
 const IP_SENSITIVE = [
+    // RequestContext 를 직접 받는 것
+    "recordPostView",
+    "submitInquiry",
+    "submitLead",
+    // OrderAccess 를 경유하는 것 — 게스트 인가 rate-limit 이 이 축에 선다
     "getOrder",
     "getShipment",
     "cancelOrder",
-    "submitInquiry",
-    "submitLead",
-    "recordPostView",
+    "startPayment",
+    "confirmPayment",
+    "completeOrder",
 ];
 
-/** 방문자가 위조할 수 있는 값을 손으로 뽑는 형태. */
-const FORGEABLE = /headers\(\)[\s\S]{0,80}?["']x-forwarded-for["']|["']x-forwarded-for["'][\s\S]{0,60}?split/;
+/**
+ * 방문자가 위조할 수 있는 값을 손으로 뽑는 형태.
+ *
+ * 대문자 표기(`X-Forwarded-For`)·`x-real-ip`·`substring`/`indexOf` 추출까지 덮는다 — 재심의가
+ * 그 셋으로 우회에 성공했다. 헤더 이름을 직접 만지는 것 자체가 신호이므로 추출 방법은 안 따진다.
+ */
+const FORGEABLE = /["'`](?:x-forwarded-for|x-real-ip|forwarded)["'`]/i;
+
+/**
+ * 주석을 지운 사본. **판정은 실행되는 코드에만** 걸어야 한다 — 재심의가 "주석 안의 `clientIp`" 하나로
+ * 검사를 통과시켰다. 문자열 안의 `//` 를 지우는 오검이 있을 수 있으나, 방향은 **더 엄격해지는 쪽**이라
+ * (선언을 못 본 것으로 쳐서 실패시킨다) 안전하다.
+ */
+function stripComments(text) {
+    return text.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/^\s*\/\/.*$/gm, " ");
+}
 
 function walk(dir, base = "") {
     let entries;
@@ -87,8 +106,14 @@ export function checkVisitorIp(root = join(HERE, "..", "..")) {
     for (const tree of sourceTrees(root)) {
         for (const rel of walk(tree.dir)) {
             if (!/\.(ts|tsx)$/.test(rel) || rel.endsWith(".test.ts")) continue;
-            const text = readFileSync(join(tree.dir, rel), "utf8");
-            const hits = IP_SENSITIVE.filter((fn) => new RegExp(`\\.${fn}\\s*\\(`).test(text));
+            const text = stripComments(readFileSync(join(tree.dir, rel), "utf8"));
+            // `.fn(` 뿐 아니라 **구조분해로 꺼내 쓴 것**도 잡는다(`const {getOrder} = client`) —
+            // 재심의가 그 형태로 검사 시야를 벗어났다.
+            const hits = IP_SENSITIVE.filter(
+                (fn) =>
+                    new RegExp(`\\.${fn}\\s*\\(`).test(text) ||
+                    new RegExp(`(?:const|let|var)\\s*\\{[^}]*\\b${fn}\\b[^}]*\\}\\s*=`).test(text),
+            );
             if (hits.length === 0) continue;
             scanned += 1;
 
@@ -101,7 +126,9 @@ export function checkVisitorIp(root = join(HERE, "..", "..")) {
                 continue;
             }
             declared += 1;
-            if (!text.includes("visitorIp") && FORGEABLE.test(text)) {
+            // `visitorIp` 가 **불린 적이 있는지**를 본다. 문자열만 있으면(죽은 import·이름만 언급)
+            // 위조 검사가 통째로 꺼졌다(재심의 우회 ⑤).
+            if (!/\bvisitorIp\s*\(/.test(text) && FORGEABLE.test(text)) {
                 violations.push({
                     tree: tree.name,
                     file: rel,
