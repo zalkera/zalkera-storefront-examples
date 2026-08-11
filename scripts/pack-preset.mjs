@@ -154,6 +154,10 @@ const SOURCE_EXCLUDES = [
     // 애초에 이 검사기의 목적은 **우리 팩 4벌이 갈리는 것**을 막는 것이다(2026-08-10 사고의 실제 원인).
     // 그 목적은 우리 레포에서만 서면 달성된다. 규칙 자체는 AGENTS.md 로 계속 배송한다.
     "scripts/lib/visitor-ip-parity.mjs",
+    // ⚠ **그 픽스처도 함께 뺀다.** 본체만 빼고 시험을 실었더니 zip 안에서 단독 실행 시
+    // `ERR_MODULE_NOT_FOUND` 로 죽었다(심의 실측). 고객 CI 는 교집합 가드로 그 단계를 스킵해
+    // 관문이 깨지진 않지만, **고객이 받은 소스에 실행하면 죽는 파일**을 넣어 보내는 셈이다.
+    "scripts/lib/visitor-ip-parity.test.mjs",
     // ⚠ **우리 인프라 워크플로는 배송물이 아니다**(심의 차단 2 · 2026-08-10). `ci.yml`·`client-upgrade.yml`
     // 은 고객 레포에서 돌라고 주는 것이지만, 이것은 **자사 S3·IAM role·AWS 계정 ID** 를 담은 내부
     // 굽기 파이프라인이다. 실려 나가면 ⑴ 고객 레포에서 lockfile push·cron 마다 3플랫폼 빌드가 돌고
