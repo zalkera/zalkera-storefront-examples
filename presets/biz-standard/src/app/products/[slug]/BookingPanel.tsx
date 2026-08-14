@@ -108,7 +108,9 @@ export function BookingPanel({product}: {product: ProductDetail}) {
         return (
             <p className="text-muted">
                 예약 가능 시간을 불러오지 못했습니다.{" "}
-                <button type="button" onClick={load} className={LINK}>다시 시도</button>
+                <button type="button" onClick={load} className={LINK}>
+                    다시 시도
+                </button>
             </p>
         );
     }
@@ -182,7 +184,9 @@ export function BookingPanel({product}: {product: ProductDetail}) {
                             인원{" "}
                             <select value={quantity} onChange={(e) => setQuantity(Number(e.target.value))}>
                                 {Array.from({length: maxQuantity}, (_, i) => i + 1).map((n) => (
-                                    <option key={n} value={n}>{n}</option>
+                                    <option key={n} value={n}>
+                                        {n}
+                                    </option>
                                 ))}
                             </select>
                         </label>
@@ -215,7 +219,10 @@ export function BookingPanel({product}: {product: ProductDetail}) {
                     ) : (
                         // 예약은 로그인 필수(게스트 불가) — 여기가 경계다. 슬롯을 먼저 보여주고
                         // 결심한 뒤에 로그인을 요구하는 게 자연스러운 순서다.
-                        <a href={`/login?next=${encodeURIComponent(`/products/${product.slug}`)}`} className={buttonClasses("primary", "px-4 py-1.5")}>
+                        <a
+                            href={`/login?next=${encodeURIComponent(`/products/${product.slug}`)}`}
+                            className={buttonClasses("primary", "px-4 py-1.5")}
+                        >
                             로그인하고 예약하기
                         </a>
                     )}
@@ -239,8 +246,7 @@ function groupByDate(slots: AvailabilitySlot[]): Record<string, AvailabilitySlot
 
 const formatDate = (ymd: string) =>
     new Date(`${ymd}T00:00:00`).toLocaleDateString("ko-KR", {month: "numeric", day: "numeric", weekday: "short"});
-const formatTime = (iso: string) =>
-    new Date(iso).toLocaleTimeString("ko-KR", {hour: "2-digit", minute: "2-digit"});
+const formatTime = (iso: string) => new Date(iso).toLocaleTimeString("ko-KR", {hour: "2-digit", minute: "2-digit"});
 
 /** 백엔드 1회 예약 수량 한도(BookingService.MAX_QUANTITY) — 넘기면 QUANTITY_EXCEEDED. */
 const MAX_QUANTITY = 10;

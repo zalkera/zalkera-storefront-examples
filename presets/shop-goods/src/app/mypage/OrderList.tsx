@@ -64,7 +64,9 @@ export function OrderList() {
         return (
             <p className="text-muted">
                 주문을 불러오지 못했습니다.{" "}
-                <button type="button" onClick={load} className={LINK}>다시 시도</button>
+                <button type="button" onClick={load} className={LINK}>
+                    다시 시도
+                </button>
             </p>
         );
     }
@@ -87,7 +89,12 @@ export function OrderList() {
                         <div className="flex gap-1.5">
                             {/* 미결제만 취소 가능 — 결제된 주문은 환불 경로다(서버가 NOT_CANCELABLE 로 막는다). */}
                             {o.status === "PENDING_PAYMENT" && (
-                                <button type="button" onClick={() => act(o.orderNo, "cancel")} disabled={pending} className={ACTION}>
+                                <button
+                                    type="button"
+                                    onClick={() => act(o.orderNo, "cancel")}
+                                    disabled={pending}
+                                    className={ACTION}
+                                >
                                     취소
                                 </button>
                             )}
@@ -96,7 +103,8 @@ export function OrderList() {
                                 <button
                                     type="button"
                                     onClick={() => {
-                                        if (confirm("구매를 확정하면 반품·교환이 마감됩니다. 확정할까요?")) act(o.orderNo, "complete");
+                                        if (confirm("구매를 확정하면 반품·교환이 마감됩니다. 확정할까요?"))
+                                            act(o.orderNo, "complete");
                                     }}
                                     disabled={pending}
                                     className={ACTION}

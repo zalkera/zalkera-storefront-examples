@@ -110,7 +110,13 @@ export function BookingList() {
 
 const formatWhen = (iso: string | null) =>
     iso
-        ? new Date(iso).toLocaleString("ko-KR", {month: "numeric", day: "numeric", weekday: "short", hour: "2-digit", minute: "2-digit"})
+        ? new Date(iso).toLocaleString("ko-KR", {
+              month: "numeric",
+              day: "numeric",
+              weekday: "short",
+              hour: "2-digit",
+              minute: "2-digit",
+          })
         : "시간 미정";
 
 const STATUS_LABEL: Record<string, string> = {

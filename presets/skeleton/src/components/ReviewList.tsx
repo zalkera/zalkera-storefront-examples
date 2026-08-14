@@ -15,7 +15,13 @@ import {ReviewLoadMore} from "./ReviewLoadMore";
  *
  * SDK 를 직접 호출하지 않는다(props 로 받는다) — "use client" 가 아니라서 baseUrl 노출 위험이 없다.
  */
-export function ReviewList({reviewPage, summary}: {reviewPage: Paginated<Review> | null; summary: RatingSummary | null}) {
+export function ReviewList({
+    reviewPage,
+    summary,
+}: {
+    reviewPage: Paginated<Review> | null;
+    summary: RatingSummary | null;
+}) {
     const reviews = reviewPage?.content ?? [];
     // 첫 페이지 조회 실패(null)면 더보기 아일랜드는 미렌더(마지막 페이지로 취급).
     const initialLast = reviewPage?.last ?? true;

@@ -17,7 +17,9 @@ export default async function CartPage() {
         <main className="py-8">
             <h1>장바구니</h1>
             {cart.items.length === 0 ? (
-                <p>비어 있습니다. <Link href="/">상품 보러 가기</Link></p>
+                <p>
+                    비어 있습니다. <Link href="/">상품 보러 가기</Link>
+                </p>
             ) : (
                 <>
                     <ul className="divide-y divide-border list-none p-0">
@@ -26,9 +28,7 @@ export default async function CartPage() {
                                 {line.productName}
                                 {line.variantLabel ? ` · ${line.variantLabel}` : ""} × {line.quantity}
                                 {" — "}
-                                {(line.lineTotal ?? 0).toLocaleString()}원
-                                {line.available ? "" : " (판매 불가)"}
-                                {" "}
+                                {(line.lineTotal ?? 0).toLocaleString()}원{line.available ? "" : " (판매 불가)"}{" "}
                                 <CartActions variantId={line.variantId} />
                             </li>
                         ))}

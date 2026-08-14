@@ -33,7 +33,9 @@ export default function CheckoutPage() {
                     buyerName: form.buyerName,
                     buyerPhone: form.buyerPhone,
                     buyerEmail: form.buyerEmail || undefined,
-                    shipTo: form.address1 ? {name: form.buyerName, phone: form.buyerPhone, address1: form.address1} : undefined,
+                    shipTo: form.address1
+                        ? {name: form.buyerName, phone: form.buyerPhone, address1: form.address1}
+                        : undefined,
                 }),
             });
             const data = await res.json();
@@ -61,10 +63,17 @@ export default function CheckoutPage() {
             <h1>결제</h1>
             <form onSubmit={submit} className="grid gap-3 max-w-sm">
                 <input required placeholder="이름" value={form.buyerName} onChange={set("buyerName")} />
-                <input required placeholder="연락처 (주문 조회에 사용)" value={form.buyerPhone} onChange={set("buyerPhone")} />
+                <input
+                    required
+                    placeholder="연락처 (주문 조회에 사용)"
+                    value={form.buyerPhone}
+                    onChange={set("buyerPhone")}
+                />
                 <input placeholder="이메일 (선택)" value={form.buyerEmail} onChange={set("buyerEmail")} />
                 <input placeholder="배송지 주소 (재화면)" value={form.address1} onChange={set("address1")} />
-                <Button type="submit" disabled={pending}>{pending ? "처리 중…" : "결제하기"}</Button>
+                <Button type="submit" disabled={pending}>
+                    {pending ? "처리 중…" : "결제하기"}
+                </Button>
                 {error && <p className="text-danger text-sm">{error}</p>}
             </form>
         </main>

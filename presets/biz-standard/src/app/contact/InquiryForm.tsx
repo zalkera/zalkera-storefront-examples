@@ -40,7 +40,9 @@ export function InquiryForm() {
             }
             // 400 필드 검증 — errors 배열을 필드별로 표시.
             if (Array.isArray(data?.errors)) {
-                setErrors(Object.fromEntries(data.errors.map((v: {field: string; message: string}) => [v.field, v.message])));
+                setErrors(
+                    Object.fromEntries(data.errors.map((v: {field: string; message: string}) => [v.field, v.message])),
+                );
                 return;
             }
             setMessage(data?.message ?? "문의 접수에 실패했습니다.");

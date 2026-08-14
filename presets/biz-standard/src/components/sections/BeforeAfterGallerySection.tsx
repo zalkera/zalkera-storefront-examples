@@ -38,9 +38,7 @@ export function BeforeAfterGallerySection({config}: {config: unknown}) {
                                 className="w-1/2 aspect-square object-cover rounded"
                             />
                         </div>
-                        {item.caption && (
-                            <figcaption className="text-sm text-muted mt-1.5">{item.caption}</figcaption>
-                        )}
+                        {item.caption && <figcaption className="text-sm text-muted mt-1.5">{item.caption}</figcaption>}
                     </figure>
                 ))}
             </div>

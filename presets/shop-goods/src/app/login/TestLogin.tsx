@@ -53,7 +53,12 @@ export function TestLogin({consents, disabled}: {consents: ConsentInput[]; disab
                 실제 OAuth 없이 code(=subject)로 세션을 발급합니다. 백엔드 test-provider-enabled=true 필요.
             </p>
             <form onSubmit={submit} className="flex gap-2 mt-2">
-                <input className="flex-1" value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="subject" />
+                <input
+                    className="flex-1"
+                    value={subject}
+                    onChange={(e) => setSubject(e.target.value)}
+                    placeholder="subject"
+                />
                 <Button type="submit" disabled={pending || disabled}>
                     {pending ? "…" : "테스트 로그인"}
                 </Button>

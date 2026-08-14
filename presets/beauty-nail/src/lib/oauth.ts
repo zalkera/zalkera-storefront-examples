@@ -44,7 +44,6 @@ export function safeNextPath(raw: string | null | undefined): string | null {
     }
 }
 
-
 /** 로그인 동의 UI 에 노출할 항목 정의. `required` 3종은 신규 가입에 모두 체크돼야 한다. */
 export interface ConsentItem {
     type: ConsentType;

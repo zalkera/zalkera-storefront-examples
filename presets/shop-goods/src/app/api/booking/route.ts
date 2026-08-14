@@ -49,7 +49,10 @@ export async function POST(req: Request) {
         }
 
         // 유료·예약금 — 기존 결제 흐름에 그대로 얹는다(체크아웃 라우트와 동형).
-        const payment = await zalkera.startPayment(booking.orderNo, {accessToken, context: {clientIp: visitorIp(req.headers)}});
+        const payment = await zalkera.startPayment(booking.orderNo, {
+            accessToken,
+            context: {clientIp: visitorIp(req.headers)},
+        });
         const response = NextResponse.json({
             booking,
             orderNo: booking.orderNo,

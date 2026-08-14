@@ -30,8 +30,19 @@ const PAGE_SIZE = 100;
  * 알리는 셈이라, 색인은 되는데 내용이 다르다. 그림자화된 slug 는 조용히 뺀다.
  */
 const RESERVED_SEGMENTS = new Set([
-    "api", "auth", "blog", "cart", "checkout", "contact",
-    "login", "media", "mypage", "orders", "payment", "policies", "products",
+    "api",
+    "auth",
+    "blog",
+    "cart",
+    "checkout",
+    "contact",
+    "login",
+    "media",
+    "mypage",
+    "orders",
+    "payment",
+    "policies",
+    "products",
 ]);
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {

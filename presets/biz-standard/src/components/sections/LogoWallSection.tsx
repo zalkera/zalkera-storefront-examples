@@ -28,9 +28,7 @@ export function LogoWallSection({config}: {config: unknown}) {
                             className="h-8 w-auto opacity-70 transition-opacity hover:opacity-100"
                         />
                     );
-                    return (
-                        <li key={i}>{item.href ? <Link href={safeLinkUrl(item.href)}>{logo}</Link> : logo}</li>
-                    );
+                    return <li key={i}>{item.href ? <Link href={safeLinkUrl(item.href)}>{logo}</Link> : logo}</li>;
                 })}
             </ul>
         </section>

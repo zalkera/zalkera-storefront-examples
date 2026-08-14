@@ -110,11 +110,7 @@ export default async function ProductPage({params}: {params: Promise<{slug: stri
             {product.description && <p className="whitespace-pre-wrap">{product.description}</p>}
             {/* 예약(SERVICE)은 카트를 타지 않는다(혼합주문 금지) — 담기 대신 슬롯 선택이다.
                 BookingPanel 은 클라이언트 아일랜드라 이 페이지의 ISR 정적성을 깨지 않는다. */}
-            {product.productType === "SERVICE" ? (
-                <BookingPanel product={product} />
-            ) : (
-                <AddToCart product={product} />
-            )}
+            {product.productType === "SERVICE" ? <BookingPanel product={product} /> : <AddToCart product={product} />}
             <ReviewList reviewPage={reviewPage} summary={rating} />
         </main>
     );

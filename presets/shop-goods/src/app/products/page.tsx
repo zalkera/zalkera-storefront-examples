@@ -41,9 +41,7 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default async function ProductsPage() {
     // 백엔드가 죽어도 셸은 살아야 한다 — 실패는 삼키고 빈 목록으로 강하한다(블로그 목록과 같은 판단).
-    const page = await zalkera
-        .listProducts({size: PAGE_SIZE}, {tags: ["site-config", "products"]})
-        .catch(() => null);
+    const page = await zalkera.listProducts({size: PAGE_SIZE}, {tags: ["site-config", "products"]}).catch(() => null);
     // 카테고리 내비 — 없으면 그냥 안 그린다. **이게 없으면 `/c/{slug}` 는 sitemap 에만 있고 사람이
     // 도달할 길이 없는 라우트가 된다**(크롤러도 링크 추적으로는 못 만난다).
     const categories = await zalkera.listProductCategories({tags: ["site-config", "products"]}).catch(() => null);
@@ -55,13 +53,14 @@ export default async function ProductsPage() {
             {/* 목록의 구조화 데이터 — 화면에 그리는 바로 그 순서·그 상품들이다. 0건이면 빈 ItemList 를
                 내지 않는다(팔 것이 없다는 진술을 그래프로 하지 않는다). */}
             {items.length > 0 && (
-                <JsonLd
-                    data={itemListJsonLd(
-                        items.map((p) => ({name: p.name, url: `${base}/products/${p.slug}`})),
-                    )}
-                />
+                <JsonLd data={itemListJsonLd(items.map((p) => ({name: p.name, url: `${base}/products/${p.slug}`})))} />
             )}
-            <JsonLd data={breadcrumbJsonLd([{name: "홈", url: base}, {name: "상품", url: `${base}/products`}])} />
+            <JsonLd
+                data={breadcrumbJsonLd([
+                    {name: "홈", url: base},
+                    {name: "상품", url: `${base}/products`},
+                ])}
+            />
 
             <h1>상품</h1>
             {categories != null && categories.length > 0 && (

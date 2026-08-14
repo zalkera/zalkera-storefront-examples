@@ -62,11 +62,7 @@ export function LoginPanel({showTest}: {showTest: boolean}) {
                     ))}
                 </div>
 
-                {!ready && (
-                    <p className="text-muted text-sm mt-2">
-                        가입을 진행하려면 필수 약관에 모두 동의해 주세요.
-                    </p>
-                )}
+                {!ready && <p className="text-muted text-sm mt-2">가입을 진행하려면 필수 약관에 모두 동의해 주세요.</p>}
             </fieldset>
 
             <SocialLoginButtons consents={consents} disabled={!ready} />

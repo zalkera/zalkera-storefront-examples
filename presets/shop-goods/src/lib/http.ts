@@ -57,10 +57,7 @@ export function invalidBody(): NextResponse {
  */
 export function assertSameOrigin(req: Request): NextResponse | null {
     if (isSameOriginRequest(req)) return null;
-    return NextResponse.json(
-        {message: "허용되지 않은 요청 출처입니다.", code: "CROSS_ORIGIN_BLOCKED"},
-        {status: 403},
-    );
+    return NextResponse.json({message: "허용되지 않은 요청 출처입니다.", code: "CROSS_ORIGIN_BLOCKED"}, {status: 403});
 }
 
 /** 본문 필수 라우트의 `Content-Type` 강제 — [assertSameOrigin] 다음 줄. 근거는 [isJsonContentType]. */

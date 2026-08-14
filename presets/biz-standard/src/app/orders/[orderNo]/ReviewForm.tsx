@@ -45,7 +45,9 @@ export function ReviewForm({productId, orderItemId}: {productId: number; orderIt
             }
             // 400 필드 검증 — 필드별 표시(§11 R3 · §9 F1: BFF 가 errors 를 실어 준다).
             if (Array.isArray(data?.errors)) {
-                setFieldErrors(Object.fromEntries(data.errors.map((v: {field: string; message: string}) => [v.field, v.message])));
+                setFieldErrors(
+                    Object.fromEntries(data.errors.map((v: {field: string; message: string}) => [v.field, v.message])),
+                );
                 return;
             }
             setMessage(data?.message ?? "후기 작성에 실패했습니다.");
@@ -67,18 +69,28 @@ export function ReviewForm({productId, orderItemId}: {productId: number; orderIt
                 별점{" "}
                 <select value={rating} onChange={(e) => setRating(Number(e.target.value))}>
                     {[5, 4, 3, 2, 1].map((n) => (
-                        <option key={n} value={n}>{"★".repeat(n)}</option>
+                        <option key={n} value={n}>
+                            {"★".repeat(n)}
+                        </option>
                     ))}
                 </select>
             </label>
             <input placeholder="제목(선택)" value={title} onChange={(e) => setTitle(e.target.value)} />
-            <textarea placeholder="후기 내용" value={content} onChange={(e) => setContent(e.target.value)} rows={3} required />
+            <textarea
+                placeholder="후기 내용"
+                value={content}
+                onChange={(e) => setContent(e.target.value)}
+                rows={3}
+                required
+            />
             {fieldErrors.content && <span className="text-xs text-danger">{fieldErrors.content}</span>}
             <div className="flex gap-2">
                 <button type="button" onClick={submit} disabled={pending || !content.trim()} className={PRIMARY}>
                     {pending ? "등록 중…" : "등록"}
                 </button>
-                <button type="button" onClick={() => setOpen(false)} className={LINK}>취소</button>
+                <button type="button" onClick={() => setOpen(false)} className={LINK}>
+                    취소
+                </button>
             </div>
             {message && <p className="text-sm">{message}</p>}
         </div>

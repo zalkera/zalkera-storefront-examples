@@ -29,13 +29,7 @@ export function HeroSection({config}: {config: unknown}) {
                     </div>
                 )}
             </div>
-            {asset && (
-                <img
-                    src={asset}
-                    alt=""
-                    className="h-auto w-full rounded-xl object-cover"
-                />
-            )}
+            {asset && <img src={asset} alt="" className="h-auto w-full rounded-xl object-cover" />}
         </section>
     );
 }

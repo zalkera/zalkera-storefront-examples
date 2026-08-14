@@ -83,7 +83,12 @@ export default function PaymentWidgetPage() {
         }
     };
 
-    if (descriptor === undefined) return <main className="py-8"><p>불러오는 중…</p></main>;
+    if (descriptor === undefined)
+        return (
+            <main className="py-8">
+                <p>불러오는 중…</p>
+            </main>
+        );
     if (descriptor === null) {
         return (
             <main className="py-8">
