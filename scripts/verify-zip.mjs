@@ -99,10 +99,29 @@ const record = (name, ok, detail = "") => {
  * git 이력은 되돌릴 수 없어서 사후 수습이 불가능하다. `.env.example` 류는 값이 없어 허용.
  */
 const ENV_KEEP = /\.(example|sample|template)$/;
+
+/**
+ * 못 읽은 자리. 납품 zip 안에 권한 없는 디렉터리나 깨진 항목이 있으면 여기 쌓인다.
+ *
+ * ⚠ **비면 안 되는 이유.** 종전엔 `readdirSync` 가 무방비라 그런 zip 하나에 스크립트가 스택트레이스로
+ * 죽었고, 납품사가 받는 반려 사유가 `Error: EACCES … at walk (verify-zip.mjs:105)` 였다. 무엇을
+ * 고치라는 것인지 알 수 없다. 반대로 조용히 건너뛰면 **시크릿 스캔이 0줄 돌고도 "동봉 시크릿 없음"**
+ * 으로 읽힌다 — 검사기 본체에서 같은 결함을 rc 7 로 갈라낸 것과 같은 자리다.
+ */
+const unread = [];
+function readDirSafe(d, what) {
+    try {
+        return readdirSync(d, {withFileTypes: true});
+    } catch (e) {
+        unread.push(`${d} — ${what} 실패 [${e.code ?? "UNKNOWN"}]`);
+        return [];
+    }
+}
+
 function scanSecrets(dir) {
     const hits = [];
     const walk = (d, rel = "") => {
-        for (const e of readdirSync(d, {withFileTypes: true})) {
+        for (const e of readDirSafe(d, "시크릿 스캔")) {
             const r = rel ? `${rel}/${e.name}` : e.name;
             if (e.name === "node_modules" || e.name === ".git" || e.name === ".next") continue;
             if (e.isDirectory()) {
@@ -121,7 +140,7 @@ function scanSecrets(dir) {
 function countImages(dir) {
     let n = 0;
     const walk = (d) => {
-        for (const e of readdirSync(d, {withFileTypes: true})) {
+        for (const e of readDirSafe(d, "이미지 수 세기")) {
             if (e.name === "node_modules" || e.name === ".git" || e.name === ".next") continue;
             if (e.isDirectory()) walk(join(d, e.name));
             else if (/\.(png|jpe?g|webp|gif|svg|avif)$/i.test(e.name)) n++;
@@ -135,7 +154,7 @@ function countImages(dir) {
 function effectiveRoot(dir) {
     let cur = dir;
     for (let i = 0; i < 8; i++) {
-        const children = readdirSync(cur, {withFileTypes: true}).filter((e) => e.name !== "__MACOSX");
+        const children = readDirSafe(cur, "실효 루트 탐색").filter((e) => e.name !== "__MACOSX");
         if (children.length !== 1 || !children[0].isDirectory()) return cur;
         cur = join(cur, children[0].name);
     }
@@ -258,16 +277,38 @@ try {
         }
 
         // ③ 시크릿 0 — 반려 사유 중 되돌릴 수 없는 유일한 항목이라 먼저 본다.
+        //
+        // ⚠ **못 읽은 자리가 있으면 "시크릿 0" 은 참이 아니라 미측정이다.** 안 가른 판이 위험한 이유:
+        // 나중에 "읽지 못한 자리" 목록이 반려로 붙어도, 사람은 위에서 본 `✅ 시크릿 0` 을 기억한다.
+        // 잰 것과 못 잰 것을 한 줄에 섞지 않는다.
+        const beforeSecrets = unread.length;
         const secrets = scanSecrets(root);
-        if (!record("시크릿 0", secrets.length === 0, secrets.length ? secrets.slice(0, 5).join(", ") : "")) {
+        const secretsComplete = unread.length === beforeSecrets;
+        if (secrets.length || !secretsComplete) {
+            record(
+                secretsComplete ? "시크릿 0" : "시크릿 스캔(불완전)",
+                false,
+                secrets.length
+                    ? secrets.slice(0, 5).join(", ")
+                    : "읽지 못한 자리가 있어 **끝까지 훑지 못했습니다** — 0 건이 아니라 미측정입니다",
+            );
             failed = true;
+        } else {
+            record("시크릿 0", true);
         }
 
         // ④ 에셋 라이선스 매니페스트(발주 스펙 §1-5 필수) — **존재만** 기계가 보고 내용 대조는 사람이 한다.
         //    동봉 이미지가 하나도 없으면 요구 자체가 무의미하므로 그때만 면제한다.
+        //    ⚠ 여기도 같은 함정이 있다 — 못 읽은 자리가 있으면 "이미지 0" 이 면제 사유가 되어선 안 된다.
+        const beforeImages = unread.length;
         const images = countImages(root);
+        const imagesComplete = unread.length === beforeImages;
         const manifest = join(root, ".zalkera", "ASSETS-LICENSE.md");
-        if (images === 0) {
+        if (images === 0 && !imagesComplete) {
+            // 이미지 0 이 **면제 사유**로 쓰이는 자리라, 못 세었으면 면제해선 안 된다.
+            record("에셋 라이선스 매니페스트", false, "이미지 수를 끝까지 세지 못해 면제 판단을 할 수 없습니다");
+            failed = true;
+        } else if (images === 0) {
             record("에셋 라이선스 매니페스트", true, "동봉 이미지 없음 — 해당 없음");
         } else if (!record("에셋 라이선스 매니페스트", existsSync(manifest), existsSync(manifest) ? `이미지 ${images}개 — 내용 대조는 사람이` : `이미지 ${images}개인데 .zalkera/ASSETS-LICENSE.md 가 없습니다`)) {
             failed = true;
@@ -352,11 +393,29 @@ try {
         const mode = vLines.find((l) => l.startsWith("스타일 규약 모드")) ?? "";
         const summary = [...vLines].reverse().find((l) => /^(✅|❌)/.test(l)) ?? "";
         const warnings = vLines.filter((l) => l.startsWith("⚠️"));
-        if (v.status !== 0) {
-            record("규약 검사", false, `\n   ${vLines.filter((l) => !l.startsWith("⚠️")).slice(-12).join("\n   ")}`);
+        // 종료코드를 한 칸으로 접으면 납품사가 **"규약을 어겼다"와 "검사를 못 했다"를 구분할 수 없다.**
+        // 둘은 고치는 사람도 고치는 법도 다르다 — 앞은 납품사가 코드를 고치고, 뒤는 zip 안의
+        // 파일 상태(권한·끊어진 심링크)를 고친다. 셋 다 반려지만 사유를 갈라 적는다.
+        //
+        //   0  통과 · 1 규약 위반 · 2 검사기 자체 오류 · 7 검사 불능(못 읽은 자리가 있음)
+        //
+        // ⚠ `status` 는 시그널로 죽으면 **null** 이다. `!== 0` 은 그걸 잡지만 `=== 1` 은 못 잡는다.
+        const detail = `\n   ${vLines.filter((l) => !l.startsWith("⚠️")).slice(-12).join("\n   ")}`;
+        if (v.status === 0) {
+            record("규약 검사", true, [mode, summary].filter(Boolean).join(" · "));
+        } else if (v.status === 7) {
+            record("규약 검사(불능)", false, `\n   zip 안에 **읽지 못한 자리**가 있어 검사가 끝나지 않았습니다 — 통과가 아닙니다.${detail}`);
+            failed = true;
+        } else if (v.status === 1) {
+            record("규약 검사", false, detail);
             failed = true;
         } else {
-            record("규약 검사", true, [mode, summary].filter(Boolean).join(" · "));
+            record(
+                "규약 검사(실행 실패)",
+                false,
+                `\n   검사기가 종료코드 ${v.status ?? `시그널 ${v.signal}`} 로 멈췄습니다 — 규약 검사가 0줄 돌았습니다.${detail}`,
+            );
+            failed = true;
         }
         // 경고는 반려 사유가 아니지만(inferred 모드) 재납품 요청에 그대로 붙일 재료다 — 삼키지 않는다.
         if (warnings.length) {
@@ -457,8 +516,29 @@ try {
     if (keep) {
         console.log(`\n작업 트리 보존: ${work}`);
     } else {
-        rmSync(work, {recursive: true, force: true});
+        try {
+            rmSync(work, {recursive: true, force: true});
+        } catch {
+            // `force` 는 ENOENT 만 삼킨다 — 권한 000 디렉터리가 섞인 zip 이면 EACCES 로 던지고,
+            // 그 예외가 finally 안에서 나가면 **판정 자체를 덮어쓴다**(반려/통과가 정리 실패로 뒤바뀐다).
+            // 정리 실패는 판정이 아니다. 자리만 알려 주고 판정은 아래에서 그대로 낸다.
+            spawnSync("chmod", ["-R", "u+rwX", work]);
+            try {
+                rmSync(work, {recursive: true, force: true});
+            } catch (e) {
+                console.warn(`\n⚠️  작업 트리를 지우지 못했습니다: ${work} [${e.code ?? "UNKNOWN"}] — 손으로 지우십시오.`);
+            }
+        }
     }
+}
+
+// 못 읽은 자리는 **반려**다. 조용히 건너뛰면 시크릿 스캔이 0줄 돌고도 "동봉 시크릿 없음"으로 읽힌다 —
+// 검사기 본체가 rc 7 로 가른 것과 같은 자리이고, 여기 zip 은 우리가 서빙을 책임질 물건이다.
+if (unread.length) {
+    console.error(`\n❌ 읽지 못한 자리 ${unread.length}곳 — 이 자리들은 **검사하지 않았습니다(통과가 아닙니다).**`);
+    for (const u of unread) console.error(`   · ${u}`);
+    console.error("   zip 안 파일 권한을 정상화(디렉터리 755·파일 644)해 다시 압축한 뒤 재납품 요청하십시오.");
+    failed = true;
 }
 
 console.log("─".repeat(60));

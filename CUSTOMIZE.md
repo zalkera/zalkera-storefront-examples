@@ -296,7 +296,8 @@ node scripts/verify-zip.mjs ../내사이트.zip
 어느 쪽이 낫다는 서열은 없고, 값이 다른 단계가 있을 뿐입니다.
 
 **AI 에게 맡길 때**는 `npm install` 후 생기는 `node_modules/@zalkera/client/llms.txt` 와 이 저장소의
-`AGENTS.md` 를 함께 주십시오. 그 두 파일이 이 코드의 규약 전부입니다.
+`AGENTS.md` 를 함께 주십시오. 그 둘이 규약을 **말로** 담고 있고, 기계가 지키는 쪽은 저장소에 이미
+들어 있습니다 — 고친 뒤 `npm run validate` 와 `npm run format` 을 한 번씩 돌리면 됩니다.
 우리 콘솔의 AI 가 아니어도 됩니다 — **소스는 당신 것이고, 아무 AI 로나 고쳐서 다시 올리면 됩니다.**
 
 ---
