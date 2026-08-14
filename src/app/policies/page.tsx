@@ -38,7 +38,13 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function PoliciesPage() {
     // site-config 태그 — 관리자가 정책을 고치면 백엔드가 이 태그로 이 페이지를 콕 집어 무효화한다.
     const config = await zalkera.getSiteConfig({tags: ["site-config"]}).catch(() => null);
-    if (!config) return <main className="py-8"><h1>구매 정책</h1><p>정보를 불러오지 못했습니다.</p></main>;
+    if (!config)
+        return (
+            <main className="py-8">
+                <h1>구매 정책</h1>
+                <p>정보를 불러오지 못했습니다.</p>
+            </main>
+        );
 
     const policies = parsePolicies(config.commercePolicies);
     const fee = config.defaultReturnShippingFee;

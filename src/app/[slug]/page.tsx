@@ -71,7 +71,12 @@ export default async function StaticPage({params}: {params: Promise<{slug: strin
             <JsonLd data={webPageJsonLd({title: page.title, slug}, base, description)} />
             {/* 서브페이지는 홈 아래 1뎁스 — 검색결과에 `홈 > 회사소개` 경로가 선다. 상품·글 상세만
                 갖고 있던 표면이라, 순수 마케팅 사이트에는 여기가 유일한 거처였다. */}
-            <JsonLd data={breadcrumbJsonLd([{name: "홈", url: base}, {name: page.title, url: `${base}/${slug}`}])} />
+            <JsonLd
+                data={breadcrumbJsonLd([
+                    {name: "홈", url: base},
+                    {name: page.title, url: `${base}/${slug}`},
+                ])}
+            />
             <h1 className="text-foreground">{page.title}</h1>
             <SectionList sections={page.sections} />
         </main>

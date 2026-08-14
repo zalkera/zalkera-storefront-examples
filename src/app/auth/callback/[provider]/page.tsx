@@ -19,12 +19,7 @@ export default async function CallbackPage({
     return (
         <main>
             <h1>로그인 처리 중…</h1>
-            <CallbackHandler
-                provider={provider}
-                code={sp.code}
-                state={sp.state}
-                providerError={sp.error ?? null}
-            />
+            <CallbackHandler provider={provider} code={sp.code} state={sp.state} providerError={sp.error ?? null} />
         </main>
     );
 }

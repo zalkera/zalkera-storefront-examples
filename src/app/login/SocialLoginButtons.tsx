@@ -1,12 +1,7 @@
 "use client";
 
 import type {ConsentInput, SocialProvider} from "@zalkera/client";
-import {
-    CONSENT_STORAGE_KEY,
-    PROVIDER_CONFIG,
-    SOCIAL_PROVIDERS,
-    STATE_STORAGE_KEY,
-} from "@/lib/oauth";
+import {CONSENT_STORAGE_KEY, PROVIDER_CONFIG, SOCIAL_PROVIDERS, STATE_STORAGE_KEY} from "@/lib/oauth";
 import {Button} from "@/components/ui/Button";
 
 /**
@@ -16,13 +11,7 @@ import {Button} from "@/components/ui/Button";
  *
  * 필수 동의(이용약관·개인정보·만14세)가 아직이면 `disabled` 로 버튼이 잠긴다.
  */
-export function SocialLoginButtons({
-    consents,
-    disabled,
-}: {
-    consents: ConsentInput[];
-    disabled: boolean;
-}) {
+export function SocialLoginButtons({consents, disabled}: {consents: ConsentInput[]; disabled: boolean}) {
     /**
      * 개시는 **서버가 한다**(memo118 ②층). state 를 브라우저가 만들어 sessionStorage 에만 두면,
      * 그 검사는 우리 클라이언트 코드가 실행될 때만 산다 — AI 가 이 파일을 다시 쓰거나 BYO 고객이

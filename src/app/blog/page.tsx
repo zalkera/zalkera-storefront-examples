@@ -27,7 +27,12 @@ export default async function BlogPage() {
             {items.length > 0 && (
                 <JsonLd data={itemListJsonLd(items.map((p) => ({name: p.title, url: `${base}/blog/${p.slug}`})))} />
             )}
-            <JsonLd data={breadcrumbJsonLd([{name: "홈", url: base}, {name: "블로그", url: `${base}/blog`}])} />
+            <JsonLd
+                data={breadcrumbJsonLd([
+                    {name: "홈", url: base},
+                    {name: "블로그", url: `${base}/blog`},
+                ])}
+            />
             <h1>블로그</h1>
             {items.length === 0 ? (
                 <p className="text-muted">게시글이 없습니다.</p>

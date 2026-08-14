@@ -27,7 +27,10 @@ export async function POST(req: Request) {
     if (!PROVIDER_CONFIG[provider].clientId) {
         // 미설정 provider 는 조용히 실패시키지 않는다 — 운영자가 무엇을 안 채웠는지 알아야 한다.
         return NextResponse.json(
-            {message: `${PROVIDER_CONFIG[provider].label} 로그인이 아직 설정되지 않았습니다.`, code: "PROVIDER_NOT_CONFIGURED"},
+            {
+                message: `${PROVIDER_CONFIG[provider].label} 로그인이 아직 설정되지 않았습니다.`,
+                code: "PROVIDER_NOT_CONFIGURED",
+            },
             {status: 503},
         );
     }
