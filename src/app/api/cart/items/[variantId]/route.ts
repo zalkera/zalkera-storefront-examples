@@ -2,6 +2,7 @@ import {NextResponse} from "next/server";
 import {zalkera} from "@/lib/zalkera";
 import {assertJsonContentType, assertSameOrigin, errorResponse, invalidBody, readJsonBody} from "@/lib/http";
 import {getShopSession} from "@/lib/session";
+import {isPreview} from "@/lib/preview";
 
 /**
  * 수량 변경.
@@ -17,6 +18,10 @@ export async function PATCH(req: Request, {params}: {params: Promise<{variantId:
     // 본문을 읽는 라우트라 ③층(CT 강제)도 건다 — `<form enctype="text/plain">` 운반체를 막는다.
     const badType = assertJsonContentType(req);
     if (badType) return badType;
+    // 프리뷰 모드(memo29 §3)는 읽기전용 — 프로덕션 데이터 오염 방지로 쓰기를 차단한다.
+    if (isPreview()) {
+        return NextResponse.json({message: "프리뷰 모드에서는 장바구니 변경가 비활성화됩니다."}, {status: 403});
+    }
     const {variantId} = await params;
     const body = await readJsonBody(req);
     if (!body) return invalidBody();
@@ -34,6 +39,10 @@ export async function PATCH(req: Request, {params}: {params: Promise<{variantId:
 export async function DELETE(req: Request, {params}: {params: Promise<{variantId: string}>}) {
     const blocked = assertSameOrigin(req);
     if (blocked) return blocked;
+    // 프리뷰 모드(memo29 §3)는 읽기전용 — 프로덕션 데이터 오염 방지로 쓰기를 차단한다.
+    if (isPreview()) {
+        return NextResponse.json({message: "프리뷰 모드에서는 장바구니 변경가 비활성화됩니다."}, {status: 403});
+    }
     const {variantId} = await params;
     try {
         return NextResponse.json(await zalkera.removeFromCart(Number(variantId), await getShopSession()));

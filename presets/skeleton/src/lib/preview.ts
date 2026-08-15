@@ -6,4 +6,10 @@
 export const isPreview = (): boolean =>
     process.env.NEXT_PUBLIC_ZALKERA_PREVIEW === "1" || process.env.NEXT_PUBLIC_ONEQUE_PREVIEW === "1";
 
-// 적용 지점: src/app/api/cart/items/route.ts (담기), src/app/api/checkout/route.ts (주문·결제) — 프리뷰면 403.
+// ⚠ **여기에 적용 지점을 나열하지 마라.** 손으로 관리하던 목록이 둘에서 멈춰 있는 사이 카트 세 곳이
+//   무방비였고, 그동안 `CUSTOMIZE.md` 는 "장바구니 쓰기가 막힌다"고 보증하고 있었다(심의 실측 —
+//   프리뷰 빌드에서 항목 삭제가 운영 백엔드까지 갔다). 목록은 반드시 낡는다.
+//
+//   규칙은 **쓰기 핸들러(POST·PATCH·PUT·DELETE)는 전부 이 함수를 부른다**이고, 못 부를 사정이 있으면
+//   파일 머리에 `// zalkera-allow-preview-write: <한 줄 이유>` 를 단다. 그것을 재는 것은 목록이 아니라
+//   `previewGuard.test.ts` 다 — 새 라우트가 둘 다 빠뜨리면 시험이 빨개진다.

@@ -1,3 +1,4 @@
+// zalkera-allow-preview-write: 로그인 흐름 — 막으면 프리뷰에서 로그인한 화면을 못 본다.
 import {NextResponse} from "next/server";
 import type {SocialProvider} from "@zalkera/client";
 import {zalkera} from "@/lib/zalkera";
