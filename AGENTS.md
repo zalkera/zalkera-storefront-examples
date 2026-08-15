@@ -100,7 +100,9 @@ export async function POST(req: Request) {
 - **프리뷰 모드는 쓰기를 막는다.** 쓰기 핸들러(`POST`·`PATCH`·`PUT`·`DELETE`)는 `if (isPreview())` 로
   403 을 내라(`src/lib/preview.ts`). 막으면 안 되는 사정이 있으면 파일 **상단**에
   `// zalkera-allow-preview-write: <이유 한 줄>` — 위 교차출처 마커와 같은 형태다.
-  둘 다 없으면 `src/lib/previewGuard.test.ts` 가 빨개진다. **마커는 출구가 아니라 기록이다** —
+  `src/lib/previewGuard.test.ts` 가 `src/app/**/route.*` 의 **내보낸** 쓰기 핸들러를 잘라 각자 몸통에서
+  가드를 확인하고, 자를 수 없는 형태(재수출 등)는 반려한다. **서버 액션(`"use server"`)·미들웨어는
+  그 검사의 범위 밖이니 거기서는 손으로 걸어라.** **마커는 출구가 아니라 기록이다** —
   가드를 지우는 쪽이 쉬워 보이면 그 판단을 사람이 읽을 수 있게 사유를 적으라는 뜻이다.
 - 소셜 로그인은 **서버 `state` 쿠키 대조**가 한 겹 더 있다(`/api/auth/social/start` 발행 → 교환에서 대조 →
   즉시 소각). `CallbackHandler` 의 `sessionStorage` 대조는 **UX 지 방어가 아니다** — 그걸 방어로 세지 마라.
@@ -334,12 +336,14 @@ root layout(`src/app/layout.tsx`)이 `parseThemeColors(...)` 로 테넌트 색�
 
 ⚠ **이 규약은 CI 가 재지 않는다 — 네가 돌려야 한다.** 재게 하지 않는 것이 의도다: 이 저장소의 CI 는 백엔드 배포 게이트가 결과를 읽으므로, 포맷 하나가 어긋났다고 사이트 배포를 막으면 대가가 이득보다 크다. 그래서 집행을 기계가 아니라 **너**에게 맡긴다. 확인만 하려면 `npm run format:check`, 고치려면 `npm run format`.
 
-`npm run format` 은 `prettier --write .` 이다 — **스크립트가 글롭이나 플래그를 더하지 않는다.** 무엇을 재고 무엇을 건너뛸지는 스크립트가 아니라 설정이 정한다.
+두 스크립트 다 `--cache` 를 쓴다. 무엇을 재고 무엇을 건너뛸지는 스크립트가 아니라 설정(`.prettierignore`)이 정한다 — 스크립트가 정확히 무엇인지는 **`package.json` 을 읽어라**(여기 옮겨 적으면 낡는다).
+
+⚠ **`--cache` 없이 prettier 를 부르면 캐시 파일이 지워진다**(실측 — `--check`·`--list-different`·`--write` 전부). 그러면 다음 `npm run format` 이 전 파일을 다시 읽는다(배송 트리 267ms → 910ms · 사진 쌓인 트리 285ms → 2429ms). 직접 부를 일이 있으면 `--cache` 를 같이 주라.
 
 **무엇이 바뀔지는 세지 말고 물어봐라.** 무시 규칙이 한 파일에만 있는 게 아니라서(`.prettierignore` 도, `.gitignore` 도 본다) 문서로 세면 틀린다.
 
 ```bash
-npx prettier --list-different .   # 아무것도 안 나오면 바꿀 것이 없다는 뜻이다
+npx prettier --list-different --cache .   # 아무것도 안 나오면 바꿀 것이 없다는 뜻이다
 ```
 
 **`npm run format` 이 실패하면 네 편집이 원인이 아닐 수 있다.** 이 명령은 `src/` 밖도 보므로, **이 명령이 보는 자리에**(무시 목록 밖에) 문법이 깨진 파일이 하나 있으면 명령 전체가 `rc 2` 로 선다 — 무시되는 자리의 깨진 파일은 `rc 0` 이다(둘 다 실측). 그때는 위 조회 명령으로 **어느 파일인지 먼저 확인해라** — 오류 줄이 파일명을 말해 준다.

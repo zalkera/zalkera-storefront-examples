@@ -16,7 +16,7 @@
     "check:aeo": "node scripts/check-aeo-surfaces.mjs",
     "test": "node --experimental-strip-types --test 'src/**/*.test.ts'",
     "format": "prettier --write --cache .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check --cache ."
   },
   "dependencies": {
     "@tosspayments/tosspayments-sdk": "^2.7.1",
