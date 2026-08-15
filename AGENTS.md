@@ -329,7 +329,7 @@ root layout(`src/app/layout.tsx`)이 `parseThemeColors(...)` 로 테넌트 색�
 
 ⚠ **이 규약은 CI 가 재지 않는다 — 네가 돌려야 한다.** 재게 하지 않는 것이 의도다: 이 저장소의 CI 는 백엔드 배포 게이트가 결과를 읽으므로, 포맷 하나가 어긋났다고 사이트 배포를 막으면 대가가 이득보다 크다. 그래서 집행을 기계가 아니라 **너**에게 맡긴다. 확인만 하려면 `npm run format:check`, 고치려면 `npm run format`.
 
-`npm run format` 은 `prettier --write .` 이다. 손으로 `prettier` 를 돌려도 같은 명령이라 결과가 갈리지 않는다.
+`npm run format` 은 `prettier --write .` 이다 — **스크립트가 글롭이나 플래그를 더하지 않는다.** 무엇을 재고 무엇을 건너뛸지는 스크립트가 아니라 설정이 정한다.
 
 **무엇이 바뀔지는 세지 말고 물어봐라.** 무시 규칙이 한 파일에만 있는 게 아니라서(`.prettierignore` 도, `.gitignore` 도 본다) 문서로 세면 틀린다.
 
