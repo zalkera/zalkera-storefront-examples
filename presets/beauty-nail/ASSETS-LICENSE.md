@@ -24,7 +24,7 @@
 | `doctor.png` | 자체 생성 — 모노그램 원형 타일 | Credium | 자체 저작 · 재배포/수정/상업 사용 허용 | 2026-07-28 |
 | `avatar-01.png` | 자체 생성 — 모노그램 원형 타일 | Credium | 자체 저작 · 재배포/수정/상업 사용 허용 | 2026-07-28 |
 | `avatar-02.png` | 자체 생성 — 모노그램 원형 타일 | Credium | 자체 저작 · 재배포/수정/상업 사용 허용 | 2026-07-28 |
-| `thumbnail.png` | 자체 생성 — `scripts/gen-preset-assets.mjs` (콘솔 테마 카드 썸네일) | Credium | 자체 저작 · 재배포/수정/상업 사용 허용 | 2026-07-28 |
+| `thumbnail.png` *(zip 미포함 — 콘솔 카탈로그 카드용)* | 자체 생성 — `scripts/gen-preset-assets.mjs` (콘솔 테마 카드 썸네일) | Credium | 자체 저작 · 재배포/수정/상업 사용 허용 | 2026-07-28 |
 
 ## 확인 사항
 

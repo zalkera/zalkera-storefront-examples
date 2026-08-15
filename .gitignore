@@ -20,7 +20,7 @@ next-env.d.ts
 # 프리셋 팩 산출물(scripts/pack-preset.mjs) — 커밋하지 않는다. 적재는 S3, 정본 기록은 설정의 sha256.
 dist-presets
 
-# 미리보기 스냅샷 산출물(scripts/snapshot-preview.mjs) — 재생성 가능한 사진이라 원장이 아니다.
+# 미리보기 스냅샷 산출물 — 재생성 가능한 사진이라 원장이 아니다(만드는 도구는 배송물에 없다).
 # 거처는 S3+CDN 의 버전 고정 프리픽스다(memo116 §3).
 dist-preview
 

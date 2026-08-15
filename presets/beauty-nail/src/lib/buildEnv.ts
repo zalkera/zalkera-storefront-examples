@@ -14,7 +14,7 @@
  * ⚠ **지금 이 트리에는 소스 호출자가 없다.** 유일한 호출자가 홈의 `getPage` 폴백이었는데, 콘텐츠가
  * 소스로 오면서(어휘 계약 rev 4 `contentFile`) 그 왕복 자체가 사라졌다 — 남은 백엔드 호출은 전부
  * `.catch()` 로 fail-soft 라 애초에 빌드를 세우지 않는다. env·CI 배선(`ZALKERA_OFFLINE_BUILD`)과
- * `scripts/verify-zip.mjs`·`snapshot-preview.mjs` 는 그대로 그 플래그를 켠다(무해). **"빌드 시점
+ * `scripts/verify-zip.mjs` 같은 검수 도구는 그대로 그 플래그를 켠다(무해). **"빌드 시점
  * 백엔드 불통을 무엇으로 감지할 것인가"는 다시 열린 물음이고, 이 헬퍼를 지울지 새 tripwire 를 걸지는
  * 별건이다** — 여기 안 적으면 다음 사람이 "쓰이는 장치"로 읽는다.
  */

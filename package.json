@@ -15,8 +15,8 @@
     "validate": "node scripts/validate-storefront.mjs",
     "check:aeo": "node scripts/check-aeo-surfaces.mjs",
     "test": "node --experimental-strip-types --test 'src/**/*.test.ts'",
-    "format": "prettier --write \"src/**/*.{ts,tsx}\" \"presets/**/*.{ts,tsx}\"",
-    "format:check": "prettier --check \"src/**/*.{ts,tsx}\" \"presets/**/*.{ts,tsx}\""
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "dependencies": {
     "@tosspayments/tosspayments-sdk": "^2.7.1",
