@@ -34,7 +34,11 @@ jobs:
             cp node_modules/@zalkera/client/llms.txt llms.txt
           fi
 
-      - run: npm run validate && npm run typecheck && npm run build
+      # ⚠ `npm test` 를 뺐다가 사고 형상이 하나 남았다 — 계약 rev 가 오르면 `docsRev` 가 드리프트를
+      #   잡는데, 여기서 안 돌면 승급이 **초록으로 머지되고** 그 다음 push 의 본 CI 에서야 빨개진다.
+      #   그때는 되돌릴 브랜치가 이미 없다. 승급을 만드는 자리에서 잡는 것이 맞다.
+      #   (고객 트리에서 `docsRev` 는 skip 이므로 이 줄이 남의 승급을 막지 않는다.)
+      - run: npm run validate && npm run typecheck && npm test && npm run build
 
       - name: commit lockfile
         run: |

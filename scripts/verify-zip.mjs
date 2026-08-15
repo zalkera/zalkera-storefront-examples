@@ -50,7 +50,7 @@
  * 종료코드: 0=통과 · 1=반려(검사 실패) · 2=실행 불가(인자·환경 문제)
  */
 import {spawnSync} from "node:child_process";
-import {existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync} from "node:fs";
+import {existsSync, lstatSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync} from "node:fs";
 import {basename, join, relative, resolve} from "node:path";
 import {tmpdir} from "node:os";
 import {fileURLToPath} from "node:url";
@@ -162,6 +162,13 @@ function scanSecrets(dir) {
             if (/(^|\/)\.env(\.|$)/.test(`/${r}`) && !ENV_KEEP.test(e.name)) hits.push(r);
             if (/\.(pem|key|p12|pfx)$/.test(e.name)) hits.push(r);
             if (!SECRET_TEXTUAL.test(e.name)) continue;
+            // ⚠ **심링크는 따라가지 않는다.** 신뢰 밖 zip 이라 `docs/harmless.md → /검수자/사설파일`
+            //   하나로 검수자 파일을 읽고 그 내용이 반려문에 실린다(심의 실측). 못 읽은 것으로 적어
+            //   "시크릿 0" 이 미측정을 덮지 않게 한다.
+            if (e.isSymbolicLink()) {
+                unread.push(`${r} — 심링크라 내용을 읽지 않았습니다(zip 안 실파일로 바꿔 재납품하십시오)`);
+                continue;
+            }
             let text;
             try {
                 const full = join(d, e.name);
@@ -462,6 +469,11 @@ try {
             for (const doc of DOC_TARGETS) {
                 let text;
                 try {
+                    // 심링크 문서도 따라가지 않는다 — 위 시크릿 스캔과 같은 사유.
+                    if (lstatSync(join(root, doc)).isSymbolicLink()) {
+                        unread.push(`${doc} — 심링크라 좌표를 읽지 않았습니다`);
+                        continue;
+                    }
                     text = readFileSync(join(root, doc), "utf8");
                 } catch (e) {
                     // 없는 문서는 사실이 아니다(프리셋마다 문서 구성이 다를 수 있다). 있는데 못 읽는

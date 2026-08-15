@@ -84,17 +84,19 @@ jobs:
         #   ⑵ 총 통과 수 하한(20) → **빈 파일 25개**로, 또는 실 스위트를 지우고 **자명 통과 시험
         #      21건으로 대체**해서 뚫림(둘 다 심의 실측 rc 0). 개수는 **이름을 재지 않는다.**
         #
-        # 그래서 **가드 스위트마다** 하한을 건다. 현재치는 18·9·3·1·6 이다.
+        # 그래서 **가드 스위트마다** 하한을 건다. 현재치는 18·9·3·6 이다(docsRev 는 위 사유로 제외).
         #   · 큰 스위트(crossOrigin 18→14 · oauthState 9→7 · safeUrl 6→4)는 여유를 뒀다 — 시험을
         #     한둘 더하고 빼는 정상 작업이 게이트를 건드리지 않게.
-        #   · **한 자릿수 스위트(previewGuard 3 · docsRev 1)는 현재치가 곧 하한이다.** 거기서 빼면
+        #   · **한 자릿수 스위트(previewGuard 3)는 현재치가 곧 하한이다.** 거기서 빼면
         #     바로 적색이다 — 그 셋(통제군·본 판정·검사기 자기검증)은 하나도 뺄 것이 없다.
         #     시험을 합치거나 줄이려면 이 줄을 **같이** 고쳐라.
         run: |
           set -o pipefail
           npm test
           fail=0
-          for s in "src/lib/crossOrigin.test.ts:14" "src/lib/oauthState.test.ts:7" "src/lib/previewGuard.test.ts:3" "src/lib/docsRev.test.ts:1" "src/lib/safeUrl.test.ts:4"; do
+          # ⚠ `docsRev.test.ts` 는 여기 없다 — 그것은 **정본 전용**이라 고객 트리에서 skip 되고,
+          #   skip 은 `# pass 0` 이라 하한이 거짓 적색을 낸다. 그 시험은 `npm test` 안에서만 돈다.
+          for s in "src/lib/crossOrigin.test.ts:14" "src/lib/oauthState.test.ts:7" "src/lib/previewGuard.test.ts:3" "src/lib/safeUrl.test.ts:4"; do
             f=${s%:*}; min=${s##*:}
             p=$(node --experimental-strip-types --test "$f" 2>&1 | sed -n 's/^# pass \([0-9]*\)$/\1/p' | tail -1)
             if [ -z "$p" ] || [ "$p" -lt "$min" ]; then

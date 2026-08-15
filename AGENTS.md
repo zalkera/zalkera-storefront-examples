@@ -97,6 +97,11 @@ export async function POST(req: Request) {
   서로 `same-site`** 다 — 그 관용구는 테넌트-대-테넌트 위조를 열어 둔 채 "고쳤다"고 기록된다.
 - **스킴을 비교하지 마라.** 서빙 오케스트레이터가 `x-forwarded-proto: "http"` 를 넣는데 공개 스킴은
   https 다. 비교하면 전 사이트가 즉시 죽는다. 호스트만 본다.
+- **프리뷰 모드는 쓰기를 막는다.** 쓰기 핸들러(`POST`·`PATCH`·`PUT`·`DELETE`)는 `if (isPreview())` 로
+  403 을 내라(`src/lib/preview.ts`). 막으면 안 되는 사정이 있으면 파일 **상단**에
+  `// zalkera-allow-preview-write: <이유 한 줄>` — 위 교차출처 마커와 같은 형태다.
+  둘 다 없으면 `src/lib/previewGuard.test.ts` 가 빨개진다. **마커는 출구가 아니라 기록이다** —
+  가드를 지우는 쪽이 쉬워 보이면 그 판단을 사람이 읽을 수 있게 사유를 적으라는 뜻이다.
 - 소셜 로그인은 **서버 `state` 쿠키 대조**가 한 겹 더 있다(`/api/auth/social/start` 발행 → 교환에서 대조 →
   즉시 소각). `CallbackHandler` 의 `sessionStorage` 대조는 **UX 지 방어가 아니다** — 그걸 방어로 세지 마라.
   state 쿠키는 `sameSite: "lax"` 여야 한다(`strict` 면 authorize 복귀에서 안 실려 로그인이 깨진다).

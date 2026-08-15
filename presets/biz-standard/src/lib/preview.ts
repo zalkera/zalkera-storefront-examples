@@ -12,4 +12,6 @@ export const isPreview = (): boolean =>
 //
 //   규칙은 **쓰기 핸들러(POST·PATCH·PUT·DELETE)는 전부 이 함수를 부른다**이고, 못 부를 사정이 있으면
 //   파일 머리에 `// zalkera-allow-preview-write: <한 줄 이유>` 를 단다. 그것을 재는 것은 목록이 아니라
-//   `previewGuard.test.ts` 다 — 새 라우트가 둘 다 빠뜨리면 시험이 빨개진다.
+//   `previewGuard.test.ts` 다 — `src/app/**/route.*` 의 쓰기 핸들러가 둘 다 빠뜨리면 빨개진다.
+//   그 검사가 **모르는 형태를 만나면 통과가 아니라 빨강**이다(미지 선언 형태 fail-closed). 다만
+//   서버 액션(`"use server"`)은 범위 밖이니, 쓴다면 거기서도 손으로 걸어라.
