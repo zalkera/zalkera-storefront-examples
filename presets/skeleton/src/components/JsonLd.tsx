@@ -129,7 +129,7 @@ export type CommercePolicies = {
  * 가장 흔한 확장 모양이다) `policies/page.tsx` 가 그 값을 React 자식으로 그려
  * "Objects are not valid as a React child" 로 `/policies` 가 500 이 된다.
  *
- * 그래서 `lib/seo.ts` 의 `parseSeo` 와 **같은 깊이로** — 객체 판정 + 필드별 `typeof` 확인까지 한다.
+ * 그래서 `src/lib/seo.ts` 의 `parseSeo` 와 **같은 깊이로** — 객체 판정 + 필드별 `typeof` 확인까지 한다.
  * 값이 형에 안 맞으면 그 필드만 버린다(절 전체를 버리지 않는다). 정책은 부가 정보라
  * 여기서 페이지를 죽이지 않는 것이 계약이다.
  */

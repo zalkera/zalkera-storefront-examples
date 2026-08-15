@@ -72,7 +72,7 @@ export function BookingPanel({product}: {product: ProductDetail}) {
                     return;
                 }
                 // 정원 소진 — 내 목록이 stale 했다는 뜻이다. 재조회해서 지금 진짜 남은 걸 보여준다.
-                // BFF(lib/http)는 백엔드 errorCode 를 `code` 로 실어 준다(SDK ZalkeraError.code 그대로) —
+                // BFF(src/lib/http.ts)는 백엔드 errorCode 를 `code` 로 실어 준다(SDK ZalkeraError.code 그대로) —
                 // `errorCode` 로 읽으면 영영 안 잡힌다(실기동에서 그 버그를 만났다).
                 if (data?.code === "SLOT_FULL") {
                     setSelected(null);

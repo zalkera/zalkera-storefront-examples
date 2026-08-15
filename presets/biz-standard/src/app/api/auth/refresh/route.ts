@@ -53,7 +53,7 @@ export async function GET(req: Request) {
     }
 }
 
-/** 내부 경로만 통과(파서 기반 판정 — `lib/oauth`). 판정 실패는 홈으로 떨어뜨린다. */
+/** 내부 경로만 통과(파서 기반 판정 — `src/lib/oauth.ts`). 판정 실패는 홈으로 떨어뜨린다. */
 function safeNext(raw: string | null): string {
     return safeNextPath(raw) ?? "/";
 }

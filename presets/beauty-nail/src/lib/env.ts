@@ -1,6 +1,6 @@
 /**
  * 서버 env 접근 단일 지점. 이 골격은 거래처마다 레포로 복제되므로, env 를 읽는 곳이 흩어지면
- * 폴백도 흩어진다(실제로 `lib/zalkera.ts` 와 `app/media/[id]/route.ts` 가 각자 갖고 있었다).
+ * 폴백도 흩어진다(실제로 `src/lib/zalkera.ts` 와 `src/app/media/[id]/route.ts` 가 각자 갖고 있었다).
  *
  * ## env 이름 — `ZALKERA_*` 단독(memo101 컷오버 완료·2026-07-26)
  *

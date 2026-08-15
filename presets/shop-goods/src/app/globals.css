@@ -5,9 +5,9 @@
  * 스타일은 전부 Tailwind v4 유틸리티 클래스로 표현하고, 테넌트 색은 아래 토큰 경유로만 쓴다.
  */
 @theme {
-    /* ── 테넌트 오버라이드 지점 (themeColors JSON → <html> inline style 로 덮인다, lib/theme.ts) ── */
+    /* ── 테넌트 오버라이드 지점 (themeColors JSON → <html> inline style 로 덮인다, src/lib/theme.ts) ── */
     --color-primary: oklch(20.8% 0.042 265.755); /* slate-900 — 기본 액센트(무채 캔버스). 테넌트 색이 얹히기 전 */
-    --color-primary-foreground: #ffffff; /* primary 위 글자색 — 서버가 명도로 산출(lib/theme.ts) */
+    --color-primary-foreground: #ffffff; /* primary 위 글자색 — 서버가 명도로 산출(src/lib/theme.ts) */
     --color-secondary: oklch(55.4% 0.046 257.417); /* slate-500 — 보조 액센트 */
     --color-background: #ffffff; /* 페이지 배경 */
     --color-foreground: oklch(20.8% 0.042 265.755); /* slate-900 — 본문 글자 */
@@ -18,7 +18,7 @@
     --color-surface: oklch(98.4% 0.003 247.858); /* slate-50 — 카드·필드 배경 */
     --color-danger: oklch(57.7% 0.245 27.325); /* red-600 — 오류 */
 
-    /* ── 타이포 (웹폰트 다운로드 없음 — 시스템 스택. font knob 이 --font-sans 를 덮는다, lib/theme.ts) ── */
+    /* ── 타이포 (웹폰트 다운로드 없음 — 시스템 스택. font knob 이 --font-sans 를 덮는다, src/lib/theme.ts) ── */
     --font-sans: ui-sans-serif, system-ui, -apple-system, "Apple SD Gothic Neo",
         "Malgun Gothic", "Noto Sans KR", sans-serif;
 
