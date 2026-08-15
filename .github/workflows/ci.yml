@@ -84,11 +84,13 @@ jobs:
         #   ⑵ 총 통과 수 하한(20) → **빈 파일 25개**로, 또는 실 스위트를 지우고 **자명 통과 시험
         #      21건으로 대체**해서 뚫림(둘 다 심의 실측 rc 0). 개수는 **이름을 재지 않는다.**
         #
-        # 그래서 **가드 스위트마다** 하한을 건다. 현재치는 18·9·3·6 이다(docsRev 는 위 사유로 제외).
+        # 그래서 **가드 스위트마다** 하한을 건다. 현재치는 18·9·6·6 이다(docsRev 는 위 사유로 제외).
         #   · 큰 스위트(crossOrigin 18→14 · oauthState 9→7 · safeUrl 6→4)는 여유를 뒀다 — 시험을
         #     한둘 더하고 빼는 정상 작업이 게이트를 건드리지 않게.
-        #   · **한 자릿수 스위트(previewGuard 3)는 현재치가 곧 하한이다.** 거기서 빼면
-        #     바로 적색이다 — 그 셋(통제군·본 판정·검사기 자기검증)은 하나도 뺄 것이 없다.
+        #   · **`previewGuard` 는 현재치(6)가 곧 하한이다.** 여섯 중 둘이 통제군(관문 존재·배선 ·
+        #     면제목록↔마커 대칭)이라 그것만 빼도 관문이 통째로 사라진 상태가 초록이 된다.
+        #     ⚠ 실제로 그랬다 — 스위트를 3건에서 6건으로 갈면서 **이 줄을 안 따라 올려**, 통제군 둘과
+        #     `src/middleware.ts` 를 지워도 `pass 4 ≥ 3` 으로 전 게이트가 초록이었다(심의 실측).
         #     시험을 합치거나 줄이려면 이 줄을 **같이** 고쳐라.
         run: |
           set -o pipefail
@@ -96,7 +98,7 @@ jobs:
           fail=0
           # ⚠ `docsRev.test.ts` 는 여기 없다 — 그것은 **정본 전용**이라 고객 트리에서 skip 되고,
           #   skip 은 `# pass 0` 이라 하한이 거짓 적색을 낸다. 그 시험은 `npm test` 안에서만 돈다.
-          for s in "src/lib/crossOrigin.test.ts:14" "src/lib/oauthState.test.ts:7" "src/lib/previewGuard.test.ts:3" "src/lib/safeUrl.test.ts:4"; do
+          for s in "src/lib/crossOrigin.test.ts:14" "src/lib/oauthState.test.ts:7" "src/lib/previewGuard.test.ts:6" "src/lib/safeUrl.test.ts:4"; do
             f=${s%:*}; min=${s##*:}
             p=$(node --experimental-strip-types --test "$f" 2>&1 | sed -n 's/^# pass \([0-9]*\)$/\1/p' | tail -1)
             if [ -z "$p" ] || [ "$p" -lt "$min" ]; then
@@ -108,6 +110,32 @@ jobs:
 
       - name: Build (next build)
         run: npm run build
+
+      - name: 프리뷰 관문이 빌드에 실렸는가 (.next/server/middleware-manifest.json)
+        # ⚠ **재는 것은 소스가 아니라 Next 가 방금 실은 산출물이다.**
+        #   프리뷰 쓰기 차단의 집행 지점은 `src/middleware.ts` 하나인데, 그것이 **등재되지 않으면
+        #   조용히 전부 무방비**가 된다. 소스를 읽는 검사는 그 형상을 못 본다 — 파일은 멀쩡히 있고
+        #   내용도 맞는데 Next 가 안 싣는 경우가 있기 때문이다: 위치 오류·`matcher` 오염, 그리고
+        #   **Next 16 이 이 규약을 deprecated 로 선언했다**(빌드마다 경고한다). 판을 올리는 날
+        #   규약이 사라지면 집행이 죽는데 소스 검사는 초록을 유지한다.
+        #   그래서 매니페스트를 잰다 — 규약 이름이 바뀌든 판이 오르든 여기서 시끄러워진다.
+        run: |
+          node -e '
+            const m = require("./.next/server/middleware-manifest.json");
+            const e = Object.values(m.middleware ?? {});
+            if (e.length === 0) {
+              console.error("::error::프리뷰 관문이 빌드에 안 실렸습니다 — 쓰기 차단이 통째로 꺼집니다.");
+              console.error("::error::  src/middleware.ts 의 위치·이름·export 를 보고, Next 판을 올렸다면 규약(proxy) 이행이 필요합니다.");
+              process.exit(1);
+            }
+            const wide = e.some((x) => (x.matchers ?? []).some((mm) => mm.regexp === "^/.*$"));
+            if (!wide) {
+              console.error("::error::관문 matcher 가 좁혀졌습니다 — 빠진 경로가 조용히 무방비가 됩니다.");
+              console.error("::error::  현재: " + JSON.stringify(e.flatMap((x) => x.matchers ?? [])));
+              process.exit(1);
+            }
+            console.log("관문 등재 확인 — 항목 " + e.length + " · matcher 전 경로");
+          '
 
       - name: 서빙 산출물 (.next/standalone/server.js)
         # memo145 — `next build` 성공은 **서빙된다**를 뜻하지 않는다. 잘커라 호스팅은 `next start` 가

@@ -127,6 +127,8 @@ const SECRET_CONTENT = [
     ["URL 내장 자격증명", /\b[a-z][a-z0-9+.\-]*:\/\/[^\s/:@]+:[^\s/@]{3,}@/],
 ];
 const SECRET_TEXTUAL = /\.(m?[jt]sx?|cjs|json|md|txt|ya?ml|sh|html?|css|toml|ini|conf|env)$/i;
+/** 확장자가 없는데 자격증명이 앉는 이름들. `.git/config` 이 이 그물 밖이라 통과한 전례가 있다. */
+const SECRET_EXTENSIONLESS = /^(config|credentials|\.netrc|_netrc|\.npmrc|\.pgpass|authorized_keys|known_hosts)$/i;
 const SECRET_CONTENT_MAX = 2 * 1024 * 1024;
 
 /**
@@ -154,14 +156,21 @@ function scanSecrets(dir) {
     const walk = (d, rel = "") => {
         for (const e of readDirSafe(d, "시크릿 스캔")) {
             const r = rel ? `${rel}/${e.name}` : e.name;
-            if (e.name === "node_modules" || e.name === ".git" || e.name === ".next") continue;
+            // ⚠ `.git` 은 **건너뛰지 않는다.** 이 함수 머리말이 "git 이력은 되돌릴 수 없어 사후 수습이
+            //   불가능하다"고 적어 둔 바로 그 자리인데, 종전엔 스캔에서 빼 놓고 `✅ 시크릿 0` 을 찍었다 —
+            //   시크릿을 `.git/config` 에만 넣은 zip 이 통과했다(심의 실측). 카탈로그 팩은 `pack-preset`
+            //   이 `.git` 을 구조적으로 배제하지만, **업로드 태생 테넌트**는 작업트리를 통째로 zip 하고
+            //   이 러너가 그들의 유일한 관문이다.
+            if (e.name === "node_modules" || e.name === ".next") continue;
             if (e.isDirectory()) {
                 walk(join(d, e.name), r);
                 continue;
             }
             if (/(^|\/)\.env(\.|$)/.test(`/${r}`) && !ENV_KEEP.test(e.name)) hits.push(r);
             if (/\.(pem|key|p12|pfx)$/.test(e.name)) hits.push(r);
-            if (!SECRET_TEXTUAL.test(e.name)) continue;
+            // 확장자 없는 자격증명 파일(`.git/config`·`.git/credentials`·`.netrc` 등)도 본다 —
+            // 위 정크 반려가 1차 방어이고 이것이 2차다.
+            if (!SECRET_TEXTUAL.test(e.name) && !SECRET_EXTENSIONLESS.test(e.name)) continue;
             // ⚠ **심링크는 따라가지 않는다.** 신뢰 밖 zip 이라 `docs/harmless.md → /검수자/사설파일`
             //   하나로 검수자 파일을 읽고 그 내용이 반려문에 실린다(심의 실측). 못 읽은 것으로 적어
             //   "시크릿 0" 이 미측정을 덮지 않게 한다.
@@ -344,7 +353,12 @@ try {
         if (!record("프로젝트 형상", hasPkg && Boolean(lock), lockNote)) {
             failed = true;
         }
-        for (const junk of ["node_modules", ".next"]) {
+        // ⚠ `.git` 이 여기 있는 이유는 용량이 아니라 **시크릿**이다. 아래 시크릿 스캔은 확장자로
+        //   텍스트 파일을 고르는데 `.git/config`·`.git/credentials` 는 **확장자가 없어** 그 그물에
+        //   안 걸린다(실측: `.git/config` 에만 자격증명을 넣은 zip 이 `✅ 시크릿 0` 으로 통과했다).
+        //   스캔을 넓히는 것보다 **아예 안 받는 것**이 확실하다 — 이력은 되돌릴 수 없고, 고객 소스에
+        //   git 이력이 우리 쪽으로 올 이유도 없다.
+        for (const junk of ["node_modules", ".next", ".git"]) {
             if (existsSync(join(root, junk))) {
                 record(`${junk} 미포함`, false, "zip 에서 빼 주십시오");
                 failed = true;
@@ -711,6 +725,33 @@ try {
                 if (!run("npm run build", "npm", ["run", "build"])) {
                     failed = true;
                 } else {
+                    // ⑧-a **프리뷰 관문이 빌드에 실렸는가.** 재는 것은 소스가 아니라 **Next 가 방금 실은
+                    //     산출물**이다. 관문(`src/middleware.ts`)이 등재되지 않으면 프리뷰 쓰기 차단이
+                    //     조용히 전부 꺼지는데, 소스를 읽는 검사는 그 형상을 못 본다 — 파일이 멀쩡해도
+                    //     위치 오류·matcher 오염·**규약 폐지**(Next 16 이 이미 deprecated 경고를 낸다)로
+                    //     안 실릴 수 있다. 위 ⑦-b 스위트의 통제군은 문면 검사라 여기까지는 못 온다.
+                    {
+                        const mf = join(root, ".next", "server", "middleware-manifest.json");
+                        let entries = null;
+                        try {
+                            entries = Object.values(JSON.parse(readFileSync(mf, "utf8")).middleware ?? {});
+                        } catch (e) {
+                            unread.push(`.next/server/middleware-manifest.json — 못 읽었습니다 [${e.code ?? "UNKNOWN"}]`);
+                        }
+                        if (entries !== null) {
+                            const wide = entries.some((x) => (x.matchers ?? []).some((m) => m.regexp === "^/.*$"));
+                            if (entries.length === 0) {
+                                record("프리뷰 관문 등재", false, "빌드에 안 실렸습니다 — 프리뷰 쓰기 차단이 통째로 꺼집니다");
+                                failed = true;
+                            } else if (!wide) {
+                                record("프리뷰 관문 등재", false, `matcher 가 좁혀졌습니다 — ${JSON.stringify(entries.flatMap((x) => x.matchers ?? []))}`);
+                                failed = true;
+                            } else {
+                                record("프리뷰 관문 등재", true, `항목 ${entries.length} · matcher 전 경로`);
+                            }
+                        }
+                    }
+
                     // ⑧ **서빙 산출물 계약**(memo145 §2-4-⑴ — 이 러너의 주 관문).
                     //
                     //    재는 것은 `next.config` 에 무엇이 적혀 있는가가 **아니다**. 설정 문자열은 양쪽으로
