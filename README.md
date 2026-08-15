@@ -90,9 +90,12 @@ npm run dev                    # http://localhost:3000
 
 백엔드가 떠 있어야 하고, `ZALKERA_TENANT` 에 이 사이트의 테넌트 코드를 넣어야 합니다.
 
-> ⚠ **구 `ONEQUE_` 접두는 더 이상 동작하지 않습니다.** 폴백을 제거했습니다(`src/lib/env.ts`) — 옛 이름만
-> 넣으면 빌드가 그 자리에서 죽습니다. 종전 판본이 "그대로 동작한다"고 적어 뒀는데 거짓이었고, 그 말을
-> 믿은 BYO 배포는 기동에 실패합니다. `ZALKERA_` 로 쓰십시오.
+> ⚠ **`ZALKERA_API_BASE`·`ZALKERA_TENANT` 는 구 `ONEQUE_` 접두를 더 이상 받지 않습니다.** 폴백을
+> 제거했습니다(`src/lib/env.ts`) — 옛 이름만 넣으면 빌드가 그 자리에서 죽습니다. 종전 판본이
+> "그대로 동작한다"고 적어 뒀는데 거짓이었고, 그 말을 믿은 BYO 배포는 기동에 실패합니다.
+>
+> 다만 **`NEXT_PUBLIC_ONEQUE_PREVIEW` 는 지금도 받습니다**(`src/lib/preview.ts` — 구 프리뷰 러너 호환).
+> "구 접두는 전부 죽었다"로 넓혀 읽지 마십시오. 새로 쓸 때는 `ZALKERA_` 로 쓰십시오.
 
 ## AI 매뉴얼 — `llms.txt`
 

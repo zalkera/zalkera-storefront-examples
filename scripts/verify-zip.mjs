@@ -688,6 +688,26 @@ try {
                     }
                 }
 
+                // ⑦-b **가드 회귀 스위트**. `npm ci` 가 이미 돌았으니 추가 비용이 사실상 없다(~0.24s).
+                //
+                //    ⚠ 이걸 여기서 안 돌리면 **집행 지점이 `ci.yml` 하나**가 되는데, 그것은 GitHub 레포가
+                //    있는 테넌트에서만 돈다. 업로드 태생 테넌트(memo76)는 CI 가 없어 집행이 **0** 이었고,
+                //    `CUSTOMIZE.md` 는 이 명령을 업로드 전 자가 검수로 지목한다 — 즉 고객이 문서대로 다
+                //    해도 가드가 깨진 zip 이 ✅ 를 받았다(심의 실측).
+                //    스위트가 없으면 node 러너가 `# tests 0` 과 rc 0 을 내므로 **그것도 반려**로 친다.
+                {
+                    const t = spawnSync("npm", ["test"], {cwd: root, encoding: "utf8", env: BUILD_ENV, maxBuffer: 32 * 1024 * 1024});
+                    const out = `${t.stdout ?? ""}${t.stderr ?? ""}`;
+                    const pass = Number(out.match(/^# pass (\d+)$/m)?.[1] ?? -1);
+                    if (t.status !== 0 || pass < 1) {
+                        record("가드 회귀 스위트", false, `\n   ${out.trim().split("\n").slice(-8).join("\n   ")}`);
+                        console.error(`   교차사이트·프리뷰·소독기 가드가 옳은지 재는 자리입니다 — 통과 ${pass < 0 ? 0 : pass}건.`);
+                        failed = true;
+                    } else {
+                        record("가드 회귀 스위트", true, `${pass}건 통과`);
+                    }
+                }
+
                 if (!run("npm run build", "npm", ["run", "build"])) {
                     failed = true;
                 } else {

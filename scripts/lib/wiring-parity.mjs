@@ -62,13 +62,19 @@ export const WIRING_FILES = [
     "src/lib/buildEnv.ts", // 오프라인 빌드 강하 — 서빙 빌드에 켜지면 콘텐츠 빈 아티팩트가 나간다
     "src/lib/zalkera.ts", // 클라이언트 싱글턴(baseUrl·X-Tenant·스토어프론트 키 주입 지점)
     "src/lib/theme.ts", // 고객 값 → `<html>` inline style 주입(화이트리스트 파서)
-    "src/lib/preview.ts", // 프리뷰에서 쓰기 차단 — 프로덕션 데이터 오염 방지
+    "src/lib/preview.ts", // 프리뷰 판별
+    // ⚠ 프리뷰 쓰기 차단의 **집행 지점**이다. 한 벌에서 빠지면 그 팩만 조용히 샌다 —
+    //   `WIRING_MISSING` 이 부재도 위반으로 잡는 이유가 이것이다.
+    "src/middleware.ts",
+    "src/lib/previewGuard.ts",
     "src/app/robots.ts",
     "src/app/sitemap.ts",
     // 잠근 판정의 **뜻**을 잠그는 회귀 픽스처. 규칙은 한 줄만 흔들려도 조용히 열리고,
     // `npm test` 는 레포 루트에서만 도니까 사본이 갈리면 아무도 모른다.
     "src/lib/crossOrigin.test.ts",
     "src/lib/oauthState.test.ts",
+    "src/lib/safeUrl.test.ts", // 오픈 리다이렉트 — 잠금이 0건이던 자리라 세 번째 결함이 배송됐다
+    "src/lib/previewGuard.test.ts",
 ];
 
 /** 이 아래는 **전송층**이다(디자인 0). 같은 경로가 둘 이상의 팩에 있으면 바이트 동일해야 한다. */

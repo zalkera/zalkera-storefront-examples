@@ -97,13 +97,17 @@ export async function POST(req: Request) {
   서로 `same-site`** 다 — 그 관용구는 테넌트-대-테넌트 위조를 열어 둔 채 "고쳤다"고 기록된다.
 - **스킴을 비교하지 마라.** 서빙 오케스트레이터가 `x-forwarded-proto: "http"` 를 넣는데 공개 스킴은
   https 다. 비교하면 전 사이트가 즉시 죽는다. 호스트만 본다.
-- **프리뷰 모드는 쓰기를 막는다.** 쓰기 핸들러(`POST`·`PATCH`·`PUT`·`DELETE`)는 `if (isPreview())` 로
-  403 을 내라(`src/lib/preview.ts`). 막으면 안 되는 사정이 있으면 파일 **상단**에
-  `// zalkera-allow-preview-write: <이유 한 줄>` — 위 교차출처 마커와 같은 형태다.
-  `src/lib/previewGuard.test.ts` 가 `src/app/**/route.*` 의 **내보낸** 쓰기 핸들러를 잘라 각자 몸통에서
-  가드를 확인하고, 자를 수 없는 형태(재수출 등)는 반려한다. **서버 액션(`"use server"`)·미들웨어는
-  그 검사의 범위 밖이니 거기서는 손으로 걸어라.** **마커는 출구가 아니라 기록이다** —
-  가드를 지우는 쪽이 쉬워 보이면 그 판단을 사람이 읽을 수 있게 사유를 적으라는 뜻이다.
+- **프리뷰 모드는 쓰기를 막는다 — 그리고 그 판정은 `src/middleware.ts` 한 곳에 있다.**
+  새 라우트는 **아무것도 안 해도 덮인다**(선언 형태·경로·파일명과 무관하다). 라우트 안의
+  `if (isPreview())` 는 이중 방어로 남겨 둔 것이지 그것이 집행 지점은 아니다.
+  막으면 안 되는 사정이 있으면 **두 곳**을 같이 고쳐라 — `src/lib/previewGuard.ts` 의
+  `PREVIEW_WRITE_ALLOW` 에 경로를 넣고, 그 라우트 파일 **상단**에
+  `// zalkera-allow-preview-write: <이유 한 줄>`(위 교차출처 마커와 같은 형태). 둘이 어긋나면
+  `previewGuard.test.ts` 가 빨개진다.
+  **면제는 출구가 아니라 기록이다** — "운영 데이터를 써도 좋다"고 적는 일이니, 그 라우트가 **누구의**
+  데이터를 건드리는지 확인하고 사유를 사람이 읽을 수 있게 남겨라.
+  ⚠ 종전에는 이 규약을 소스를 **텍스트로 파싱**해 재는 시험이 있었고 **네 판 연속 뚫렸다.**
+  그 이력은 `src/lib/previewGuard.ts` 머리말에 있다 — 파싱으로 되돌리지 마라.
 - 소셜 로그인은 **서버 `state` 쿠키 대조**가 한 겹 더 있다(`/api/auth/social/start` 발행 → 교환에서 대조 →
   즉시 소각). `CallbackHandler` 의 `sessionStorage` 대조는 **UX 지 방어가 아니다** — 그걸 방어로 세지 마라.
   state 쿠키는 `sameSite: "lax"` 여야 한다(`strict` 면 authorize 복귀에서 안 실려 로그인이 깨진다).
@@ -336,7 +340,7 @@ root layout(`src/app/layout.tsx`)이 `parseThemeColors(...)` 로 테넌트 색�
 
 ⚠ **이 규약은 CI 가 재지 않는다 — 네가 돌려야 한다.** 재게 하지 않는 것이 의도다: 이 저장소의 CI 는 백엔드 배포 게이트가 결과를 읽으므로, 포맷 하나가 어긋났다고 사이트 배포를 막으면 대가가 이득보다 크다. 그래서 집행을 기계가 아니라 **너**에게 맡긴다. 확인만 하려면 `npm run format:check`, 고치려면 `npm run format`.
 
-두 스크립트 다 `--cache` 를 쓴다. 무엇을 재고 무엇을 건너뛸지는 스크립트가 아니라 설정(`.prettierignore`)이 정한다 — 스크립트가 정확히 무엇인지는 **`package.json` 을 읽어라**(여기 옮겨 적으면 낡는다).
+두 스크립트 다 `--cache` 를 쓴다. **범위**(무엇을 재는가)는 설정(`.prettierignore`·`.gitignore`)이 정하고, **건너뛰기**(지난번과 안 바뀐 파일)는 그 `--cache` 플래그가 정한다. 스크립트가 정확히 무엇인지는 **`package.json` 을 읽어라**(여기 옮겨 적으면 낡는다).
 
 ⚠ **`--cache` 없이 prettier 를 부르면 캐시 파일이 지워진다**(실측 — `--check`·`--list-different`·`--write` 전부). 그러면 다음 `npm run format` 이 전 파일을 다시 읽는다(배송 트리 267ms → 910ms · 사진 쌓인 트리 285ms → 2429ms). 직접 부를 일이 있으면 `--cache` 를 같이 주라.
 
