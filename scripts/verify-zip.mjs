@@ -30,7 +30,8 @@
  * 같은 종류의 거짓이다. ⑵ 납품 zip 은 **신뢰 밖 코드**다. 그 postinstall 을 검수자 기계에서 돌리는 것은
  * 그 자체로 사고다. `--include=dev` 는 이 러너에서는 기본 동작이지만, NODE_ENV=production 인 CI 러너에서
  * 돌 때 devDeps 가 빠져 멀쩡한 납품물이 거짓 반려되는 것을 막는다(샌드박스가 같은 이유로 붙였다).
- * 반대로 **일부러 다르게 두는 축**도 있다: `ZALKERA_OFFLINE_BUILD=1`(러너에 백엔드가 없다는 선언).
+ * 반대로 **일부러 다르게 두는 축**도 있다: `ZALKERA_OFFLINE_BUILD=1` — 러너에 백엔드가 없다는 선언이다
+ * (아래 `BUILD_ENV` 주석 참조 — 이 플래그는 지금 동작을 바꾸지 않는다).
  *
  * lockfile 축도 같은 원리다 — 서빙 박스는 `npm ci` 뿐이라 yarn·pnpm lock 을 소비하지 못한다.
  * 넓게 받으면 "검사기는 통과했는데 업로드가 거절"이 만들어진다(백엔드 `SiteTypeDetector.LOCKFILES` 거울).
@@ -75,11 +76,12 @@ if (!existsSync(zipPath)) {
 /**
  * 빌드 env — **`.github/workflows/ci.yml` 과 패리티**여야 한다(백엔드 `SandboxBuildGate.CI_ENV` 도 같은 상수).
  *
- * 이유가 각각 있다: 러너에 백엔드가 없으므로 `ZALKERA_API_BASE`·`ZALKERA_TENANT` 는 값만 있으면 되고
- * (코드가 폴백 없이 require 한다), `ZALKERA_OFFLINE_BUILD` 는 "여긴 백엔드가 없다"는 **선언**이라
- * 홈이 시드 페이지를 집어 오는 경로가 불통을 던지지 않게 한다(memo109 계열 — 서빙 빌드는 던져야 맞다).
- *
- * 이 값을 안 주면 멀쩡한 납품물이 빌드 실패로 **거짓 반려**된다(이 러너를 처음 돌렸을 때 실제로 그랬다).
+ * 이유가 각각 다르다:
+ *  · `ZALKERA_TENANT` — 코드가 **폴백 없이 require** 한다(`src/lib/env.ts` 가 없으면 던진다). 이 값을
+ *    안 주면 멀쩡한 납품물이 빌드 실패로 **거짓 반려**된다(이 러너를 처음 돌렸을 때 실제로 그랬다).
+ *  · `ZALKERA_API_BASE` — 코드에 폴백이 있어 없어도 빌드는 된다. 그래도 CI·서빙과 같은 값을 준다(패리티).
+ *  · `ZALKERA_OFFLINE_BUILD` — "여긴 백엔드가 없다"는 **선언**이다. ⚠ **지금 아무것도 바꾸지 않는다** —
+ *    읽는 코드에 호출자가 0개다(실측). 패리티로 그대로 두되, 이걸 줘야 거짓 반려를 막는다고 읽지 마라.
  * 이름이 구 `ONEQUE_*` 면 폴백 제거 후 env 파서가 던진다(memo101 컷오버 실사고).
  */
 const BUILD_ENV = {
@@ -257,7 +259,11 @@ const work = mkdtempSync(join(tmpdir(), "zalkera-verify-"));
 
 /** 실패 문면이 "임시 공간 부족"으로 읽히면 조치를 한 줄 덧붙인다. 아니면 조용히 지나간다. */
 function hintTmpSpace(text) {
-    if (!/ENOSPC|EDQUOT|-122\b|-28\b|no space left|disk quota/i.test(String(text ?? ""))) return;
+    // ⚠ 숫자 코드를 맨몸으로 두면 평범한 빌드 출력에 오발화한다 — 청크명(`vendors-28.js`)·소스 위치
+    // (`page.tsx:4-28`)·빌드 id(`7f3a-122`)·경로명(`promo-28`)이 전부 걸렸다(심의가 실제 배송 도구로
+    // 재현). 이름 넷은 오발화 0건이었으므로 그것을 본체로 두고 숫자는 errno 문맥에 앵커한다.
+    const SPACE_ERROR = /ENOSPC|EDQUOT|no space left|disk quota|(?:errno|error|code)\s*:?\s*-(?:122|28)\b/i;
+    if (!SPACE_ERROR.test(String(text ?? ""))) return;
     console.error(`   ⓘ 임시 디렉터리 공간이 부족한 것으로 보입니다(현재: ${tmpdir()}).`);
     console.error(`     이 검수는 zip 을 풀고 npm ci·빌드까지 돌리므로 수백 MB 가 필요합니다.`);
     console.error(`     디스크 경로를 주고 다시 돌리십시오:  TMPDIR=/큰/디스크/경로 node scripts/verify-zip.mjs <zip>`);
@@ -335,6 +341,69 @@ try {
             record("에셋 라이선스 매니페스트", true, "동봉 이미지 없음 — 해당 없음");
         } else if (!record("에셋 라이선스 매니페스트", existsSync(manifest), existsSync(manifest) ? `이미지 ${images}개 — 내용 대조는 사람이` : `이미지 ${images}개인데 .zalkera/ASSETS-LICENSE.md 가 없습니다`)) {
             failed = true;
+        }
+
+        // ⑩ **배송 문서의 좌표가 zip 안에서 실재하는가** — 카탈로그 팩 전용.
+        //
+        // ⚠ 왜 여기인가. 검사기의 D1 은 `AGENTS.md` 만, D2 는 `llms.txt` 만 본다 — `CUSTOMIZE.md`·
+        //   `README.md` 는 **어떤 기계도 안 본다.** 2026-08-15 팩 심의에서 다섯 판이 반려됐는데 그중
+        //   하나가 정확히 그 사각이었다(`CUSTOMIZE.md` 가 그 프리셋에 없는 `public/images/` 를 "열어
+        //   보십시오"라고 지목). 그리고 실제로 `README.md` 가 죽은 좌표 2건(`lib/session.ts`·
+        //   `lib/theme.ts` — 실물은 `src/lib/…`)을 4벌에 배송하고 있었다.
+        //
+        // ⚠ **왜 고객 CI(D1 확장)가 아니라 팩 시점인가.** D1 은 고객 트리에서 돈다. 확장하면 우리가
+        //   잘못 배송한 문서 때문에 **테넌트 CI 가 빨개지고** BuildGate 가 그 사이트 배포를 막는다 —
+        //   `ci.yml` 이 이미 경고하는 비대칭이다. 배송 전에 우리가 잡는 것이 맞다.
+        //
+        // ⚠ **`--pack` 모드에서만 잰다.** 납품 zip 은 한 테넌트로 가고 그 문서는 납품사 것이다.
+        //   발주 스펙이 약속한 것은 규약 검사이지 문서 위생이 아니다(전제 A).
+        if (packMode) {
+            const DOC_TARGETS = ["CUSTOMIZE.md", "README.md", "AGENTS.md"];
+            // ⚠ **잣대는 검사기 D1 의 거울이다** — 새로 지어내지 않는다.
+            //   `@zalkera/client` 의 `bin/validate-storefront.mjs` 가 쓰는 `DOC_PATH_TOKEN`·
+            //   `DOC_PATH_SKIP_PREFIX` 와 같은 값이고, 그 규칙은 17라운드 심의를 통과한 것이다.
+            //   내가 처음에 "슬래시가 있으면 좌표"라는 자작 규칙을 썼다가 **후보 45건**이 나왔다 —
+            //   URL 라우트(`/products`·`/blog/[slug]`)와 예시 파일명(`content/pages/회사연혁.json`)이
+            //   전부 걸렸다(실측). 확장자 요구 + 접두 제외가 그것을 정확히 거른다.
+            //
+            //   이 파일은 외주에게 **단일 파일로** 건네지므로 공용 모듈을 import 하지 않는다(머리말).
+            //   그래서 사본이 아니라 **거울**이고, 갈리면 이 검사가 헛돈다 — 옮길 일이 있으면 두 곳을
+            //   같은 트랜치에서 고쳐라.
+            //   ⚠ 한 곳만 **일부러 넓혔다**: 에셋 확장자. D1 목록은 소스 파일뿐이라 3.0.15 를 반려시킨
+            //   바로 그 좌표(`public/images/…`)를 못 잡는다 — 그 판의 차단이 이미지 지목이었다.
+            //   넓힌 대가를 재 봤더니 **오탐 0 · 진짜 1건**이었다(3.0.19 배송물 실측).
+            const DOC_PATH_TOKEN =
+                /^[A-Za-z0-9_.\-/[\]]+\.(?:tsx?|jsx?|mjs|cjs|json|css|md|png|jpe?g|webp|avif|gif|svg|ico)$/;
+            const DOC_PATH_SKIP_PREFIX = ["doc/", "node_modules/", ".zalkera/", "@", "/", "http"];
+            const dead = [];
+            for (const doc of DOC_TARGETS) {
+                let text;
+                try {
+                    text = readFileSync(join(root, doc), "utf8");
+                } catch (e) {
+                    // 없는 문서는 사실이 아니다(프리셋마다 문서 구성이 다를 수 있다). 있는데 못 읽는
+                    // 것은 `unread` 에 적어 판정에 물린다 — 조용히 건너뛰면 "검사했다"로 읽힌다.
+                    if (e.code !== "ENOENT") unread.push(`${relative(work, join(root, doc))} — 배송 문서 좌표 검사 실패 [${e.code ?? "UNKNOWN"}]`);
+                    continue;
+                }
+                const seen = new Set();
+                for (const m of text.matchAll(/`([^`\n]+)`/g)) {
+                    const tok = m[1];
+                    if (!tok.includes("/") || seen.has(tok)) continue;
+                    if (!DOC_PATH_TOKEN.test(tok)) continue;
+                    if (DOC_PATH_SKIP_PREFIX.some((x) => tok.startsWith(x))) continue;
+                    seen.add(tok);
+                    if (!existsSync(join(root, tok))) dead.push(`${doc}: ${tok}`);
+                }
+            }
+            if (dead.length) {
+                record("배송 문서 좌표", false, `\n   zip 안에 없는 것을 가리킵니다(${dead.length}건):\n   · ${dead.join("\n   · ")}`);
+                console.error(`   죽은 좌표는 문서 위생이 아니라 **토큰 원가**입니다 — 고객 AI 가 이 문서를 먼저 읽고`);
+                console.error(`   없는 파일을 찾다가 제 좌표를 짜냅니다. 실물 경로로 고치거나 표기를 지우십시오.`);
+                failed = true;
+            } else {
+                record("배송 문서 좌표", true, `${DOC_TARGETS.join("·")} — 죽은 좌표 없음`);
+            }
         }
 
         // ⑨ 팩 신원 매니페스트(memo150 §3·§8.2). **번호는 도입 순서이고 실행 순서가 아니다**(⑦⑧이 ⑥ 안에

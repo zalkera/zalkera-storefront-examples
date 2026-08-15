@@ -130,7 +130,7 @@ npm run dev                    # http://localhost:3000
 
 스타일은 **Tailwind v4 유틸리티 클래스**로만 표현합니다. 색·폰트는 `src/app/globals.css` 의 `@theme` 토큰이 1급 시민이고, **테넌트 브랜드색은 잘커라 콘솔에서 말로 바뀝니다("버튼색 바꿔줘") — 코드 수정이 필요 없습니다.**
 
-- **테넌트 색은 토큰 경유로만.** `SiteConfig.themeColors`(콘솔 `primary`·`secondary`·`background`·`text`) → 루트 `layout.tsx` 가 `<html>` 의 CSS 변수로 주입 → 아래 유틸리티가 그 색으로 바뀝니다. **이 배선(`lib/theme.ts` + layout)을 유지하세요.** 지우거나 우회하면 콘솔에서 색을 바꾸는 무료·즉시 경로가 이 사이트에서 안 삽니다 — 색 하나 바꾸는 데 코드 수정과 재업로드가 필요해집니다. 코드는 당신 것이니 포기해도 되지만, 포기하는 것이 무엇인지는 분명히 적습니다(`docs/byo-headless-guide.md` §7 과 같은 이야기입니다).
+- **테넌트 색은 토큰 경유로만.** `SiteConfig.themeColors`(콘솔 `primary`·`secondary`·`background`·`text`) → 루트 `layout.tsx` 가 `<html>` 의 CSS 변수로 주입 → 아래 유틸리티가 그 색으로 바뀝니다. **이 배선(`src/lib/theme.ts` + layout)을 유지하세요.** 지우거나 우회하면 콘솔에서 색을 바꾸는 무료·즉시 경로가 이 사이트에서 안 삽니다 — 색 하나 바꾸는 데 코드 수정과 재업로드가 필요해집니다. 코드는 당신 것이니 포기해도 되지만, 포기하는 것이 무엇인지는 분명히 적습니다(`docs/byo-headless-guide.md` §7 과 같은 이야기입니다).
 
 | 토큰 유틸리티 | 쓰임 |
 |---|---|
@@ -151,7 +151,7 @@ npm run dev                    # http://localhost:3000
 ## 설계 규약 (지켜야 하는 것)
 
 - **`@zalkera/client` 와 `lib/zalkera` 는 서버에서만** import (RSC·route handler). 클라이언트 컴포넌트에서 쓰면 `baseUrl` 이 노출됩니다 — 타입만 필요하면 `import type` 으로.
-- **장바구니·결제는 BFF route handler** 를 거칩니다. 토큰·게스트 카트키는 httpOnly 쿠키(`lib/session.ts`)로 서버가 관리합니다.
+- **장바구니·결제는 BFF route handler** 를 거칩니다. 토큰·게스트 카트키는 httpOnly 쿠키(`src/lib/session.ts`)로 서버가 관리합니다.
 - **결제 확정은 백엔드 웹훅이 합니다.** returnUrl 의 "성공"을 믿지 말고 `/orders/[orderNo]` 로 상태를 확인하세요.
 - **variant 가 판매 단위** — 담기·주문은 항상 `variant.id`.
 - **미디어는 `/media/{id}` 안정 URL** 로 렌더합니다(presigned URL 직접 사용 금지, `next/image` 대신 `<img>`).

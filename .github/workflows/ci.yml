@@ -26,9 +26,10 @@ jobs:
       # 구 `ONEQUE_*` 로 두면 폴백이 제거된 지금 `env.ts` 가 던져 빌드가 죽는다(memo101 컷오버 실사고).
       ZALKERA_API_BASE: http://localhost:8100
       ZALKERA_TENANT: ci-placeholder
-      # 이 러너에는 백엔드가 **없다**고 선언한다(src/lib/buildEnv.ts). 홈이 시드 페이지를 집어 오는 경로가
-      # 불통을 그냥 던지면 여기서 빌드가 죽는다 — 반대로 테넌트 서빙 빌드는 던져야 맞으므로, 구분은
-      # 상태값이 아니라 이 플래그로 한다(기본값은 fail-fast).
+      # 이 러너에는 백엔드가 **없다**는 선언이다. 서빙 인프라·검수 러너와 같은 값을 주어 패리티를 지킨다.
+      # ⚠ **다만 이 플래그는 지금 아무것도 바꾸지 않는다** — 읽는 코드(`src/lib/buildEnv.ts` 의
+      #   `isOfflineBuild`)에 호출자가 0개다(실측). 켜든 안 켜든 백엔드가 죽어도 빌드는 통과한다.
+      #   "안 켜면 장애 때 빌드가 막아 준다"고 읽지 마라 — 막지 않는다. 사정은 `.env.example` 에 있다.
       ZALKERA_OFFLINE_BUILD: "1"
     steps:
       - uses: actions/checkout@v4
@@ -68,7 +69,17 @@ jobs:
         # memo118 §8 — 판정 규칙은 한 줄만 흔들려도 조용히 열린다. Node 기본 러너 + 타입 스트리핑이라
         # devDependency 추가가 0이다(node 22 필요). 검사기 X1 은 "가드를 불렀는가"만 보므로
         # **가드가 옳은가**는 이 스텝에서만 잠긴다.
-        run: npm test
+        #
+        # ⚠ **그래서 픽스처가 없으면 실패해야 한다.** node 러너는 시험 파일이 0개면 `# tests 0` 과
+        # 함께 **rc 0** 을 낸다(실측) — 즉 파일을 지우는 것만으로 이 유일한 잠금이 조용히 초록이 된다.
+        # 이 파일이 아래 스텝에서 "가드를 지우는 것이 고치는 것보다 쉬우면 안 된다"는 규약을 인용하며
+        # 판별자를 존재 기준으로 뒤집었는데, 정작 여기엔 그 원칙이 안 걸려 있었다.
+        run: |
+          if [ -z "$(find src -name '*.test.ts' -print -quit)" ]; then
+            echo "::error::교차사이트 가드 회귀 픽스처(src/**/*.test.ts)가 하나도 없습니다 — 가드가 옳은지 재는 유일한 자리입니다."
+            exit 1
+          fi
+          npm test
 
       - name: Build (next build)
         run: npm run build
@@ -111,13 +122,15 @@ jobs:
             # **CI 가 영구 적색**이 되고, BuildGate 가 이 워크플로를 읽으므로 그 사이트는 "말로 고치기"가
             # 구조적으로 막힌다 — 이 스텝 주석이 스스로 막겠다고 적은 바로 그 형상이다(심의 실측).
             if [ ! -f scripts/lib/visitor-ip-parity.test.mjs ]; then
-              echo "::error::잘커라 레포인데 scripts/lib/visitor-ip-parity.test.mjs 가 없습니다 — 픽스처가 지워졌습니다."
+              echo "::error::이 트리가 잘커라 정본 저장소로 판정됐는데 scripts/lib/visitor-ip-parity.test.mjs 가 없습니다."
+              echo "::error::  고객 레포라면 presets/ 또는 scripts/pack-preset.mjs 를 지우십시오(이 검사는 정본 전용)."
               exit 1
             fi
             node scripts/lib/visitor-ip-parity.test.mjs
             for checker in scripts/lib/wiring-parity.mjs scripts/lib/visitor-ip-parity.mjs; do
               if [ ! -f "$checker" ]; then
-                echo "::error::잘커라 레포인데 $checker 가 없습니다 — 가드가 지워졌습니다."
+                echo "::error::이 트리가 잘커라 정본 저장소로 판정됐는데 $checker 가 없습니다."
+                echo "::error::  고객 레포라면 presets/ 또는 scripts/pack-preset.mjs 를 지우십시오(이 검사는 정본 전용)."
                 exit 1
               fi
               node "$checker"
