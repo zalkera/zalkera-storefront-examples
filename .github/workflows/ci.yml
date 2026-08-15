@@ -41,15 +41,25 @@ jobs:
       - name: Install
         run: npm ci
 
-      # ⚠ **`--gate` 를 붙이는 이유.** 권고 모드는 "못 읽은 자리"가 있어도 rc 0 을 낸다 — 고객 나무의
-      # 상태를 우리가 벌하지 않는다는 처분이고, 고객 레포에서는 그게 맞다. 그러나 **여기는 우리 자산**
-      # 이고 이 job 은 백엔드 BuildGate 가 GitHub Checks 로 읽어 Tier2 배포를 여는 신호다.
-      #
-      # 심의 실측: 옛 검사기는 못 읽는 자리에서 크래시(rc 1)로 **CI red** 였는데, rc 7 계약이 생기면서
-      # 권고 모드가 경고 + rc 0 → **CI green** 이 됐다. 커밋된 끊어진 심링크 하나가 배포 신호를 초록으로
-      # 통과시킨다. 우리가 서빙하는 자리는 error 로 잰다(memo140 §6.5).
-      - name: Validate (키트 validator · 관문 모드)
-        run: npx zalkera-validate ./src --gate
+      - name: Validate (키트 validator)
+        run: npm run validate
+
+      - name: 잘커라 레포 전용 — 관문 모드로 한 번 더
+        # 위 스텝은 **권고 모드**다. 권고는 "못 읽은 자리"가 있어도 rc 0 을 낸다 — 고객 나무의 상태를
+        # 우리가 벌하지 않는다는 처분이고 고객 레포에서는 그게 맞다(memo140 §6.5). 그러나 우리 레포는
+        # **팩의 원본**이라 여기서 새는 것은 전 테넌트로 복제된다.
+        #
+        # ⚠ **이 스텝을 위 스텝 대신 쓰면 안 된다.** `ci.yml` 은 고객 zip 에 실리므로(SOURCE_EXCLUDES 에
+        # 없다) `--gate` 로 바꾸면 **전 테넌트의 CI 가 관문 모드가 되고**, BuildGate 가 이 워크플로의
+        # 성공을 읽으므로 거짓 양성 하나가 그 사이트의 배포를 무환불로 막는다. 같은 비대칭 때문에
+        # 방문자 IP 검사기를 배송에서 뺐다(SOURCE_EXCLUDES 주석). 그래서 **레포 전용 판별자**로 가른다 —
+        # 이 파일이 아래 스텝에서 이미 쓰는 관용구다(`presets/` + `scripts/pack-preset.mjs` 의 교집합).
+        run: |
+          if [ -d presets ] && [ -f scripts/pack-preset.mjs ]; then
+            npx zalkera-validate ./src --gate
+          else
+            echo "관문 모드 재검사는 잘커라 레포 전용입니다 — 건너뜁니다."
+          fi
 
       - name: Typecheck (tsc --noEmit)
         run: npm run typecheck
