@@ -50,7 +50,7 @@
  */
 import {spawnSync} from "node:child_process";
 import {existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync} from "node:fs";
-import {basename, join, resolve} from "node:path";
+import {basename, join, relative, resolve} from "node:path";
 import {tmpdir} from "node:os";
 import {fileURLToPath} from "node:url";
 
@@ -113,7 +113,9 @@ function readDirSafe(d, what) {
     try {
         return readdirSync(d, {withFileTypes: true});
     } catch (e) {
-        unread.push(`${d} — ${what} 실패 [${e.code ?? "UNKNOWN"}]`);
+        // ⚠ **임시 추출 경로가 아니라 zip 안 경로로 적는다.** 납품사가 손댈 수 있는 것은 zip 안이고,
+        // `/tmp/zalkera-verify-XsUkLl/src/...` 를 주면 지시("권한을 정상화하라")와 좌표가 어긋난다.
+        unread.push(`${relative(work, d) || "."} — ${what} 실패 [${e.code ?? "UNKNOWN"}]`);
         return [];
     }
 }
@@ -400,7 +402,18 @@ try {
         //   0  통과 · 1 규약 위반 · 2 검사기 자체 오류 · 7 검사 불능(못 읽은 자리가 있음)
         //
         // ⚠ `status` 는 시그널로 죽으면 **null** 이다. `!== 0` 은 그걸 잡지만 `=== 1` 은 못 잡는다.
-        const detail = `\n   ${vLines.filter((l) => !l.startsWith("⚠️")).slice(-12).join("\n   ")}`;
+        // ⚠ **위반 줄이 먼저다.** 종전엔 그냥 마지막 12줄을 잘랐는데, 못 읽은 자리 목록이 길면
+        // 그것이 창을 다 채워 `❌ [E1]`·`❌ [E3]` 가 **검수자에게 한 글자도 안 갔다**(심의 실측:
+        // 시크릿이 박힌 zip 에서 위반 grep 0건, 검수자가 받는 안내는 "권한을 고치라"뿐).
+        // 규약 위반은 절대 잘리지 않게 앞에 붙이고, 남는 자리를 나머지로 채운다.
+        const detailLines = vLines.filter((l) => !l.startsWith("⚠️"));
+        const violations = detailLines.filter((l) => /^❌ \[/.test(l));
+        const rest = detailLines.filter((l) => !/^❌ \[/.test(l));
+        const picked = [...violations.slice(0, 12), ...rest.slice(-Math.max(0, 12 - violations.length))];
+        const dropped = detailLines.length - picked.length;
+        const detail =
+            `\n   ${picked.join("\n   ")}` +
+            (dropped > 0 ? `\n   … 외 ${dropped}줄(전체는 위 출력 참조 — 여기서 자른 것은 위반이 아닙니다)` : "");
         if (v.status === 0) {
             record("규약 검사", true, [mode, summary].filter(Boolean).join(" · "));
         } else if (v.status === 7) {

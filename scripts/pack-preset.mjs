@@ -789,8 +789,51 @@ function sourceEntries() {
             fail("SOURCE_SYMLINK", `${path}: 소스에 심링크를 둘 수 없습니다 — 대상 내용이 zip 에 실립니다`);
             return [];
         }
-        return [{path, bytes: readFileSync(join(ROOT, path))}];
+        const bytes = readFileSync(join(ROOT, path));
+        return [{path, bytes: path === "package.json" ? shipPackageJson(bytes) : bytes}];
     });
+}
+
+/**
+ * 고객 트리로 나가는 `package.json` 을 다듬는다 — **이 레포에만 있는 좌표를 지운다.**
+ *
+ * ⚠ 왜 필요한가(심의 실측 · 2026-08-14): 레포의 `format`/`format:check` 는 `src/**` 와 `presets/**`
+ * 둘 다 본다. 고객 트리에는 `presets/` 가 **없으므로** 그 스크립트가 그대로 배송되면
+ * `[error] No files matching the pattern were found: "presets/**"` 로 **rc 2** 에 죽는다.
+ * 하필 `CUSTOMIZE.md` 가 *"고친 뒤 `npm run validate` 와 `npm run format` 을 한 번씩 돌리면 됩니다"*
+ * 라고 지목하는 명령이고, 레인A(고객 LLM 이 소스를 고치는 길)가 부르는 표면이다.
+ *
+ * 그리고 **어느 기계도 이걸 안 잡는다** — 팩의 CI 도 `verify-zip` 도 `format:check` 를 안 돌린다.
+ * 그래서 배송 시점에 여기서 자른다.
+ *
+ * 종전 시도는 반대 방향이었다: 레포 쪽에 `--no-error-on-unmatched-pattern` 을 붙여 양쪽을 살렸다.
+ * 그러면 **소스 나무가 통째로 사라져도 "All matched files…" 로 통과**한다(실측 rc 0) — 없는 것을
+ * 통과로 세는 형상이라 이 레포가 금지한다. 레포는 엄격하게 재고, 배송본은 좌표를 줄인다.
+ */
+function shipPackageJson(bytes) {
+    let text = bytes.toString("utf8");
+    const pkg = JSON.parse(text);
+    // 값만 바꾸고 나머지 바이트는 그대로 둔다 — 재직렬화하면 들여쓰기·키 순서가 통째로 달라져
+    // "무엇이 바뀌었나"를 아무도 못 읽는다(팩은 커밋을 봉인하는 행위다).
+    const REPO_ONLY = /\s*\\?"presets\/\*\*[^"\\]*\\?"/g;
+    for (const key of ["format", "format:check"]) {
+        const value = pkg.scripts?.[key];
+        if (typeof value !== "string") continue;
+        const narrowed = value.replace(REPO_ONLY, "");
+        if (narrowed === value) continue;
+        if (!narrowed.includes("src/**")) {
+            fail("SHIP_SCRIPT", `package.json scripts.${key}: 좁히고 나니 대상이 없습니다 — ${narrowed}`);
+            continue;
+        }
+        const encoded = JSON.stringify(value).slice(1, -1);
+        const replacement = JSON.stringify(narrowed).slice(1, -1);
+        if (!text.includes(encoded)) {
+            fail("SHIP_SCRIPT", `package.json scripts.${key}: 원문에서 값을 찾지 못했습니다`);
+            continue;
+        }
+        text = text.replace(encoded, replacement);
+    }
+    return Buffer.from(text, "utf8");
 }
 
 /**
