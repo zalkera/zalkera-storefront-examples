@@ -85,7 +85,7 @@ jobs:
         # 검사기 **둘 다 고객 zip 에 안 실린다**(SOURCE_EXCLUDES). 우리 레포에서 팩 4벌이 갈리는 것을
         # 막는 물건이라 그게 맞다 — 그런데 `ci.yml` 은 **실린다.** 무조건 부르면 고객 레포에서
         # MODULE_NOT_FOUND 로 **CI 가 영구 적색**이 되고, 백엔드 BuildGate 가 이 워크플로의 성공을
-        # 읽으므로 그 사이트는 "말로 고치기"가 구조적으로 막힌다(3.0.6 라이브가 실제로 그 상태다).
+        # 읽으므로 그 사이트는 "말로 고치기"가 구조적으로 막힌다 — 실제로 한 번 그렇게 됐다.
         #
         # ■ 배선 동일성 — 얼굴은 갈려도 되고 **틀리면 사고가 나는 배선**만 바이트로 잠근다.
         # ■ 방문자 IP 선언 — 바이트 잠금이 못 보는 자리다(그 파일은 얼굴이라 목록 밖). 2026-08-10 에
@@ -104,6 +104,16 @@ jobs:
           if [ -d presets ] && [ -f scripts/pack-preset.mjs ]; then
             # 픽스처를 먼저 돌린다 — **검사기가 옳은지**를 먼저 묻고 소스를 잰다.
             # 이 검사기는 여섯 라운드 연속 수정됐고 매번 새 구멍이 났다(그 이력이 픽스처 파일 머리말에).
+            #
+            # ⚠ **존재검사가 먼저다.** 아래 루프는 친절한 오류를 내도록 가드가 걸려 있는데, 이 픽스처만
+            # 루프 **앞**에서 무방비로 돌았다. 그래서 판별자가 참이 되는 순간(고객이 `presets/` 를 만들고
+            # `scripts/pack-preset.mjs` 라는 이름의 파일을 두면 성립한다) raw `MODULE_NOT_FOUND` 로 죽어
+            # **CI 가 영구 적색**이 되고, BuildGate 가 이 워크플로를 읽으므로 그 사이트는 "말로 고치기"가
+            # 구조적으로 막힌다 — 이 스텝 주석이 스스로 막겠다고 적은 바로 그 형상이다(심의 실측).
+            if [ ! -f scripts/lib/visitor-ip-parity.test.mjs ]; then
+              echo "::error::잘커라 레포인데 scripts/lib/visitor-ip-parity.test.mjs 가 없습니다 — 픽스처가 지워졌습니다."
+              exit 1
+            fi
             node scripts/lib/visitor-ip-parity.test.mjs
             for checker in scripts/lib/wiring-parity.mjs scripts/lib/visitor-ip-parity.mjs; do
               if [ ! -f "$checker" ]; then

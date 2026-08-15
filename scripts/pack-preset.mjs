@@ -140,6 +140,11 @@ const SOURCE_EXCLUDES = [
     "scripts/pack-preset.mjs",
     "scripts/gen-preset-assets.mjs",
     "scripts/preset-canvas.mjs",
+    // ⚠ **카탈로그 미리보기를 굽는 사내 도구다**(promote 절차·스모크 테넌트·`dist-preview` S3 프리픽스).
+    // 고객이 부를 표면이 아니고 어떤 배송 문서도 안내하지 않는데 38KB 가 전 테넌트에 복제되고 있었다
+    // (심의 보안축 실측). 형제들(`pack-preset`·`gen-preset-assets`·`preset-canvas`)은 이미 빠져 있었고
+    // 이것만 빠뜨렸다. 대조군 `verify-zip.mjs` 는 CUSTOMIZE.md 가 고객에게 직접 시키는 명령이라 남긴다.
+    "scripts/snapshot-preview.mjs",
     "scripts/lib/wiring-parity.mjs",
     // ⚠ **방문자 IP 검사기도 배송하지 않는다**(4차 심의 · Fable/Opus 동시 판정). 처음엔 고객에게도
     // 쓸모 있다고 보고 실었는데, 네 라운드에 걸쳐 **거짓 양성이 닫히지 않았다** — 타입 전용 import,
@@ -1190,7 +1195,7 @@ validateSource([
 
 // **배선 동일성**(오너 확정 2026-08-01) — 팩이 소스를 따로 갖는 대신, *틀리면 사고가 나는* 파일만
 // 바이트로 잠근다. 얼굴이 갈리는 것은 의도이므로 재지 않는다. 판정은 `scripts/lib/wiring-parity.mjs`
-// 한 곳에만 있다(`npm run check:wiring` 이 같은 함수를 부른다 — 검사기 사본이 갈리는 병의 재발 방지).
+// 한 곳에만 있다(`node scripts/lib/wiring-parity.mjs` 이 같은 함수를 부른다 — 검사기 사본이 갈리는 병의 재발 방지).
 problems.push(...checkWiringParity(ROOT));
 
 // **방문자 IP 선언** — 배선 동일성이 못 보는 자리다(그쪽은 바이트 잠금이라 **얼굴**을 못 넣는다).
