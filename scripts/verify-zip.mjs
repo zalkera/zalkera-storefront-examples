@@ -241,7 +241,27 @@ function identityFromFilename(path) {
     return {code: m[1], version: m[2]};
 }
 
+/**
+ * 작업 트리는 **임시 디렉터리 안**에서 만들고, 거기서 `npm ci` 와 `next build` 까지 돈다.
+ * 즉 이 러너는 임시 공간을 수백 MB 쓴다.
+ *
+ * ⚠ **`/tmp` 가 tmpfs(RAM) 인 기계·컨테이너에서는 그 공간이 금방 마른다.** 그러면 이 러너가
+ * `Unknown system error -122`(EDQUOT) 같은 문면으로 반려하는데, **멀쩡한 zip 이 그렇게 반려된다**
+ * (심의 실측 — 검수자가 원인을 알 수 없는 사유였다). 그래서 실패할 때 그 가능성을 말해 준다.
+ * 미리 공간을 재서 막지는 않는다 — 임계값은 빌드 크기에 달렸고, 짐작한 숫자로 멀쩡한 검수를
+ * 거절하는 쪽이 더 나쁘다.
+ *
+ * 다른 자리에서 돌리려면 `TMPDIR` 을 디스크 경로로 주면 된다(`os.tmpdir()` 이 그 값을 읽는다).
+ */
 const work = mkdtempSync(join(tmpdir(), "zalkera-verify-"));
+
+/** 실패 문면이 "임시 공간 부족"으로 읽히면 조치를 한 줄 덧붙인다. 아니면 조용히 지나간다. */
+function hintTmpSpace(text) {
+    if (!/ENOSPC|EDQUOT|-122\b|-28\b|no space left|disk quota/i.test(String(text ?? ""))) return;
+    console.error(`   ⓘ 임시 디렉터리 공간이 부족한 것으로 보입니다(현재: ${tmpdir()}).`);
+    console.error(`     이 검수는 zip 을 풀고 npm ci·빌드까지 돌리므로 수백 MB 가 필요합니다.`);
+    console.error(`     디스크 경로를 주고 다시 돌리십시오:  TMPDIR=/큰/디스크/경로 node scripts/verify-zip.mjs <zip>`);
+}
 let failed = false;
 
 try {
@@ -255,6 +275,7 @@ try {
     }
     if (unzip.status !== 0) {
         record("언팩", false, "zip 이 손상됐거나 형식이 아닙니다");
+        hintTmpSpace((unzip.stderr ?? "") + (unzip.stdout ?? "") + (unzip.error?.message ?? ""));
         failed = true;
     } else {
         const root = effectiveRoot(work);
@@ -452,6 +473,8 @@ try {
                 if (!ok) {
                     const tail = (r.stderr || r.stdout || "").trim().split("\n").slice(-6).join("\n   ");
                     record(label, false, `\n   ${tail}`);
+                    // 설치·빌드가 임시 공간을 가장 많이 쓴다 — 심의가 실제로 여기서 EDQUOT 를 밟았다.
+                    hintTmpSpace((r.stderr ?? "") + (r.stdout ?? "") + (r.error?.message ?? ""));
                 } else {
                     record(label, true);
                 }
