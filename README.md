@@ -150,7 +150,7 @@ npm run dev                    # http://localhost:3000
 
 ## 설계 규약 (지켜야 하는 것)
 
-- **`@zalkera/client` 와 `lib/zalkera` 는 서버에서만** import (RSC·route handler). 클라이언트 컴포넌트에서 쓰면 `baseUrl` 이 노출됩니다 — 타입만 필요하면 `import type` 으로.
+- **`@zalkera/client` 와 `src/lib/zalkera.ts` 는 서버에서만** import (RSC·route handler). 클라이언트 컴포넌트에서 쓰면 `baseUrl` 이 노출됩니다 — 타입만 필요하면 `import type` 으로.
 - **장바구니·결제는 BFF route handler** 를 거칩니다. 토큰·게스트 카트키는 httpOnly 쿠키(`src/lib/session.ts`)로 서버가 관리합니다.
 - **결제 확정은 백엔드 웹훅이 합니다.** returnUrl 의 "성공"을 믿지 말고 `/orders/[orderNo]` 로 상태를 확인하세요.
 - **variant 가 판매 단위** — 담기·주문은 항상 `variant.id`.

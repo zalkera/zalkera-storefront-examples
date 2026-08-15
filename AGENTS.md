@@ -277,7 +277,7 @@ shadcn 소스는 자기 변수층(`--card`·`--muted-foreground` …)을 전제�
   여기서 에러·경고를 내지 마라.
 - **섹션 이미지**는 레포 `public/` 루트 절대 경로(`"asset": "/images/hero.png"` → `assetPath()`),
   **상품 커버**는 DB 가 발급한 `coverAssetId` → `mediaSrc()` 프록시다(카탈로그는 레인 B).
-  모든 href 는 `lib/safeUrl` 을 태운다(저장형 XSS 방어).
+  모든 href 는 `src/lib/safeUrl.ts` 를 태운다(저장형 XSS 방어).
 - `LEAD_CTA` 섹션은 `id="lead"` 앵커를 갖는다 — 원페이지 랜딩의 히어로 CTA(`ctaHref: "#lead"`)가 여기를 가리킨다.
   이 id 를 지우면 간판 버튼이 **조용히 아무 데도 안 간다**.
 - `FAQ_LIST` 는 네이티브 `<details>/<summary>` 다 — JS 0·접근성 내장·**닫힌 답변도 SSR 마크업에 실린다**.

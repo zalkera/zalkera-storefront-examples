@@ -37,7 +37,7 @@
  */
 export function isSameOriginRequest(req: Request): boolean {
     const origin = req.headers.get("origin");
-    // ⚠ `origin === "null"` 은 **오늘 동치 가드다**(실측: 그 절만 지워도 27/27 통과). 아래
+    // ⚠ `origin === "null"` 은 **오늘 동치 가드다**(실측: 그 절만 지워도 스위트가 전부 통과). 아래
     // `new URL("null")` 이 throw 해서 `catch → false` 로 같은 답이 나오기 때문이다. 그래도 남기는
     // 이유는 **의도를 드러내기 위해서다** — 샌드박스 iframe 의 `Origin: null` 을 막는 것이 판정
     // 규칙의 일부이고, 파싱 실패에 얹혀 우연히 참인 상태로 두면 URL 파서 동작이 바뀌는 날 조용히

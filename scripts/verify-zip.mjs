@@ -359,23 +359,22 @@ try {
         //   발주 스펙이 약속한 것은 규약 검사이지 문서 위생이 아니다(전제 A).
         if (packMode) {
             const DOC_TARGETS = ["CUSTOMIZE.md", "README.md", "AGENTS.md"];
-            // ⚠ **잣대는 검사기 D1 의 거울이다** — 새로 지어내지 않는다.
-            //   `@zalkera/client` 의 `bin/validate-storefront.mjs` 가 쓰는 `DOC_PATH_TOKEN`·
-            //   `DOC_PATH_SKIP_PREFIX` 와 같은 값이고, 그 규칙은 17라운드 심의를 통과한 것이다.
-            //   내가 처음에 "슬래시가 있으면 좌표"라는 자작 규칙을 썼다가 **후보 45건**이 나왔다 —
-            //   URL 라우트(`/products`·`/blog/[slug]`)와 예시 파일명(`content/pages/회사연혁.json`)이
-            //   전부 걸렸다(실측). 확장자 요구 + 접두 제외가 그것을 정확히 거른다.
+            // 잣대는 검사기 D1 의 **거울**이다(`@zalkera/client` 의 `DOC_PATH_TOKEN`·
+            // `DOC_PATH_SKIP_PREFIX`). 자작 규칙을 쓰면 URL 라우트·예시 파일명이 쏟아진다.
+            // 이 파일은 외주에게 단일 파일로 건네지므로 공용 모듈을 import 하지 않는다(머리말) —
+            // 사본이 아니라 거울이고, 옮길 일이 있으면 두 곳을 같은 트랜치에서 고쳐라.
+            // 갈리면 이 검사는 **덜 잡는 쪽**으로 죽는다(고객 CI 를 붉히는 방향이 아니다).
             //
-            //   이 파일은 외주에게 **단일 파일로** 건네지므로 공용 모듈을 import 하지 않는다(머리말).
-            //   그래서 사본이 아니라 **거울**이고, 갈리면 이 검사가 헛돈다 — 옮길 일이 있으면 두 곳을
-            //   같은 트랜치에서 고쳐라.
-            //   ⚠ 한 곳만 **일부러 넓혔다**: 에셋 확장자. D1 목록은 소스 파일뿐이라 3.0.15 를 반려시킨
-            //   바로 그 좌표(`public/images/…`)를 못 잡는다 — 그 판의 차단이 이미지 지목이었다.
-            //   넓힌 대가를 재 봤더니 **오탐 0 · 진짜 1건**이었다(3.0.19 배송물 실측).
+            // ⚠ **못 잡는 것 둘.** ⑴ 디렉터리형 지목(`public/images/`) — 확장자를 요구하므로 안 걸린다.
+            //   넓혀 보니 4벌에서 후보 8건이 전부 정당한 부재 서술이었다(조건부 `public/`·`sections/`).
+            //   ⑵ 없는 파일을 **예시로** 든 튜토리얼 문장. 이 둘은 사람이 본다.
             const DOC_PATH_TOKEN =
                 /^[A-Za-z0-9_.\-/[\]]+\.(?:tsx?|jsx?|mjs|cjs|json|css|md|png|jpe?g|webp|avif|gif|svg|ico)$/;
-            const DOC_PATH_SKIP_PREFIX = ["doc/", "node_modules/", ".zalkera/", "@", "/", "http"];
+            // ⚠ `".."` 는 **거울에 없는 우리 쪽 추가**다. D1 은 고객 자기 레포에서 돌지만 여기 트리는
+            //   **신뢰 밖 zip** 이라, `..` 를 따라가면 검수자 파일시스템에 대한 존재 오라클이 된다.
+            const DOC_PATH_SKIP_PREFIX = ["doc/", "node_modules/", ".zalkera/", "@", "/", "http", ".."];
             const dead = [];
+            const readDocs = [];
             for (const doc of DOC_TARGETS) {
                 let text;
                 try {
@@ -386,6 +385,7 @@ try {
                     if (e.code !== "ENOENT") unread.push(`${relative(work, join(root, doc))} — 배송 문서 좌표 검사 실패 [${e.code ?? "UNKNOWN"}]`);
                     continue;
                 }
+                readDocs.push(doc);
                 const seen = new Set();
                 for (const m of text.matchAll(/`([^`\n]+)`/g)) {
                     const tok = m[1];
@@ -402,7 +402,9 @@ try {
                 console.error(`   없는 파일을 찾다가 제 좌표를 짜냅니다. 실물 경로로 고치거나 표기를 지우십시오.`);
                 failed = true;
             } else {
-                record("배송 문서 좌표", true, `${DOC_TARGETS.join("·")} — 죽은 좌표 없음`);
+                // ⚠ **읽은 것만 이름을 댄다.** 목록을 그대로 찍으면 못 읽은 문서까지 "검사했다"로
+                //   읽힌다(심의 실측 — 판정은 옳았는데 ✅ 줄이 세 문서를 다 댔다).
+                record("배송 문서 좌표", true, `${readDocs.join("·") || "대상 문서 없음"} — 죽은 좌표 없음`);
             }
         }
 
@@ -642,7 +644,11 @@ try {
 if (unread.length) {
     console.error(`\n❌ 읽지 못한 자리 ${unread.length}곳 — 이 자리들은 **검사하지 않았습니다(통과가 아닙니다).**`);
     for (const u of unread) console.error(`   · ${u}`);
-    console.error("   zip 안 파일 권한을 정상화(디렉터리 755·파일 644)해 다시 압축한 뒤 재납품 요청하십시오.");
+    // 사유별로 조치가 다르다 — 권한이 아닌 실패(거대 파일·손상)에 "권한을 고치라"고 하면 오도한다.
+    if (unread.some((u) => /EACCES|EPERM/.test(u))) {
+        console.error("   권한 문제로 보이는 자리가 있습니다 — zip 안 폴더는 755, 파일은 644 로 두고 다시 압축하십시오.");
+    }
+    console.error("   그 밖의 사유는 위 대괄호 안 코드가 가리킵니다(예: 파일이 너무 커서 읽지 못함).");
     failed = true;
 }
 

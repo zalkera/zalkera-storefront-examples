@@ -183,7 +183,7 @@ node scripts/verify-zip.mjs 내가고친것.zip
 
 | 코드 | 무엇을 막나 | 왜 |
 |---|---|---|
-| **E1·E2** | `"use client"` 파일에서 `@zalkera/client` 나 `lib/zalkera` 를 값으로 import | 서버 주소·토큰이 브라우저에 노출됩니다 |
+| **E1·E2** | `"use client"` 파일에서 `@zalkera/client` 나 `src/lib/zalkera.ts` 를 값으로 import | 서버 주소·토큰이 브라우저에 노출됩니다 |
 | **C1** | 공개 페이지(홈·목록·상세·글)가 요청마다 서버 렌더하도록 만드는 것 | 느려지고 서버 비용이 상시로 붙습니다 |
 | **C1b** | `layout` 이 import 로 닿는 파일에서 `cookies()`·`headers()` 사용 | **그 아래 전 페이지**가 통째로 느려집니다 |
 | **C2** | 섹션 렌더러가 계약의 섹션 종류를 빠뜨리는 것 | 콘솔에서 넣은 섹션이 **조용히 안 그려집니다** |
@@ -238,7 +238,7 @@ npm run check:aeo -- --print-guarantees
 - **`src/app/globals.css` 의 `@theme` 블록** — `bg-primary` 같은 클래스가 여기서 생깁니다(S8).
 - **`SectionRenderer` 의 `default:` 가 조용히 `null` 인 것** — 새 섹션 종류가 추가돼도 옛 사이트가 안 깨지는 계약입니다.
 - **`LEAD_CTA` 섹션의 `id="lead"`** — 홈 첫 화면의 CTA 버튼이 여기를 가리킵니다. 지우면 간판 버튼이 **아무 데도 안 갑니다**.
-- **`lib/safeUrl`** 을 거치는 링크 처리 — 콘솔 입력으로 들어오는 주소의 방어선입니다.
+- **`src/lib/safeUrl.ts`** 를 거치는 링크 처리 — 콘솔 입력으로 들어오는 주소의 방어선입니다.
 - **`.env` 파일을 zip 에 넣지 마세요.** 소스는 공개될 수 있고, 한 번 나간 값은 회수할 수 없습니다.
 
 ### 플랫폼이 업로드 뒤에 하는 것
