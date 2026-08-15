@@ -53,7 +53,7 @@
 | 경로 | 무엇 |
 |---|---|
 | `/` | 홈 — 시드 섹션이 있으면 그것이 홈, 없으면 상호·카테고리 골격 (RSC, 공개 조회) |
-| `/[slug]` | **소스가 갖는 고정 페이지**(회사소개·이용안내 등) — `content/pages/<slug>.json` 의 섹션 배열로 그린다. 얼굴이 소스 정본이라 `force-static`(재검증 없음)이고, 고치려면 재업로드한다 |
+| `/[slug]` | **소스가 갖는 고정 페이지**(회사소개·이용안내 등) — `content/pages/<slug>.json` 의 섹션 배열로 그린다. 얼굴이 소스 정본이라 `force-static` 이고, 고치려면 재업로드한다 |
 | `/products` | **상품 목록** — 카탈로그 허브(`ItemList`) |
 | `/products/[slug]` | 상품 상세 + 장바구니 담기 (예약 상품이면 슬롯 선택) |
 | `/blog`, `/blog/[slug]` | 글 목록·상세 (공지·블로그) |
@@ -111,18 +111,20 @@ npm run dev                    # http://localhost:3000
 | 경로 | 렌더링 | 이유 |
 |---|---|---|
 | `/` (홈) | **ISR** (`revalidate=600`) | 사이트 설정·카테고리 = 세션 무관 공개 데이터 |
-| `/[slug]` (고정 페이지) | **정적** (`force-static`) | **소스가 갖는 콘텐츠**라 재검증할 것이 없다 — 고치면 재업로드하고, 그때 새로 구워진다 |
+| `/[slug]` (고정 페이지) | **정적 프리렌더** (`force-static`) | **소스가 갖는 콘텐츠**라 재검증할 것이 없다 — 고치면 재업로드하고, 그때 새로 구워진다. (빌드 표에는 `●` 로 나온다 — 프리렌더된 경로가 있다는 뜻이고, 옆의 재검증 값은 Next 기본값이다) |
 | `/products` (상품 목록) | **ISR** (`revalidate=300`) | 카탈로그 허브. **`searchParams` 를 안 받는 것이 의도** — 정렬·필터를 쿼리로 받으면 동적 렌더로 강등된다 |
 | `/products/[slug]` (상품 상세) | **ISR** (`revalidate=300`) | 카탈로그 = 공개 읽기. 재고·가격은 결제 시점에 백엔드가 재검증하므로 stale 안전 |
 | `/blog`·`/blog/[slug]` (글) | **ISR** (`revalidate=300`) | 발행글 = 세션 무관 공개 읽기 |
 | `/contact`·`/policies` | **ISR/static** | 폼 셸·정책 표시면. 제출만 아일랜드→BFF |
 | `/cart`·`/mypage`·`/login`·`/orders/[orderNo]` | **동적(ƒ)** | 쿠키(세션 토큰·게스트 카트키)를 읽음 → 요청별 렌더 필수 |
-| `/checkout`·`/auth/callback/[provider]` | **동적(ƒ)** | 클라이언트 컴포넌트(폼 상태·OAuth state) |
+| `/checkout`·`/payment/widget`·`/payment/complete` | **정적(○)** | 정적 셸 + 클라이언트 폼. 값은 브라우저에서 채운다 |
+| `/auth/callback/[provider]` | **동적(ƒ)** | 동적 세그먼트 |
 | `/api/**` (BFF) | **동적(ƒ)** | route handler |
 
 - ISR 전환은 페이지 상단 두 줄입니다: `export const dynamic = "force-static"` + `export const revalidate = N`.
   (Next 16 은 fetch 를 기본 no-store 로 두어 `revalidate` 만으론 동적으로 남습니다 — `force-static` 이 세그먼트 fetch 를 캐시로 돌려 ISR 을 성립시킵니다.)
-- `npm run build` 의 라우트 표에서 `○`(Static/ISR)인지 `ƒ`(Dynamic)인지 확인하세요.
+- `npm run build` 의 라우트 표에서 `○`(정적)·`●`(정적 프리렌더)·`ƒ`(동적) 중 무엇인지 확인하세요.
+  **이 표보다 그 산출물이 정본입니다** — 어긋나면 산출물이 맞고 이 표가 낡은 것이니 표를 고치세요.
 - 새 **읽기 페이지**(게시글 목록/상세 등)를 추가하면 같은 두 줄로 ISR 로 만들고, **세션/쓰기 페이지**는 쿠키를 읽거나 클라이언트 fetch 로 두어 동적으로 남깁니다.
 - **Tailwind 는 빌드타임 CSS 라 렌더링 전략과 무관합니다.** `next build` 중 산출된 정적 `.css` 를 런타임엔 `<link>` 하나로 실을 뿐, 서버 fetch·동적 렌더를 유발하지 않습니다(아래 스타일 규약 참조).
 
