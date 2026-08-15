@@ -1,6 +1,7 @@
 // 클라이언트/서버 공용 — 서버 클라이언트 싱글턴(lib/zalkera)이나 값 import 를 포함하지 않으므로
 // "use client" 컴포넌트에서 안전하게 import 할 수 있다(validator E1/E2 무관).
 import type {ConsentInput, ConsentType, SocialProvider} from "@zalkera/client";
+import {internalPath} from "./safeUrl.ts";
 
 /** 로그인 버튼으로 노출할 소셜 제공자 순서. TEST 는 실OAuth 가 아니라 여기에 없다(개발 전용 별도 진입점). */
 export const SOCIAL_PROVIDERS: SocialProvider[] = ["KAKAO", "NAVER", "GOOGLE"];
@@ -20,9 +21,6 @@ export const CONSENT_STORAGE_KEY = "zalkera_oauth_consents";
  */
 export const POLICY_VERSION = "v1";
 
-/** 판정 전용 더미 오리진 — 실제 배포 도메인과 무관하다(오리진 동일성만 본다). */
-const DUMMY_ORIGIN = "https://zalkera.invalid";
-
 /**
  * 로그인 복귀 경로 안전 판정 — **내부 경로만** 통과시킨다.
  *
@@ -34,14 +32,10 @@ const DUMMY_ORIGIN = "https://zalkera.invalid";
  * 소비자가 또 다르게 해석할 여지가 남는다.
  */
 export function safeNextPath(raw: string | null | undefined): string | null {
+    // 판정은 `safeUrl.ts` 의 `internalPath` 하나가 진다 — 규칙을 여기 옮겨 적지 마라.
+    // 종전에는 같은 규칙이 두 파일에 베껴져 있었고, 그래서 둘이 같이 틀렸다(오픈 리다이렉트).
     if (!raw || !raw.startsWith("/")) return null;
-    try {
-        const parsed = new URL(raw, DUMMY_ORIGIN);
-        if (parsed.origin !== DUMMY_ORIGIN) return null;
-        return parsed.pathname + parsed.search + parsed.hash;
-    } catch {
-        return null;
-    }
+    return internalPath(raw);
 }
 
 /** 로그인 동의 UI 에 노출할 항목 정의. `required` 3종은 신규 가입에 모두 체크돼야 한다. */

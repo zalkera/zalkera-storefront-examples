@@ -18,6 +18,42 @@ const ALLOWED_SCHEMES = new Set(["http:", "https:", "mailto:", "tel:"]);
 /** 내부 경로 판정용 가짜 오리진 — 이 값으로 정규화되면 "밖으로 안 나간다"가 참이다. */
 const DUMMY_ORIGIN = "https://zalkera.invalid";
 
+/**
+ * 내부 절대경로로 **정규화**한다 — 밖으로 나가는 형태면 `null`.
+ *
+ * ⚠ **입력이 아니라 돌려주는 값을 판정한다.** 종전 판정은 `new URL(raw, DUMMY_ORIGIN).origin` 하나로
+ *   끝났는데, 그건 **입력**이 내부인지만 묻는다. `/..//evil.example` 은 그 판정을 통과하고 정규화
+ *   결과가 `//evil.example` 이 되며, 그 값이 href·`Location` 으로 소비되면 브라우저는 **프로토콜
+ *   상대 URL** 로 읽어 `https://evil.example/` 로 간다(심의 실측 — `refresh` 라우트에서 실제
+ *   `Location: https://evil.example/` 를 재현했다).
+ *
+ *   그래서 소독기는 **자기 출력이 자기 입력 판정을 다시 통과해야** 한다. 그 멱등성을 여기서 건다.
+ *   `//` 를 문자로 거르지 않는 이유는 같다 — 문자 목록은 다음 형태에서 또 진다(`/%2e%2e//`·
+ *   `/a/b/../..//`·`/./..//` 가 전부 같은 값으로 정규화된다).
+ *
+ *   재현: `node -e 'console.log(new URL("/..//evil.example","https://zalkera.invalid").pathname)'`
+ *
+ * ⚠ **이 함수가 판정의 단 하나의 자리다.** 종전에는 같은 규칙이 `safeUrl.ts` 와 `oauth.ts` 에 **베껴져**
+ *   있었고 — 주석은 "판정을 통일한다"고 적혀 있었지만 실제로는 사본이었다 — 그래서 둘이 같이 틀렸다.
+ *   새 소비자가 생기면 규칙을 옮겨 적지 말고 이것을 부르라.
+ */
+export function internalPath(raw: string): string | null {
+    let out: string;
+    try {
+        const parsed = new URL(raw, DUMMY_ORIGIN);
+        if (parsed.origin !== DUMMY_ORIGIN) return null;
+        out = parsed.pathname + parsed.search + parsed.hash;
+    } catch {
+        return null;
+    }
+    try {
+        if (new URL(out, DUMMY_ORIGIN).origin !== DUMMY_ORIGIN) return null;
+    } catch {
+        return null;
+    }
+    return out;
+}
+
 export function safeLinkUrl(raw: string | null | undefined): string {
     if (!raw) return "#";
     const url = raw.trim();
@@ -39,15 +75,7 @@ export function safeLinkUrl(raw: string | null | undefined): string {
     // `#top` 이 `/#top` 이 되어 **다른 페이지에서 홈으로 튄다**(초판 수정에서 실제로 낸 회귀).
     if (url.startsWith("#") || url.startsWith("?")) return url;
 
-    if (url.startsWith("/")) {
-        try {
-            const parsed = new URL(url, DUMMY_ORIGIN);
-            if (parsed.origin !== DUMMY_ORIGIN) return "#";
-            return parsed.pathname + parsed.search + parsed.hash;
-        } catch {
-            return "#";
-        }
-    }
+    if (url.startsWith("/")) return internalPath(url) ?? "#";
 
     try {
         const parsed = new URL(url); // 절대 URL 만 파싱된다(상대면 throw)
@@ -56,8 +84,7 @@ export function safeLinkUrl(raw: string | null | undefined): string {
         // 파싱 실패 = 스킴 없는 상대경로(anchor#·?query 등). 여기도 파서로 재판정한다 —
         // `\\evil.example` 같은 값이 "파싱 실패"로 빠져나가던 갈래를 닫는다(심의 실측).
         try {
-            const parsed = new URL(url, DUMMY_ORIGIN);
-            return parsed.origin === DUMMY_ORIGIN ? parsed.pathname + parsed.search + parsed.hash : "#";
+            return internalPath(url) ?? "#";
         } catch {
             return "#";
         }

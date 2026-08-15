@@ -86,7 +86,7 @@ jobs:
           set -o pipefail
           npm test
           fail=0
-          for s in "src/lib/crossOrigin.test.ts:14" "src/lib/oauthState.test.ts:7" "src/lib/previewGuard.test.ts:3" "src/lib/docsRev.test.ts:1"; do
+          for s in "src/lib/crossOrigin.test.ts:14" "src/lib/oauthState.test.ts:7" "src/lib/previewGuard.test.ts:3" "src/lib/docsRev.test.ts:1" "src/lib/safeUrl.test.ts:4"; do
             f=${s%:*}; min=${s##*:}
             p=$(node --experimental-strip-types --test "$f" 2>&1 | sed -n 's/^# pass \([0-9]*\)$/\1/p' | tail -1)
             if [ -z "$p" ] || [ "$p" -lt "$min" ]; then
