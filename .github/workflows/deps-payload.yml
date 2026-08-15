@@ -132,7 +132,8 @@ jobs:
         # 불일치로 폐기당한다. 그래서 ⑴ GNU tar 를 **찾고** ⑵ 못 찾으면 **시끄럽게 죽는다.**
         # (첫 판에는 ⑵만 있었다 — macOS 에서 항상 죽어 매니페스트가 세상에 존재할 수 없었다. 심의 B1.)
         #
-        # sha256 도구도 갈린다: 리눅스·Git Bash 는 `sha256sum`, macOS 는 `shasum -a 256` 이다.
+        # (sha256 은 러너 도구를 안 쓴다 — 아래에서 node 로 낸다. `setup-node` 가 이미 돌았고,
+        #  hex 와 base64 를 **같은 읽기**에서 내야 둘이 갈릴 여지가 없다.)
         run: |
           pick_tar() {
             for c in tar gtar gnutar; do
@@ -152,14 +153,6 @@ jobs:
           echo "TAR=$TAR" >> "$GITHUB_ENV"
           echo "선택한 tar: $TAR — $("$TAR" --version 2>&1 | head -1)"
 
-          if command -v sha256sum >/dev/null 2>&1; then
-            echo "SHA256_CMD=sha256sum" >> "$GITHUB_ENV"
-          elif command -v shasum >/dev/null 2>&1; then
-            echo "SHA256_CMD=shasum -a 256" >> "$GITHUB_ENV"
-          else
-            echo "::error::sha256 도구가 없다(sha256sum·shasum 둘 다). 무결성 대조 불가 — 중단."
-            exit 1
-          fi
 
       - name: 결정적 tar.gz
         shell: bash
@@ -173,8 +166,15 @@ jobs:
           "$TAR" --sort=name --mtime='2020-01-01 00:00:00Z' \
               --owner=0 --group=0 --numeric-owner \
               -czf "$TARBALL" node_modules
-          echo "SHA=$($SHA256_CMD "$TARBALL" | cut -d' ' -f1)" >> "$GITHUB_ENV"
-          echo "BYTES=$(wc -c < "$TARBALL" | tr -d ' ')" >> "$GITHUB_ENV"
+          # hex 는 매니페스트용, base64 는 S3 체크섬 헤더용 — **한 번 읽어 둘 다** 낸다.
+          node -e '
+            const {createHash} = require("crypto");
+            const buf = require("fs").readFileSync(process.argv[1]);
+            const h = createHash("sha256").update(buf).digest();
+            const out = [`SHA=${h.toString("hex")}`, `SHA_B64=${h.toString("base64")}`, `BYTES=${buf.length}`];
+            require("fs").appendFileSync(process.env.GITHUB_ENV, out.join("\n") + "\n");
+            console.log(out.join(" · "));
+          ' "$TARBALL"
           echo "TARBALL=$TARBALL" >> "$GITHUB_ENV"
 
       - uses: aws-actions/configure-aws-credentials@v4
@@ -184,14 +184,30 @@ jobs:
 
       - name: 업로드 (S3 가 체크섬으로 거부권을 갖게 한다)
         shell: bash
-        # --checksum-algorithm SHA256: 러너→S3 구간 손상을 S3 가 **거부**로 잡는다(우리가 나중에 대조하는
-        # 것이 아니라 애초에 안 받는다). Cache-Control immutable 은 내용 주소라 안전하다.
+        env:
+          # ⚠ **CLI 가 알아서 붙이는 체크섬을 끈다.** 기본값(`when_supported`)이면 CLI 판본에 따라
+          #   무엇을 붙일지가 달라진다 — 실측: aws-cli 2.35 는 인자를 안 주면 **CRC64NVME** 를 붙이고
+          #   `x-amz-sdk-checksum-algorithm` 서명 헤더를 하나 더 만든다. 러너 이미지가 판본을 정하므로
+          #   그 암묵 경로는 **플랫폼마다 다를 수 있다**. 우리가 잰 값을 명시하면 그 변수가 사라진다.
+          AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+        # S3 가 러너→S3 구간 손상을 **거부**로 잡는다(나중에 대조하는 것이 아니라 애초에 안 받는다).
+        # 값은 위에서 tar 를 읽어 낸 그 base64 다 — CLI 가 파일을 다시 읽어 계산하지 않는다.
+        # Cache-Control immutable 은 내용 주소라 안전하다.
+        #
+        # ⚠ **2026-08-15 windows-latest 에서 `SignatureDoesNotMatch` 로 죽었다.** 서명은 본문 전체
+        #   해시(`X-Amz-Content-SHA256`)를 덮으므로, CLI 가 해시한 바이트와 실제 보낸 바이트가
+        #   어긋나면 이 오류가 난다(실측: 200MB 본문도 청크가 아니라 단일 PUT 이다).
+        #   원인을 리눅스에서 재현하지 못했다 — 그래서 **판본 의존 암묵 경로를 없애는** 쪽으로 고쳤고,
+        #   아래 진단 출력으로 다음 실패를 읽을 수 있게 했다. 여전히 죽으면 그 출력부터 보라.
         run: |
+          echo "aws: $(aws --version 2>&1)"
+          echo "tarball: $TARBALL · bytes=$BYTES · sha256(b64)=$SHA_B64"
+          ls -l "$TARBALL"
           aws s3api put-object \
             --bucket "$BUCKET" \
             --key "$KEY_PREFIX/${{ needs.lockfile.outputs.sha }}/${{ matrix.platform }}.tar.gz" \
             --body "$TARBALL" \
-            --checksum-algorithm SHA256 \
+            --checksum-sha256 "$SHA_B64" \
             --cache-control "public, max-age=31536000, immutable" \
             --content-type application/gzip
 
