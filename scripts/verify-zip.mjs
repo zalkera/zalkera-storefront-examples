@@ -103,6 +103,30 @@ const record = (name, ok, detail = "") => {
 const ENV_KEEP = /\.(example|sample|template)$/;
 
 /**
+ * **내용 축.** 이름만 보면 평범한 `src/lib/cfg.ts` 에 박힌 라이브 키를 못 잡는다 — 심의가 AWS 키·
+ * 결제 라이브 시크릿·RSA 개인키를 그렇게 심고 `rc 0 · ✅ 시크릿 0` 으로 통과시켰다. 라벨이 잰 것보다
+ * 넓게 말하던 자리다(실제로 잰 것은 "환경파일 이름이 없다"였다).
+ *
+ * ⚠ **패턴을 문자클래스로 쓴다.** 이 파일 자신이 zip 에 실려 스캔 대상이 되므로, 리터럴로 적으면
+ *   스캐너가 자기를 잡는다. 바꿀 때는 4벌에 돌려 오탐 0 을 확인하라.
+ *
+ * ⚠ 이것은 **완전하지 않다.** 고엔트로피 문자열 일반은 안 본다 — 그래서 라벨이 "이름·내용 패턴"이다.
+ *   범위를 넓혀 말하지 마라. 그 과장이 이 결함의 본체였다.
+ */
+const SECRET_CONTENT = [
+    ["AWS 액세스키", /\bAKIA[0-9A-Z]{16}\b/],
+    ["개인키 블록", /-----BEGIN [A-Z ]{0,20}PRIVATE KEY-----/],
+    ["결제 라이브 시크릿", /\b(?:sk_live_|live_sk_)[0-9A-Za-z]{8,}/],
+    ["GitHub 토큰", /\b(?:gh[pousr]_[0-9A-Za-z]{20,}|github_pat_[0-9A-Za-z_]{20,})\b/],
+    ["Slack 토큰", /\bxox[abprs]-[0-9A-Za-z-]{10,}\b/],
+    ["Google API 키", /\bAIza[0-9A-Za-z_\-]{35}\b/],
+    ["npm 토큰", /\bnpm_[0-9A-Za-z]{36}\b/],
+    ["URL 내장 자격증명", /\b[a-z][a-z0-9+.\-]*:\/\/[^\s/:@]+:[^\s/@]{3,}@/],
+];
+const SECRET_TEXTUAL = /\.(m?[jt]sx?|cjs|json|md|txt|ya?ml|sh|html?|css|toml|ini|conf|env)$/i;
+const SECRET_CONTENT_MAX = 2 * 1024 * 1024;
+
+/**
  * 못 읽은 자리. 납품 zip 안에 권한 없는 디렉터리나 깨진 항목이 있으면 여기 쌓인다.
  *
  * ⚠ **비면 안 되는 이유.** 종전엔 `readdirSync` 가 무방비라 그런 zip 하나에 스크립트가 스택트레이스로
@@ -134,6 +158,18 @@ function scanSecrets(dir) {
             }
             if (/(^|\/)\.env(\.|$)/.test(`/${r}`) && !ENV_KEEP.test(e.name)) hits.push(r);
             if (/\.(pem|key|p12|pfx)$/.test(e.name)) hits.push(r);
+            if (!SECRET_TEXTUAL.test(e.name)) continue;
+            let text;
+            try {
+                const full = join(d, e.name);
+                if (statSync(full).size > SECRET_CONTENT_MAX) continue;
+                text = readFileSync(full, "utf8");
+            } catch (err) {
+                // 못 읽은 것은 적는다 — 조용히 넘기면 "0건"이 미측정을 덮는다.
+                unread.push(`${r} — 시크릿 내용 스캔 실패 [${err.code ?? "UNKNOWN"}]`);
+                continue;
+            }
+            for (const [label, re] of SECRET_CONTENT) if (re.test(text)) hits.push(`${r} (${label})`);
         }
     };
     walk(dir);
@@ -315,7 +351,7 @@ try {
         const secretsComplete = unread.length === beforeSecrets;
         if (secrets.length || !secretsComplete) {
             record(
-                secretsComplete ? "시크릿 0" : "시크릿 스캔(불완전)",
+                secretsComplete ? "시크릿 0(이름·내용 패턴)" : "시크릿 스캔(불완전)",
                 false,
                 secrets.length
                     ? secrets.slice(0, 5).join(", ")
@@ -323,7 +359,7 @@ try {
             );
             failed = true;
         } else {
-            record("시크릿 0", true);
+            record("시크릿 0(이름·내용 패턴)", true);
         }
 
         // ④ 에셋 라이선스 매니페스트(발주 스펙 §1-5 필수) — **존재만** 기계가 보고 내용 대조는 사람이 한다.
@@ -359,20 +395,61 @@ try {
         //   발주 스펙이 약속한 것은 규약 검사이지 문서 위생이 아니다(전제 A).
         if (packMode) {
             const DOC_TARGETS = ["CUSTOMIZE.md", "README.md", "AGENTS.md"];
-            // 잣대는 검사기 D1 의 **거울**이다(`@zalkera/client` 의 `DOC_PATH_TOKEN`·
-            // `DOC_PATH_SKIP_PREFIX`). 자작 규칙을 쓰면 URL 라우트·예시 파일명이 쏟아진다.
-            // 이 파일은 외주에게 단일 파일로 건네지므로 공용 모듈을 import 하지 않는다(머리말) —
-            // 사본이 아니라 거울이고, 옮길 일이 있으면 두 곳을 같은 트랜치에서 고쳐라.
-            // 갈리면 이 검사는 **덜 잡는 쪽**으로 죽는다(고객 CI 를 붉히는 방향이 아니다).
+            // 잣대는 검사기 D1(`@zalkera/client` 의 `DOC_PATH_TOKEN`·`DOC_PATH_SKIP_PREFIX`)에서
+            // 왔다. 자작 규칙을 쓰면 URL 라우트·예시 파일명이 쏟아진다. 이 파일은 외주에게 단일
+            // 파일로 건네지므로 공용 모듈을 import 하지 않는다(머리말).
             //
-            // ⚠ **못 잡는 것 둘.** ⑴ 디렉터리형 지목(`public/images/`) — 확장자를 요구하므로 안 걸린다.
-            //   넓혀 보니 4벌에서 후보 8건이 전부 정당한 부재 서술이었다(조건부 `public/`·`sections/`).
+            // ⚠ **거울이 아니다 — 두 군데 일부러 다르다. 재동기화할 때 지우지 마라.**
+            //   ⑴ **에셋 확장자 7종**(png·jpe?g·webp·avif·gif·svg·ico)을 더 본다. D1 목록은 소스
+            //      파일뿐이라 3.0.15 를 반려시킨 바로 그 좌표(`public/images/…`)를 못 잡는다.
+            //   ⑵ 판정을 **파일시스템이 아니라 zip 엔트리 집합**으로 한다(아래). 여기 트리는 신뢰 밖
+            //      zip 이라 문서가 준 문자열을 `existsSync` 에 대면 검수자 파일시스템에 대한 존재
+            //      오라클이 된다 — 실제로 그랬고, `..` 접두 필터로 막으려다 `a/../../x` 에 뚫렸다.
+            //   이 차이 때문에 갈림은 **더 잡는 쪽**이다. "덜 잡는 쪽으로 죽는다"고 적었던 판이
+            //   있는데 거짓이었다.
+            //
+            // ⚠ **못 잡는 것 둘.** ⑴ 디렉터리형 지목(`public/images/`) — 확장자를 요구하므로 안 걸린다
+            //   (끝슬래시 토큰으로 넓혀 재 보니 4벌 후보 8건이 전부 정당한 부재 서술이라 안 넓혔다).
             //   ⑵ 없는 파일을 **예시로** 든 튜토리얼 문장. 이 둘은 사람이 본다.
             const DOC_PATH_TOKEN =
                 /^[A-Za-z0-9_.\-/[\]]+\.(?:tsx?|jsx?|mjs|cjs|json|css|md|png|jpe?g|webp|avif|gif|svg|ico)$/;
-            // ⚠ `".."` 는 **거울에 없는 우리 쪽 추가**다. D1 은 고객 자기 레포에서 돌지만 여기 트리는
-            //   **신뢰 밖 zip** 이라, `..` 를 따라가면 검수자 파일시스템에 대한 존재 오라클이 된다.
-            const DOC_PATH_SKIP_PREFIX = ["doc/", "node_modules/", ".zalkera/", "@", "/", "http", ".."];
+            // 순수 어휘 필터 — URL·패키지 지정자를 거른다. 경로 이탈은 여기가 아니라 `insideZip` 이 진다.
+            const DOC_PATH_SKIP_PREFIX = ["doc/", "node_modules/", ".zalkera/", "@", "/", "http"];
+
+            // zip 이 **실제로 담고 있는 것**의 목록. 아카이브 메타데이터에서 읽는다 — 풀어 놓은 트리를
+            // 걸으면 zip 안 심링크를 따라가 같은 오라클로 돌아간다.
+            const listing = spawnSync("unzip", ["-Z1", resolve(zipPath)], {encoding: "utf8", maxBuffer: 64 * 1024 * 1024});
+            const zipEntries = new Set();
+            if (listing.status === 0) {
+                const prefix = relative(work, root);
+                for (const line of (listing.stdout ?? "").split("\n")) {
+                    let name = line.trim().replace(/\/+$/, "");
+                    if (!name) continue;
+                    if (prefix) {
+                        if (name !== prefix && !name.startsWith(`${prefix}/`)) continue; // 실효 루트 밖
+                        name = name.slice(prefix.length + 1);
+                    }
+                    if (name) zipEntries.add(name);
+                }
+            }
+
+            /**
+             * 토큰을 **문자열만으로** zip 내부 경로로 정규화한다. 파일시스템을 만지지 않는 것이 요점이다.
+             * 루트 위로 올라가면 `null` — zip 밖은 애초에 이 검사의 좌표계가 아니다.
+             */
+            const insideZip = (t) => {
+                const out = [];
+                for (const part of t.split("/")) {
+                    if (part === "" || part === ".") continue;
+                    if (part === "..") {
+                        if (out.length === 0) return null;
+                        out.pop();
+                        continue;
+                    }
+                    out.push(part);
+                }
+                return out.length ? out.join("/") : null;
+            };
             const dead = [];
             const readDocs = [];
             for (const doc of DOC_TARGETS) {
@@ -393,10 +470,15 @@ try {
                     if (!DOC_PATH_TOKEN.test(tok)) continue;
                     if (DOC_PATH_SKIP_PREFIX.some((x) => tok.startsWith(x))) continue;
                     seen.add(tok);
-                    if (!existsSync(join(root, tok))) dead.push(`${doc}: ${tok}`);
+                    const inside = insideZip(tok);
+                    if (inside === null) continue; // zip 밖을 가리키는 문자열 — 탐침하지 않는다
+                    if (!zipEntries.has(inside)) dead.push(`${doc}: ${tok}`);
                 }
             }
-            if (dead.length) {
+            if (listing.status !== 0) {
+                // 엔트리 목록이 없으면 **전부 죽은 좌표로 보인다.** 잴 수 없는 것을 위반으로 내지 않는다.
+                unread.push(`${basename(zipPath)} — 배송 문서 좌표: zip 엔트리 목록을 못 읽었습니다 [unzip -Z1 rc=${listing.status ?? "ENOENT"}]`);
+            } else if (dead.length) {
                 record("배송 문서 좌표", false, `\n   zip 안에 없는 것을 가리킵니다(${dead.length}건):\n   · ${dead.join("\n   · ")}`);
                 console.error(`   죽은 좌표는 문서 위생이 아니라 **토큰 원가**입니다 — 고객 AI 가 이 문서를 먼저 읽고`);
                 console.error(`   없는 파일을 찾다가 제 좌표를 짜냅니다. 실물 경로로 고치거나 표기를 지우십시오.`);
