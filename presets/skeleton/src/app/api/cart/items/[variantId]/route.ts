@@ -20,7 +20,7 @@ export async function PATCH(req: Request, {params}: {params: Promise<{variantId:
     if (badType) return badType;
     // 프리뷰 모드(memo29 §3)는 읽기전용 — 프로덕션 데이터 오염 방지로 쓰기를 차단한다.
     if (isPreview()) {
-        return NextResponse.json({message: "프리뷰 모드에서는 장바구니 변경가 비활성화됩니다."}, {status: 403});
+        return NextResponse.json({message: "프리뷰 모드에서는 장바구니 변경이 비활성화됩니다."}, {status: 403});
     }
     const {variantId} = await params;
     const body = await readJsonBody(req);
@@ -41,7 +41,7 @@ export async function DELETE(req: Request, {params}: {params: Promise<{variantId
     if (blocked) return blocked;
     // 프리뷰 모드(memo29 §3)는 읽기전용 — 프로덕션 데이터 오염 방지로 쓰기를 차단한다.
     if (isPreview()) {
-        return NextResponse.json({message: "프리뷰 모드에서는 장바구니 변경가 비활성화됩니다."}, {status: 403});
+        return NextResponse.json({message: "프리뷰 모드에서는 장바구니 변경이 비활성화됩니다."}, {status: 403});
     }
     const {variantId} = await params;
     try {

@@ -1,4 +1,4 @@
-// zalkera-allow-preview-write: 로그인 흐름 — 막으면 프리뷰에서 로그인한 화면을 못 본다.
+// zalkera-allow-preview-write: 로그인 흐름 — 막으면 로그인한 화면을 못 본다. 최초 소셜 로그인은 운영에 계정을 만든다.
 import {NextResponse} from "next/server";
 import type {SocialProvider} from "@zalkera/client";
 import {zalkera} from "@/lib/zalkera";

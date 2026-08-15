@@ -27,7 +27,7 @@ export async function POST(req: Request) {
     if (badType) return badType;
     // 프리뷰 모드(memo29 §3)는 읽기전용 — 프로덕션 데이터 오염 방지로 쓰기를 차단한다.
     if (isPreview()) {
-        return NextResponse.json({message: "프리뷰 모드에서는 동의 변경가 비활성화됩니다."}, {status: 403});
+        return NextResponse.json({message: "프리뷰 모드에서는 동의 변경이 비활성화됩니다."}, {status: 403});
     }
     const accessToken = await getAccessToken();
     if (!accessToken) return NextResponse.json({message: "로그인이 필요합니다."}, {status: 401});

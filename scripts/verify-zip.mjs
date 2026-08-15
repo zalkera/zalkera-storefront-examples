@@ -121,6 +121,9 @@ const SECRET_CONTENT = [
     ["Slack 토큰", /\bxox[abprs]-[0-9A-Za-z-]{10,}\b/],
     ["Google API 키", /\bAIza[0-9A-Za-z_\-]{35}\b/],
     ["npm 토큰", /\bnpm_[0-9A-Za-z]{36}\b/],
+    // 우리 고유 형식. 검사기 `[E3]` 도 이걸 알지만 그쪽은 `src/` 만 훑는다 — `public/` 은 Next 가
+    // 그대로 공개 서빙하는 자리라 여기서 봐야 한다(심의 실측: `public/config.js` 의 키가 무검출이었다).
+    ["잘커라 스토어프론트 키", /\boqsk_[0-9A-Za-z_-]{8,}/],
     ["URL 내장 자격증명", /\b[a-z][a-z0-9+.\-]*:\/\/[^\s/:@]+:[^\s/@]{3,}@/],
 ];
 const SECRET_TEXTUAL = /\.(m?[jt]sx?|cjs|json|md|txt|ya?ml|sh|html?|css|toml|ini|conf|env)$/i;
@@ -416,23 +419,6 @@ try {
             // 순수 어휘 필터 — URL·패키지 지정자를 거른다. 경로 이탈은 여기가 아니라 `insideZip` 이 진다.
             const DOC_PATH_SKIP_PREFIX = ["doc/", "node_modules/", ".zalkera/", "@", "/", "http"];
 
-            // zip 이 **실제로 담고 있는 것**의 목록. 아카이브 메타데이터에서 읽는다 — 풀어 놓은 트리를
-            // 걸으면 zip 안 심링크를 따라가 같은 오라클로 돌아간다.
-            const listing = spawnSync("unzip", ["-Z1", resolve(zipPath)], {encoding: "utf8", maxBuffer: 64 * 1024 * 1024});
-            const zipEntries = new Set();
-            if (listing.status === 0) {
-                const prefix = relative(work, root);
-                for (const line of (listing.stdout ?? "").split("\n")) {
-                    let name = line.trim().replace(/\/+$/, "");
-                    if (!name) continue;
-                    if (prefix) {
-                        if (name !== prefix && !name.startsWith(`${prefix}/`)) continue; // 실효 루트 밖
-                        name = name.slice(prefix.length + 1);
-                    }
-                    if (name) zipEntries.add(name);
-                }
-            }
-
             /**
              * 토큰을 **문자열만으로** zip 내부 경로로 정규화한다. 파일시스템을 만지지 않는 것이 요점이다.
              * 루트 위로 올라가면 `null` — zip 밖은 애초에 이 검사의 좌표계가 아니다.
@@ -450,6 +436,27 @@ try {
                 }
                 return out.length ? out.join("/") : null;
             };
+
+            // zip 이 **실제로 담고 있는 것**의 목록. 아카이브 메타데이터에서 읽는다 — 풀어 놓은 트리를
+            // 걸으면 zip 안 심링크를 따라가 같은 오라클로 돌아간다.
+            const listing = spawnSync("unzip", ["-Z1", resolve(zipPath)], {encoding: "utf8", maxBuffer: 64 * 1024 * 1024});
+            const zipEntries = new Set();
+            if (listing.status === 0) {
+                const prefix = relative(work, root);
+                for (const line of (listing.stdout ?? "").split("\n")) {
+                    let name = line.trim().replace(/\/+$/, "");
+                    if (!name) continue;
+                    if (prefix) {
+                        if (name !== prefix && !name.startsWith(`${prefix}/`)) continue; // 실효 루트 밖
+                        name = name.slice(prefix.length + 1);
+                    }
+                    // ⚠ 엔트리도 **토큰과 같은 함수**를 태운다. 한쪽만 정규화하면 `./src/x.ts` 같은
+                    //   정상 엔트리가 토큰과 안 맞아 **멀쩡한 납품물을 거짓 반려**한다(심의 실측).
+                    const norm = insideZip(name);
+                    if (norm) zipEntries.add(norm);
+                }
+            }
+
             const dead = [];
             const readDocs = [];
             for (const doc of DOC_TARGETS) {
