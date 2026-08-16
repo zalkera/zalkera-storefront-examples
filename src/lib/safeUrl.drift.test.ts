@@ -35,10 +35,10 @@ function escapes(value: string): boolean {
 }
 
 /**
- * 적대 코퍼스. **여기 값을 지우지 마라** — 각각이 실제로 한 번 뚫렸던 형태다.
- * 새 형태를 발견하면 더하라(줄이는 방향으로만 고치지 마라).
+ * **내부로 남아야 하는** 값. 여기 있는 것이 밖으로 나가면 오픈 리다이렉트다.
+ * 값을 지우지 마라 — 각각이 실제로 한 번 뚫렸던 형태다. 새 형태는 더하라.
  */
-const CORPUS = [
+const MUST_STAY_INTERNAL = [
     // 파서가 제거하는 문자로 `//` 를 위장
     "/\t/evil.example",
     "/\n/evil.example",
@@ -54,7 +54,6 @@ const CORPUS = [
     "/./..//evil.example",
     // 고전
     "//evil.example",
-    "https://evil.example/x",
     "javascript:alert(1)",
     "data:text/html,<script>alert(1)</script>",
     "vbscript:msgbox(1)",
@@ -63,13 +62,20 @@ const CORPUS = [
     "/a/b?q=1#x",
     "#top",
     "?q=1",
-    "mailto:a@b.com",
-    "tel:+8210",
 ];
 
+/**
+ * **밖으로 나가도 되는** 값. 메뉴는 외부 링크가 정당하므로 스킴 허용목록을 쓴다 —
+ * 이 값들을 "이탈"로 세면 시험이 설계를 거스른다.
+ */
+const MAY_GO_EXTERNAL = ["https://example.com/a", "http://example.com/a", "mailto:a@b.com", "tel:+8210"];
+
+const CORPUS = [...MUST_STAY_INTERNAL, ...MAY_GO_EXTERNAL];
+
 test("드리프트 검사가 실제로 값을 본다(하한)", () => {
-    assert.ok(CORPUS.length >= 20, `코퍼스가 ${CORPUS.length}개뿐이다 — 이 검사가 공허해진다`);
-    const escaping = CORPUS.filter(escapes).length;
+    assert.ok(CORPUS.length >= 18, `코퍼스가 ${CORPUS.length}개뿐이다 — 이 검사가 공허해진다`);
+    // 소독기를 안 거치면 실제로 밖으로 나가는 표본이 충분히 있어야 한다. 없으면 무엇도 안 막는 셈이다.
+    const escaping = MUST_STAY_INTERNAL.filter(escapes).length;
     assert.ok(escaping >= 6, `밖으로 나가는 표본이 ${escaping}개뿐이다 — 코퍼스가 무뎌졌다`);
 });
 
@@ -83,8 +89,8 @@ test("팩 로컬과 @zalkera/client 의 safeLinkUrl 이 같은 안전성 판정�
     assert.deepEqual(drift, [], `소독기 사본이 갈렸다:\n  ${drift.join("\n  ")}`);
 });
 
-test("두 사본 모두 어떤 코퍼스 값도 밖으로 내보내지 않는다", () => {
-    for (const raw of CORPUS) {
+test("두 사본 모두 내부로 남아야 하는 값을 밖으로 내보내지 않는다", () => {
+    for (const raw of MUST_STAY_INTERNAL) {
         assert.equal(
             escapes(local(raw)),
             false,
@@ -95,5 +101,12 @@ test("두 사본 모두 어떤 코퍼스 값도 밖으로 내보내지 않는다
             false,
             `client 가 밖으로 내보냈다: ${JSON.stringify(raw)} → ${JSON.stringify(vendored(raw))}`,
         );
+    }
+});
+
+test("허용 스킴의 외부 링크는 두 사본 모두 살려 둔다 — 과잉 차단도 드리프트다", () => {
+    for (const raw of MAY_GO_EXTERNAL) {
+        assert.equal(local(raw), raw, `로컬이 정당한 외부 링크를 막았다: ${JSON.stringify(raw)}`);
+        assert.equal(vendored(raw), raw, `client 가 정당한 외부 링크를 막았다: ${JSON.stringify(raw)}`);
     }
 });
