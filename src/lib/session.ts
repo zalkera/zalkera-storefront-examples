@@ -29,7 +29,7 @@ export async function ensureCartSessionKey(): Promise<string> {
 /**
  * **주문이 카트를 소비했으므로 새 카트를 발급한다** — 체크아웃 성공 응답에 반드시 동반해야 한다.
  *
- * 없으면 무슨 일이 나는가(실측 사고 — memo 50 §26): 체크아웃 멱등키가 `co-{cartSessionKey}` 이고
+ * 없으면 무슨 일이 나는가(실제로 났던 형상): 체크아웃 멱등키가 `co-{cartSessionKey}` 이고
  * 카트 쿠키는 30일짜리라, 회전이 없으면 **한 번 주문한 게스트가 30일간 두 번째 주문을 못 한다**
  * (같은 키·다른 본문 → 409 `IDEMPOTENCY_CONFLICT`). 결제를 포기했다 다시 담아도 같다. 로그아웃도
  * 이 쿠키를 안 지운다 — 손님은 쿠키를 못 지우니 그대로 이탈이다.
@@ -79,7 +79,7 @@ export async function clearCustomerTokens(): Promise<void> {
     jar.delete(REFRESH_COOKIE);
 }
 
-// ── OAuth state 쿠키(memo118 ②층) ──────────────────────────────────────────────
+// ── OAuth state 쿠키 ──────────────────────────────────────────────
 //
 // 판정 규칙과 그 근거는 `@/lib/oauthState` 에 있다. 여기는 쿠키 정책만 맡는다.
 

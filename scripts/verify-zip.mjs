@@ -1,23 +1,23 @@
 #!/usr/bin/env node
 /**
- * 납품 zip 검수 러너 (memo108 §2 1단).
+ * 납품 zip 검수 러너.
  *
  * 외주가 보낸 zip 하나를 받아 **받아도 되는 물건인지** 기계로 판정한다. 발주 스펙
  * (`backend/doc/vendor/site-build-spec.md`) §4 가 "검사기를 드립니다"라고 약속한 그 물건이고,
- * memo107 §5.2 체크리스트의 ①②③⑥을 기계화한다(④ 라이선스·⑦ 행위 안전은 여전히 사람 몫).
+ * 체크리스트의 ①②③⑥을 기계화한다(④ 라이선스·⑦ 행위 안전은 여전히 사람 몫).
  *
  * **정본을 복사하지 않는다.** 규약 검사는 이 레포의 `validate-storefront.mjs` 를 **srcDir 인자로 참조 실행**
  * 한다 — 사본을 뜨면 그 순간 드리프트가 시작되고, 그게 이 프로젝트가 내내 싸우는 병이다(471946c).
  * 그 파일은 이제 `@zalkera/client` 의 `zalkera-validate` 를 부르는 wrapper 라(2026-08-01 이관), 이 러너가
  * 참조 실행하는 순간 판정은 **설치본 정본 한 벌**에서 나온다.
  *
- * ── 이 러너의 정본 위치(memo145 §7 T1-⑸) ────────────────────────────────────────
+ * ── 이 러너의 정본 위치 ────────────────────────────────────────
  * **정본은 이 파일이다**(`zalkera-storefront-examples/scripts/verify-zip.mjs`). `backend/doc/vendor/verify-zip.mjs`
  * 는 발주처에 건네는 **바이트 사본**이고, 고칠 곳은 언제나 여기다. 2026-08-01 에 그 둘이 **역방향으로**
  * 갈라진 채 발견됐다(사본만 lockfile 축을 고쳤고, 정본만 `--gate` 를 가졌다) — 사본을 손으로 고치면
  * 정확히 그 상태가 재생산된다. 합류시킨 뒤 사본은 `cp` 로 재고정했다.
  *
- * ── 이 러너가 왜 빌드까지 도는가(memo145) ───────────────────────────────────────
+ * ── 이 러너가 왜 빌드까지 도는가 ───────────────────────────────────────
  * **빌드 성공과 서빙 요건은 서로 다른 것을 잰다.** 2026-08-01 에 우리 팩 zip 이 `npm run build` 를
  * 통과하고도 서빙 박스에서 반려됐다(exit 4) — `.next/standalone/server.js` 가 안 나왔기 때문이다.
  * 이 러너는 exit 0 만 보고 ✅ 를 찍고 있었다. 그 간극을 ⑧ 산출물 검사가 닫는다: **이미 지불한 빌드에서
@@ -25,7 +25,7 @@
  *
  * ── 검수 빌드는 **서빙 빌드의 조건을 닮아야 한다** ──────────────────────────────
  * 그래서 설치를 `npm ci --ignore-scripts --include=dev` 로 돈다(샌드박스 `build.sh` 와 같은 플래그).
- * 근거 둘: ⑴ 서빙 박스는 공급망 RCE 를 막으려 postinstall 을 **실행하지 않는다**(memo70 §3.6). 검수만
+ * 근거 둘: ⑴ 서빙 박스는 공급망 RCE 를 막으려 postinstall 을 **실행하지 않는다**. 검수만
  * 실행하면 postinstall 산출에 기대는 소스가 여기서 ✅ 를 받고 서빙에서 죽는다 — ⑧이 막으려는 것과
  * 같은 종류의 거짓이다. ⑵ 납품 zip 은 **신뢰 밖 코드**다. 그 postinstall 을 검수자 기계에서 돌리는 것은
  * 그 자체로 사고다. `--include=dev` 는 이 러너에서는 기본 동작이지만, NODE_ENV=production 인 CI 러너에서
@@ -34,11 +34,11 @@
  * (아래 `BUILD_ENV` 주석 참조 — 이 플래그는 지금 동작을 바꾸지 않는다).
  *
  * lockfile 축도 같은 원리다 — 서빙 박스는 `npm ci` 뿐이라 yarn·pnpm lock 을 소비하지 못한다.
- * 넓게 받으면 "검사기는 통과했는데 업로드가 거절"이 만들어진다(백엔드 `SiteTypeDetector.LOCKFILES` 거울).
+ * 넓게 받으면 "검사기는 통과했는데 업로드가 거절"이 만들어진다(서버 판정과 같은 목록).
  *
- * ── `--pack` — 카탈로그 팩 모드(memo150 §8.2) ────────────────────────────────────
+ * ── `--pack` — 카탈로그 팩 모드 ────────────────────────────────────
  * 기본은 **납품 검수기**다: 외주 zip 은 테넌트 사이트로 가므로 팩 신원 매니페스트(`.zalkera/pack.json`)를
- * 낼 의무가 없고(memo150 §8.4 비목표 — 고객 소스에 우리 형식을 강제하지 않는다), 카탈로그 입장 판정은
+ * 낼 의무가 없고, 카탈로그 입장 판정은
  * 서버가 한다. `--pack` 은 **이 zip 이 본사 카탈로그에 올라간다**는 선언이고, 그때만 매니페스트가 필수가
  * 되며 파일명(`{code}-{version}.zip`)과 대조한다. `pack-preset.mjs` 는 자기 산출물을 이 모드로 잰다.
  *
@@ -79,7 +79,7 @@ if (!existsSync(zipPath)) {
 }
 
 /**
- * 빌드 env — **`.github/workflows/ci.yml` 과 패리티**여야 한다(백엔드 `SandboxBuildGate.CI_ENV` 도 같은 상수).
+ * 빌드 env — **`.github/workflows/ci.yml` 과 패리티**여야 한다(서빙 인프라도 같은 값을 준다).
  *
  * 이유가 각각 다르다:
  *  · `ZALKERA_TENANT` — 코드가 **폴백 없이 require** 한다(`src/lib/env.ts` 가 없으면 던진다). 이 값을
@@ -87,7 +87,7 @@ if (!existsSync(zipPath)) {
  *  · `ZALKERA_API_BASE` — 코드에 폴백이 있어 없어도 빌드는 된다. 그래도 CI·서빙과 같은 값을 준다(패리티).
  *  · `ZALKERA_OFFLINE_BUILD` — "여긴 백엔드가 없다"는 **선언**이다. ⚠ **지금 아무것도 바꾸지 않는다** —
  *    읽는 코드에 호출자가 0개다(실측). 패리티로 그대로 두되, 이걸 줘야 거짓 반려를 막는다고 읽지 마라.
- * 이름이 구 `ONEQUE_*` 면 폴백 제거 후 env 파서가 던진다(memo101 컷오버 실사고).
+ * 이름이 구 `ONEQUE_*` 면 폴백 제거 후 env 파서가 던진다.
  */
 const BUILD_ENV = {
     ZALKERA_API_BASE: "http://localhost:8100",
@@ -108,7 +108,7 @@ const record = (name, ok, detail = "") => {
 const ENV_KEEP = /\.(example|sample|template)$/;
 
 /**
- * **내용 축.** 이름만 보면 평범한 `src/lib/cfg.ts` 에 박힌 라이브 키를 못 잡는다 — 심의가 AWS 키·
+ * **내용 축.** 이름만 보면 평범한 `src/lib/cfg.ts` 에 박힌 라이브 키를 이름 검사로는 못 잡는다 — AWS 키·
  * 결제 라이브 시크릿·RSA 개인키를 그렇게 심고 `rc 0 · ✅ 시크릿 0` 으로 통과시켰다. 라벨이 잰 것보다
  * 넓게 말하던 자리다(실제로 잰 것은 "환경파일 이름이 없다"였다).
  *
@@ -127,7 +127,7 @@ const SECRET_CONTENT = [
     ["Google API 키", /\bAIza[0-9A-Za-z_\-]{35}\b/],
     ["npm 토큰", /\bnpm_[0-9A-Za-z]{36}\b/],
     // 우리 고유 형식. 검사기 `[E3]` 도 이걸 알지만 그쪽은 `src/` 만 훑는다 — `public/` 은 Next 가
-    // 그대로 공개 서빙하는 자리라 여기서 봐야 한다(심의 실측: `public/config.js` 의 키가 무검출이었다).
+    // 그대로 공개 서빙하는 자리라 여기서 봐야 한다 (`public/config.js` 의 키가 무검출이었다).
     ["잘커라 스토어프론트 키", /\boqsk_[0-9A-Za-z_-]{8,}/],
     ["URL 내장 자격증명", /\b[a-z][a-z0-9+.\-]*:\/\/[^\s/:@]+:[^\s/@]{3,}@/],
 ];
@@ -164,7 +164,7 @@ function scanSecrets(dir) {
             const r = rel ? `${rel}/${e.name}` : e.name;
             // ⚠ `.git` 은 **건너뛰지 않는다.** 이 함수 머리말이 "git 이력은 되돌릴 수 없어 사후 수습이
             //   불가능하다"고 적어 둔 바로 그 자리인데, 종전엔 스캔에서 빼 놓고 `✅ 시크릿 0` 을 찍었다 —
-            //   시크릿을 `.git/config` 에만 넣은 zip 이 통과했다(심의 실측). 카탈로그 팩은 `pack-preset`
+            //   시크릿을 `.git/config` 에만 넣은 zip 이 통과했다 (). 카탈로그 팩은 `pack-preset`
             //   이 `.git` 을 구조적으로 배제하지만, **업로드 태생 테넌트**는 작업트리를 통째로 zip 하고
             //   이 러너가 그들의 유일한 관문이다.
             if (e.name === "node_modules" || e.name === ".next") continue;
@@ -178,7 +178,7 @@ function scanSecrets(dir) {
             // 위 정크 반려가 1차 방어이고 이것이 2차다.
             if (!SECRET_TEXTUAL.test(e.name) && !SECRET_EXTENSIONLESS.test(e.name)) continue;
             // ⚠ **심링크는 따라가지 않는다.** 신뢰 밖 zip 이라 `docs/harmless.md → /검수자/사설파일`
-            //   하나로 검수자 파일을 읽고 그 내용이 반려문에 실린다(심의 실측). 못 읽은 것으로 적어
+            //   하나로 검수자 파일을 읽고 그 내용이 반려문에 실린다 (). 못 읽은 것으로 적어
             //   "시크릿 0" 이 미측정을 덮지 않게 한다.
             if (e.isSymbolicLink()) {
                 unread.push(`${r} — 심링크라 내용을 읽지 않았습니다(zip 안 실파일로 바꿔 재납품하십시오)`);
@@ -227,9 +227,9 @@ function effectiveRoot(dir) {
 }
 
 /**
- * 팩 신원 매니페스트 계약(memo150 §3.1) — **백엔드 `PackManifestReader` 의 거울**이다.
+ * 팩 신원 매니페스트 계약 — **서버가 적재 때 읽는 것과 같은 규칙**이다.
  *
- * 여기 규칙이 서버와 갈리면 이 러너가 ✅ 를 준 zip 이 적재에서 400 으로 죽는다(`SiteTypeDetector.LOCKFILES`
+ * 여기 규칙이 서버와 갈리면 이 러너가 ✅ 를 준 zip 이 적재에서 400 으로 죽는다(락파일 판정도
  * 거울과 같은 자리). 그래서 서버가 거부하는 것을 **여기서 같은 사유로** 먼저 말한다 — 판정의 정본은 서버이고
  * 이것은 싼 조기 경보다.
  *
@@ -388,7 +388,7 @@ function identityFromFilename(path) {
  *
  * ⚠ **`/tmp` 가 tmpfs(RAM) 인 기계·컨테이너에서는 그 공간이 금방 마른다.** 그러면 이 러너가
  * `Unknown system error -122`(EDQUOT) 같은 문면으로 반려하는데, **멀쩡한 zip 이 그렇게 반려된다**
- * (심의 실측 — 검수자가 원인을 알 수 없는 사유였다). 그래서 실패할 때 그 가능성을 말해 준다.
+ * (— 검수자가 원인을 알 수 없는 사유였다). 그래서 실패할 때 그 가능성을 말해 준다.
  * 미리 공간을 재서 막지는 않는다 — 임계값은 빌드 크기에 달렸고, 짐작한 숫자로 멀쩡한 검수를
  * 거절하는 쪽이 더 나쁘다.
  *
@@ -399,7 +399,7 @@ const work = mkdtempSync(join(tmpdir(), "zalkera-verify-"));
 /** 실패 문면이 "임시 공간 부족"으로 읽히면 조치를 한 줄 덧붙인다. 아니면 조용히 지나간다. */
 function hintTmpSpace(text) {
     // ⚠ 숫자 코드를 맨몸으로 두면 평범한 빌드 출력에 오발화한다 — 청크명(`vendors-28.js`)·소스 위치
-    // (`page.tsx:4-28`)·빌드 id(`7f3a-122`)·경로명(`promo-28`)이 전부 걸렸다(심의가 실제 배송 도구로
+    // (`page.tsx:4-28`)·빌드 id(`7f3a-122`)·경로명(`promo-28`)이 전부 걸린다(실제 배송 도구로
     // 재현). 이름 넷은 오발화 0건이었으므로 그것을 본체로 두고 숫자는 errno 문맥에 앵커한다.
     const SPACE_ERROR = /ENOSPC|EDQUOT|no space left|disk quota|(?:errno|error|code)\s*:?\s*-(?:122|28)\b/i;
     if (!SPACE_ERROR.test(String(text ?? ""))) return;
@@ -428,7 +428,7 @@ try {
         // ② 형상 — package.json + lockfile, 산출물 미포함.
         const hasPkg = existsSync(join(root, "package.json"));
         // **npm 계열만** — 빌드 샌드박스가 `npm ci` 로 돌아 yarn·pnpm lockfile 을 소비할 수 없다.
-        // 백엔드 `SiteTypeDetector.LOCKFILES` 의 거울이다. 여기서 넓게 받으면 "검사기는 통과했는데
+        // 서버의 락파일 판정과 같은 목록이다. 여기서 넓게 받으면 "검사기는 통과했는데
         // 업로드가 거절"이라는, 이 검사기가 막으려는 바로 그 형상이 만들어진다.
         const lock = ["package-lock.json", "npm-shrinkwrap.json"].find((f) => existsSync(join(root, f)));
         const lockNote = hasPkg
@@ -490,13 +490,13 @@ try {
         // ⑩ **배송 문서의 좌표가 zip 안에서 실재하는가** — 카탈로그 팩 전용.
         //
         // ⚠ 왜 여기인가. 검사기의 D1 은 `AGENTS.md` 만, D2 는 `llms.txt` 만 본다 — `CUSTOMIZE.md`·
-        //   `README.md` 는 **어떤 기계도 안 본다.** 2026-08-15 팩 심의에서 다섯 판이 반려됐는데 그중
+        //   `README.md` 는 **어떤 기계도 안 본다.** 2026-08-15 팩 다섯 판이 반려됐는데 그중
         //   하나가 정확히 그 사각이었다(`CUSTOMIZE.md` 가 그 프리셋에 없는 `public/images/` 를 "열어
         //   보십시오"라고 지목). 그리고 실제로 `README.md` 가 죽은 좌표 2건(`lib/session.ts`·
         //   `lib/theme.ts` — 실물은 `src/lib/…`)을 4벌에 배송하고 있었다.
         //
         // ⚠ **왜 고객 CI(D1 확장)가 아니라 팩 시점인가.** D1 은 고객 트리에서 돈다. 확장하면 우리가
-        //   잘못 배송한 문서 때문에 **테넌트 CI 가 빨개지고** BuildGate 가 그 사이트 배포를 막는다 —
+        //   잘못 배송한 문서 때문에 **테넌트 CI 가 빨개지고** 배포 게이트가 그 사이트 배포를 막는다 —
         //   `ci.yml` 이 이미 경고하는 비대칭이다. 배송 전에 우리가 잡는 것이 맞다.
         //
         // ⚠ **`--pack` 모드에서만 잰다.** 납품 zip 은 한 테넌트로 가고 그 문서는 납품사 것이다.
@@ -560,7 +560,7 @@ try {
                         name = name.slice(prefix.length + 1);
                     }
                     // ⚠ 엔트리도 **토큰과 같은 함수**를 태운다. 한쪽만 정규화하면 `./src/x.ts` 같은
-                    //   정상 엔트리가 토큰과 안 맞아 **멀쩡한 납품물을 거짓 반려**한다(심의 실측).
+                    //   정상 엔트리가 토큰과 안 맞아 **멀쩡한 납품물을 거짓 반려**한다 ().
                     const norm = insideZip(name);
                     if (norm) zipEntries.add(norm);
                 }
@@ -621,12 +621,12 @@ try {
                 failed = true;
             } else {
                 // ⚠ **읽은 것만 이름을 댄다.** 목록을 그대로 찍으면 못 읽은 문서까지 "검사했다"로
-                //   읽힌다(심의 실측 — 판정은 옳았는데 ✅ 줄이 세 문서를 다 댔다).
+                //   읽힌다 (— 판정은 옳았는데 ✅ 줄이 세 문서를 다 댔다).
                 record("배송 문서 좌표", true, `${readDocs.join("·") || "대상 문서 없음"} — 죽은 좌표 없음`);
             }
         }
 
-        // ⑨ 팩 신원 매니페스트(memo150 §3·§8.2). **번호는 도입 순서이고 실행 순서가 아니다**(⑦⑧이 ⑥ 안에
+        // ⑨ 팩 신원 매니페스트. **번호는 도입 순서이고 실행 순서가 아니다**(⑦⑧이 ⑥ 안에
         //    있는 것과 같다) — 신원은 싸게 읽히므로 몇 분짜리 설치·빌드 앞에 둔다.
         //
         //    두 모드가 재는 것이 다르다:
@@ -639,7 +639,7 @@ try {
         const packRead = readPackManifest(root);
         const fromName = identityFromFilename(zipPath);
         if (packRead.state === "invalid") {
-            record("팩 신원(.zalkera/pack.json)", false, `${packRead.reason}\n   → 서버도 같은 사유로 적재를 거부합니다(memo150 §3.1 · rev·code·version 세 키뿐).`);
+            record("팩 신원(.zalkera/pack.json)", false, `${packRead.reason}\n   → 서버도 같은 사유로 적재를 거부합니다(rev·code·version 세 키뿐).`);
             failed = true;
         } else if (packRead.state === "absent") {
             if (packMode) {
@@ -713,7 +713,7 @@ try {
         //
         // ⚠ `status` 는 시그널로 죽으면 **null** 이다. `!== 0` 은 그걸 잡지만 `=== 1` 은 못 잡는다.
         // ⚠ **위반 줄이 먼저다.** 종전엔 그냥 마지막 12줄을 잘랐는데, 못 읽은 자리 목록이 길면
-        // 그것이 창을 다 채워 `❌ [E1]`·`❌ [E3]` 가 **검수자에게 한 글자도 안 갔다**(심의 실측:
+        // 그것이 창을 다 채워 `❌ [E1]`·`❌ [E3]` 가 **검수자에게 한 글자도 안 갔다** (
         // 시크릿이 박힌 zip 에서 위반 grep 0건, 검수자가 받는 안내는 "권한을 고치라"뿐).
         // 규약 위반은 절대 잘리지 않게 앞에 붙이고, 남는 자리를 나머지로 채운다.
         const detailLines = vLines.filter((l) => !l.startsWith("⚠️"));
@@ -766,7 +766,7 @@ try {
                 if (!ok) {
                     const tail = (r.stderr || r.stdout || "").trim().split("\n").slice(-6).join("\n   ");
                     record(label, false, `\n   ${tail}`);
-                    // 설치·빌드가 임시 공간을 가장 많이 쓴다 — 심의가 실제로 여기서 EDQUOT 를 밟았다.
+                    // 설치·빌드가 임시 공간을 가장 많이 쓴다 — 여기서 EDQUOT 가 난다.
                     hintTmpSpace((r.stderr ?? "") + (r.stdout ?? "") + (r.error?.message ?? ""));
                 } else {
                     record(label, true);
@@ -778,7 +778,7 @@ try {
             //   `--ignore-scripts` 를 빼면 postinstall 산출에 기대는 소스가 여기서만 통과한다.
             if (!run("npm ci", "npm", ["ci", "--ignore-scripts", "--include=dev", "--no-audit", "--no-fund"])) failed = true;
             else {
-                // ⑦ 산출물 검사기가 **이 zip 안에서 살아서 뜨는가**(memo122 §1.3-3 · §8-ⓒ).
+                // ⑦ 산출물 검사기가 **이 zip 안에서 살아서 뜨는가**.
                 //
                 //    왜 게이트인가: `CUSTOMIZE.md` 는 "그 검사기도 이 zip 에 들어 있습니다"라고 약속하는데,
                 //    잣대(보장표) 해석이 형제 백엔드 체크아웃을 가정한 탓에 고객 기계에서는 exit 2 로
@@ -812,9 +812,9 @@ try {
                 // ⑦-b **가드 회귀 스위트**. `npm ci` 가 이미 돌았으니 추가 비용이 사실상 없다(~0.24s).
                 //
                 //    ⚠ 이걸 여기서 안 돌리면 **집행 지점이 `ci.yml` 하나**가 되는데, 그것은 GitHub 레포가
-                //    있는 테넌트에서만 돈다. 업로드 태생 테넌트(memo76)는 CI 가 없어 집행이 **0** 이었고,
+                //    있는 테넌트에서만 돈다. 업로드 태생 테넌트는 CI 가 없어 집행이 **0** 이었고,
                 //    `CUSTOMIZE.md` 는 이 명령을 업로드 전 자가 검수로 지목한다 — 즉 고객이 문서대로 다
-                //    해도 가드가 깨진 zip 이 ✅ 를 받았다(심의 실측).
+                //    해도 가드가 깨진 zip 이 ✅ 를 받았다 ().
                 //    스위트가 없으면 node 러너가 `# tests 0` 과 rc 0 을 내므로 **그것도 반려**로 친다.
                 {
                     const t = spawnSync("npm", ["test"], {cwd: root, encoding: "utf8", env: {...process.env, ...BUILD_ENV}, maxBuffer: 32 * 1024 * 1024});
@@ -975,11 +975,11 @@ try {
                         }
                     }
 
-                    // ⑧ **서빙 산출물 계약**(memo145 §2-4-⑴ — 이 러너의 주 관문).
+                    // ⑧ **서빙 산출물 계약**.
                     //
                     //    재는 것은 `next.config` 에 무엇이 적혀 있는가가 **아니다**. 설정 문자열은 양쪽으로
                     //    거짓말한다 — 조건부 조립이면 `output:"standalone"` 이 있어도 산출이 안 나오고,
-                    //    없어도 외부 조립·재export 로 나올 수 있다(memo140 §6.5 X1 과 같은 함정).
+                    //    없어도 외부 조립·재export 로 나올 수 있다.
                     //    빌드 산출물은 정의상 사실이고, 그 빌드는 **바로 위에서 이미 돌았다**(추가 비용 0).
                     //
                     //    이 파일이 없으면 잘커라 서빙 박스가 `node server.js` 로 띄울 것이 없어 exit 4 로

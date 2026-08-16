@@ -1,6 +1,6 @@
 # 잘커라(Zalkera) 스토어프론트 Tier2 게이팅 CI.
 #
-# 백엔드 BuildGate 가 GitHub Checks API 로 이 워크플로의 성공을 확인한 뒤에만
+# 잘커라 배포 게이트가 GitHub Checks API 로 이 워크플로의 성공을 확인한 뒤에만
 # Tier2(코드 배포) 를 진행한다. 세 단계는 27-real-codegen-deploy-pipeline.md §7.1·§9.3(T0)
 # 의 정본:
 #   1) validate     — 키트 validator(scripts/validate-storefront.mjs, llms.txt §5 규약)
@@ -22,8 +22,8 @@ jobs:
       # 빌드 시점에 백엔드 접속이 필요 없도록 안전한 기본값만 주입(SSR fetch 는 런타임에 일어남).
       # ZALKERA_TENANT 는 실재하지 않아도 된다 — 러너에 백엔드가 없어 어차피 fetch 가 실패하고,
       # 코드가 폴백 없이 require 하므로 값 자체는 있어야 한다.
-      # 이름은 서빙 인프라가 주입하는 것과 **반드시 같아야 한다**(백엔드 SandboxBuildGate.CI_ENV 패리티) —
-      # 구 `ONEQUE_*` 로 두면 폴백이 제거된 지금 `env.ts` 가 던져 빌드가 죽는다(memo101 컷오버 실사고).
+      # 이름은 서빙 인프라가 주입하는 것과 **반드시 같아야 한다** —
+      # 구 `ONEQUE_*` 로 두면 폴백이 제거된 지금 `env.ts` 가 던져 빌드가 죽는다.
       ZALKERA_API_BASE: http://localhost:8100
       ZALKERA_TENANT: ci-placeholder
       # 이 러너에는 백엔드가 **없다**는 선언이다. 서빙 인프라·검수 러너와 같은 값을 주어 패리티를 지킨다.
@@ -47,11 +47,11 @@ jobs:
 
       - name: 잘커라 레포 전용 — 관문 모드로 한 번 더
         # 위 스텝은 **권고 모드**다. 권고는 "못 읽은 자리"가 있어도 rc 0 을 낸다 — 고객 나무의 상태를
-        # 우리가 벌하지 않는다는 처분이고 고객 레포에서는 그게 맞다(memo140 §6.5). 그러나 우리 레포는
+        # 우리가 벌하지 않는다는 처분이고 고객 레포에서는 그게 맞다. 그러나 우리 레포는
         # **팩의 원본**이라 여기서 새는 것은 전 테넌트로 복제된다.
         #
         # ⚠ **이 스텝을 위 스텝 대신 쓰면 안 된다.** `ci.yml` 은 고객 zip 에 실리므로(SOURCE_EXCLUDES 에
-        # 없다) `--gate` 로 바꾸면 **전 테넌트의 CI 가 관문 모드가 되고**, BuildGate 가 이 워크플로의
+        # 없다) `--gate` 로 바꾸면 **전 테넌트의 CI 가 관문 모드가 되고**, 배포 게이트 가 이 워크플로의
         # 성공을 읽으므로 거짓 양성 하나가 그 사이트의 배포를 무환불로 막는다. 같은 비대칭 때문에
         # 방문자 IP 검사기를 배송에서 뺐다(SOURCE_EXCLUDES 주석). 그래서 **레포 전용 판별자**로 가른다 —
         # 이 파일이 아래 스텝에서 이미 쓰는 관용구다(`presets/` + `scripts/pack-preset.mjs` 의 교집합).
@@ -66,7 +66,7 @@ jobs:
         run: npm run typecheck
 
       - name: Test (교차사이트·프리뷰 가드 회귀 픽스처)
-        # memo118 §8 — 판정 규칙은 한 줄만 흔들려도 조용히 열린다. Node 기본 러너 + 타입 스트리핑이라
+        # 판정 규칙은 한 줄만 흔들려도 조용히 열린다. Node 기본 러너 + 타입 스트리핑이라
         # devDependency 추가가 0이다(node 22 필요). 검사기 X1 은 "가드를 불렀는가"만 보므로
         # **가드가 옳은가**는 이 스텝에서만 잠긴다.
         #
@@ -92,7 +92,7 @@ jobs:
           #
           # ⚠ **하한표는 검증해서 읽는다.** 두 가지가 이 자리를 조용히 무너뜨린다:
           #   ⑴ 파일을 `{}` 로 비우면 루프가 0회 돌고 `fail=0` 이 살아남는다 — `set -e` 가 없어
-          #      `$( )` 의 실패도 이 단계를 안 죽인다. 그래서 rc 와 항목 수를 둘 다 본다.
+          #      `$()` 의 실패도 이 단계를 안 죽인다. 그래서 rc 와 항목 수를 둘 다 본다.
           #   ⑵ 키는 곧 `node` 의 argv 다. `-` 로 시작하면 파일이 아니라 **플래그**로 해석돼
           #      PR 하나로 이 러너에서 임의 코드가 돈다(`GITHUB_TOKEN` 을 가진 채).
           #      재현: `node --experimental-strip-types --test "--import=./evil.mjs"`
@@ -134,12 +134,12 @@ jobs:
         #
         # ■ **행위 검사는 우리 레포에서만 돈다.** 그것은 프리뷰·비프리뷰 빌드를 각각 한 번 더 구우므로
         #   `next build` **1회 시간의 약 2배**가 얹힌다. 그 시간은 테넌트마다 매 푸시·매 PR 에 붙고,
-        #   BuildGate 가 이 워크플로를 읽으므로 곧 "말로 고치기"의 지연이 된다.
+        #   배포 게이트 가 이 워크플로를 읽으므로 곧 "말로 고치기"의 지연이 된다.
         #   재현(빌드 하나 대 빌드+행위검사):
         #     for i in 1 2; do
         #       S=$(date +%s%N); npm run build >/dev/null; M=$(date +%s%N)
         #       node scripts/lib/gate-behavior.mjs . >/dev/null; E=$(date +%s%N)
-        #       echo "build $(( (M-S)/1000000 ))ms · build+gate $(( (E-S)/1000000 ))ms"
+        #       echo "build $(((M-S)/1000000 ))ms · build+gate $(((E-S)/1000000 ))ms"
         #     done
         #   이 기계(12코어)에서 6.4s → 19.9s. 러너 사양에 따라 달라지므로 비율(약 3배)로 읽어라.
         #
@@ -152,7 +152,7 @@ jobs:
         #     반려로 치기 때문이다. 빼면 우리 팩 라운드가 통째로 막힌다.
         #
         #   ⚠ **검사기 부재를 raw 예외로 죽이지 않는다.** 아래 마지막 스텝과 같은 관용구다 —
-        #     `MODULE_NOT_FOUND` 는 조치 불가능한 메시지이고 BuildGate 를 막는다.
+        #     `MODULE_NOT_FOUND` 는 조치 불가능한 메시지이고 배포 게이트 를 막는다.
         run: |
           if [ ! -f scripts/lib/gate-probe.mjs ]; then
             echo "::error::scripts/lib/gate-probe.mjs 가 없습니다 — 프리뷰 관문이 무엇을 덮는지 잴 수단이 사라집니다. 이 검사기는 팩이 배송하는 파일입니다."
@@ -168,17 +168,17 @@ jobs:
           fi
 
       - name: 서빙 산출물 (.next/standalone/server.js)
-        # memo145 — `next build` 성공은 **서빙된다**를 뜻하지 않는다. 잘커라 호스팅은 `next start` 가
+        # `next build` 성공은 **서빙된다**를 뜻하지 않는다. 잘커라 호스팅은 `next start` 가
         # 아니라 자기완결 산출물을 `node server.js` 로 띄우므로, standalone 이 안 나오면 이 레포의
         # 소스로 개시한 사이트는 서빙 박스에서 exit 4 로 반려된다(2026-08-01 실사고).
         # 재는 것은 next.config 의 문자열이 아니라 **방금 낸 산출물**이다 — 빌드는 이미 위에서 돌았고
-        # (추가 비용 0), 설정 정적 판독은 조건부 조립 앞에서 양방향으로 거짓말한다(memo140 §6.5 X1).
+        # (추가 비용 0), 설정 정적 판독은 조건부 조립 앞에서 양방향으로 거짓말한다.
         run: test -f .next/standalone/server.js
 
       - name: 잘커라 레포 전용 검사 (팩 4벌 대조 · 방문자 IP 선언)
         # 검사기 **둘 다 고객 zip 에 안 실린다**(SOURCE_EXCLUDES). 우리 레포에서 팩 4벌이 갈리는 것을
         # 막는 물건이라 그게 맞다 — 그런데 `ci.yml` 은 **실린다.** 무조건 부르면 고객 레포에서
-        # MODULE_NOT_FOUND 로 **CI 가 영구 적색**이 되고, 백엔드 BuildGate 가 이 워크플로의 성공을
+        # MODULE_NOT_FOUND 로 **CI 가 영구 적색**이 되고, 배포 게이트가 이 워크플로의 성공을
         # 읽으므로 그 사이트는 "말로 고치기"가 구조적으로 막힌다 — 실제로 한 번 그렇게 됐다.
         #
         # ■ 배선 동일성 — 얼굴은 갈려도 되고 **틀리면 사고가 나는 배선**만 바이트로 잠근다.
@@ -187,7 +187,7 @@ jobs:
         run: |
           # 판별자는 **존재 두 개의 교집합**이다: `presets/` + `scripts/pack-preset.mjs`.
           #
-          # 부재(`! -f .zalkera/pack.json`)로 가르던 판을 뒤집었다(5차 심의 W1) — 같은 zip 안의
+          # 부재(`! -f .zalkera/pack.json`)로 가르던 판을 뒤집었다(5차 W1) — 같은 zip 안의
           # `CUSTOMIZE.md` 가 고객에게 "`.zalkera/pack.json` 은 **지워도 된다**"고 가르치는데,
           # 그 말을 따른 고객이 최상위 `presets/` 까지 갖게 되면 **영구 적색 + 조치 불가능한 오류 메시지**가
           # 된다. 배송 문서와 배송 CI 가 서로 모순인 상태였다.
@@ -202,8 +202,8 @@ jobs:
             # ⚠ **존재검사가 먼저다.** 아래 루프는 친절한 오류를 내도록 가드가 걸려 있는데, 이 픽스처만
             # 루프 **앞**에서 무방비로 돌았다. 그래서 판별자가 참이 되는 순간(고객이 `presets/` 를 만들고
             # `scripts/pack-preset.mjs` 라는 이름의 파일을 두면 성립한다) raw `MODULE_NOT_FOUND` 로 죽어
-            # **CI 가 영구 적색**이 되고, BuildGate 가 이 워크플로를 읽으므로 그 사이트는 "말로 고치기"가
-            # 구조적으로 막힌다 — 이 스텝 주석이 스스로 막겠다고 적은 바로 그 형상이다(심의 실측).
+            # **CI 가 영구 적색**이 되고, 배포 게이트 가 이 워크플로를 읽으므로 그 사이트는 "말로 고치기"가
+            # 구조적으로 막힌다 — 이 스텝 주석이 스스로 막겠다고 적은 바로 그 형상이다 ().
             if [ ! -f scripts/lib/visitor-ip-parity.test.mjs ]; then
               echo "::error::이 트리가 잘커라 정본 저장소로 판정됐는데 scripts/lib/visitor-ip-parity.test.mjs 가 없습니다."
               echo "::error::  고객 레포라면 presets/ 또는 scripts/pack-preset.mjs 를 지우십시오(이 검사는 정본 전용)."

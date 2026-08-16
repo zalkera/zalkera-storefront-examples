@@ -63,7 +63,7 @@ export default function PaymentWidgetPage() {
         setError(null);
         try {
             const origin = window.location.origin;
-            // **연락처를 successUrl 에 싣지 않는다**(memo 50 §24-2) — 이 URL 은 벤더가 리다이렉트로
+            // **연락처를 successUrl 에 싣지 않는다** — 이 URL 은 벤더가 리다이렉트로
             // 되돌려주는 주소라 PII 가 벤더 로그·리퍼러·브라우저 히스토리에 남는다. 착지 페이지는
             // 같은 sessionStorage 디스크립터에서 연락처를 직접 읽는다(브라우저 안에 머문다).
             const q = `orderNo=${encodeURIComponent(descriptor.orderNo)}`;

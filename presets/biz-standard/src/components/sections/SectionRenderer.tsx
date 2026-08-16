@@ -17,7 +17,7 @@ import {TextMediaSection} from "./TextMediaSection";
  * 깨지지 않고, **타입이 빠져도**(계약 rev 6 이 조회형 둘을 삭제했다) 그 값을 적어 둔 옛 콘텐츠 파일이
  * 페이지를 죽이지 않는다. 에러도 경고도 내지 않는 게 맞다.
  *
- * **전 타입이 선언형이다** — 어느 것도 백엔드를 부르지 않는다(memo142 §1 · `SectionList` KDoc).
+ * **전 타입이 선언형이다** — 어느 것도 백엔드를 부르지 않는다.
  * 업무 데이터를 비추는 진열은 섹션이 아니라 소스의 직접 호출이다(`ProductRail`).
  */
 export function SectionRenderer({section}: {section: ContentSection}) {
@@ -26,7 +26,7 @@ export function SectionRenderer({section}: {section: ContentSection}) {
             return <BeforeAfterGallerySection config={section.config} />;
         case "DOCTOR_INTRO":
             return <DoctorIntroSection config={section.config} />;
-        // ── 기업 마케팅(memo102) ──
+        // ── 기업 마케팅 ──
         case "HERO":
             return <HeroSection config={section.config} />;
         case "FEATURE_GRID":

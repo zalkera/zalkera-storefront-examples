@@ -13,7 +13,7 @@ export function withSiteName(title: string, siteName?: string): string {
  * 공개 라우트의 OG · 트위터 카드를 한 벌로 만든다.
  *
  * **canonical 은 여기서 내지 않는다** — 루트 layout 의 `alternates.canonical: "./"` 하나가 라우트별로
- * 자기 경로를 절대 URL 로 해석해 준다(memo98 §3.3). 실측으로 확인했다: `/policies` → `…/policies`,
+ * 자기 경로를 절대 URL 로 해석해 준다. 실측으로 확인했다: `/policies` → `…/policies`,
  * `/products/guard-test` → `…/products/guard-test`. 라우트마다 canonical 을 다시 쓰면 같은 사실의
  * 이중 원장이 되고, 새 라우트를 추가할 때 빠뜨리면 조용히 홈으로 정규화된다.
  *

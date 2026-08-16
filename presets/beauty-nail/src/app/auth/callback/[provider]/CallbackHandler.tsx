@@ -46,7 +46,7 @@ export function CallbackHandler({
                 return;
             }
             // ⚠ **이건 방어가 아니라 UX 다.** 진짜 방어는 서버가 httpOnly 쿠키의 state 와 대조하는
-            // 것이고(memo118 ②층 · `consumeOAuthState`), 그것은 이 파일을 통째로 지워도 산다.
+            // 것이고, 그것은 이 파일을 통째로 지워도 산다.
             // 여기 남겨 둔 이유는 하나 — 서버까지 가기 전에 사용자에게 더 이른 안내를 주기 때문이다.
             // 그러니 이 블록을 지우거나 AI 가 다시 써도 보안은 그대로다. **그 반대로 읽지 말 것.**
             const saved = sessionStorage.getItem(STATE_STORAGE_KEY);
@@ -60,7 +60,7 @@ export function CallbackHandler({
             const consents = readConsents();
 
             // `redirectUri` 는 **안 보낸다** — 서버가 요청 오리진에서 파생한다(열린 리다이렉터 차단).
-            // `state` 는 보낸다: 서버가 httpOnly 쿠키의 값과 대조한다(memo118 ②층). 아래 sessionStorage
+            // `state` 는 보낸다: 서버가 httpOnly 쿠키의 값과 대조한다. 아래 sessionStorage
             // 대조는 그보다 이른 UX 피드백일 뿐 **방어가 아니다**.
             const res = await fetch("/api/auth/social", {
                 method: "POST",

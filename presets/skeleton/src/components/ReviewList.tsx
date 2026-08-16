@@ -7,7 +7,7 @@ import {ReviewLoadMore} from "./ReviewLoadMore";
  *
  * 후기는 저볼라틸이라(자주 안 바뀜) 첫 페이지를 상품 상세의 ISR(`revalidate=300`)에 그대로 얹는다 —
  * 프리렌더된 HTML 에 후기 텍스트가 실리므로 **JSON-LD 의 `aggregateRating` 과 페이지가 일치**한다
- * (검색엔진에 평점을 광고하면서 페이지엔 후기가 없던 불일치를 닫는다 — memo 57 축A).
+ * (검색엔진에 평점을 광고하면서 페이지엔 후기가 없던 불일치를 닫는다
  *
  * 11건 이상이면 2페이지부터는 볼라틸하지 않아도 프리렌더에 다 실을 필요가 없으므로, 목록 아래
  * `ReviewLoadMore`(클라이언트 아일랜드)가 BFF(/api/reviews)로 당겨 온다. 요약(★평균·개수)은 첫

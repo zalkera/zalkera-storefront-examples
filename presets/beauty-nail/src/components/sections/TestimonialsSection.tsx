@@ -4,7 +4,7 @@ import {assetPath, asObjectArray, asString, readConfig} from "@zalkera/client";
  * 신뢰 — 고객 인용.
  *
  * **구조화 데이터(Review·AggregateRating)를 의도적으로 내보내지 않는다.** 자사 사이트에 실은 자사 후기에
- * 별점을 붙여 리치결과로 광고하는 것은 self-serving reviews 정책 위반이라 제재 대상이다(memo102 §2.3).
+ * 별점을 붙여 리치결과로 광고하는 것은 self-serving reviews 정책 위반이라 제재 대상이다.
  * 후기를 검색에 싣고 싶으면 제3자 플랫폼 리뷰가 답이지 우리 마크업이 아니다.
  */
 export function TestimonialsSection({config}: {config: unknown}) {

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * AEO 보장 표면 검사기 — **얇은 wrapper**(memo123 §6.1).
+ * AEO 보장 표면 검사기 — **얇은 wrapper**.
  *
  * 검사기 본체는 `@zalkera/client` 의 bin(`zalkera-aeo-check`)으로 옮겼다. 옮긴 이유는 소비자가 셋으로
  * 늘었기 때문이다: ⑴ 이 체크아웃 ⑵ 고객 zip ⑶ **serving-orchestrator 의 발행 직후 자동 검사**.

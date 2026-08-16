@@ -22,7 +22,7 @@
     --font-sans: ui-sans-serif, system-ui, -apple-system, "Apple SD Gothic Neo",
         "Malgun Gothic", "Noto Sans KR", sans-serif;
 
-    /* ── 전역 토큰 knob (memo69 §2.1 — themeColors enum → theme.ts 매핑 → <html> inline style 로 덮인다) ──
+    /* ── 전역 토큰 knob (themeColors enum → theme.ts 매핑 → <html> inline style 로 덮인다) ──
      * radius: --radius-knob(무단위 배수)이 스케일 전체를 곱한다. soft=1(기본)이 Tailwind v4 기본 스케일과
      * 정확히 일치, sharp=0(각짐), round=2(곱절). var() 폴백 1 로 knob 미주입 시에도 기본이 산다.
      * density: --spacing 베이스(cozy=0.25rem 기본). theme.ts 가 compact 시 0.22rem 으로 덮으면 전 여백이 스케일. */

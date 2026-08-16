@@ -20,7 +20,7 @@ export async function POST(req: Request) {
     if (blocked) return blocked;
     const badType = assertJsonContentType(req);
     if (badType) return badType;
-    // 프리뷰 모드(memo29 §3)는 읽기전용 — 실제 승인을 차단한다.
+    // 프리뷰 모드는 읽기전용 — 실제 승인을 차단한다.
     if (isPreview()) {
         return NextResponse.json({message: "프리뷰 모드에서는 결제가 비활성화됩니다."}, {status: 403});
     }

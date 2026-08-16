@@ -6,7 +6,7 @@ import {notifyAuthHintChange} from "@/lib/useAuthHint";
 import {buttonClasses} from "@/components/ui/Button";
 
 /**
- * 내 주문 목록 + 취소·구매확정 — 마이페이지 아일랜드(memo 57 축B).
+ * 내 주문 목록 + 취소·구매확정 — 마이페이지 아일랜드.
  *
  * 예약(BookingList)과 대칭이다: 예약을 "잡고·보고·무를" 수 있으면 주문도 "사고·보고·무를(취소)·
  * 받고 확정할" 수 있어야 한다. W7 BookingList 와 완전 동형이라 그 선례의 교훈을 그대로 따른다:

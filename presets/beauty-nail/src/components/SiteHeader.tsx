@@ -12,7 +12,7 @@ import {LogoutButton} from "./LogoutButton";
  *
  * 예전엔 async RSC 로 서버에서 `getAccessToken()`(=`cookies()`)을 읽었는데, 그러면 이 헤더가 실린
  * 루트 레이아웃이 전 라우트를 요청마다 동적 렌더로 강제해 SEO 페이지(홈·상세)가 정적/ISR 로 CDN
- * 캐시될 수 없었다(memo31 §0-1). 세션 판정을 클라이언트로 내려 페이지는 static/ISR 로 남는다.
+ * 캐시될 수 없었다. 세션 판정을 클라이언트로 내려 페이지는 static/ISR 로 남는다.
  * (토큰 유효성까지는 확인하지 않는다 — 만료라면 마이페이지 진입 시 백엔드 401 로 로그인으로 보낸다.)
  */
 export function SiteHeader({menus = []}: {menus?: NavLink[]}) {

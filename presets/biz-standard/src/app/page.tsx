@@ -40,7 +40,7 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function Home() {
-    // ISR 캐시 태그(memo31 §0-1) — 백엔드가 설정/상품 변경 시 revalidateTag 로 이 페이지만 콕 집어 무효화한다.
+    // ISR 캐시 태그 — 백엔드가 설정/상품 변경 시 revalidateTag 로 이 페이지만 콕 집어 무효화한다.
     // site-config: 사이트 설정·테마·레이아웃(전 페이지 영향) · products: 카탈로그 변경.
     const config = await zalkera.getSiteConfig({tags: ["site-config"]}).catch(() => null);
     // 사이트의 얼굴은 이 레포가 정본으로 갖는다(어휘 계약 rev 4 `contentFile`) — 백엔드 왕복이 없다.
@@ -61,7 +61,7 @@ export default async function Home() {
 
     return (
         <main className="py-8">
-            {/* 사이트 주체 — 홈에 1회만(memo 50 W1). 오프라인 점포·뷰티샵 테마는 organizationJsonLd 의
+            {/* 사이트 주체 — 홈에 1회만. 오프라인 점포·뷰티샵 테마는 organizationJsonLd 의
                 type 을 LocalBusiness·BeautySalon 으로 좁힌다. 설정이 비면 낼 게 없으므로 생략한다. */}
             {config && <JsonLd data={organizationJsonLd(config, siteUrl())} />}
             <h1>{config?.companyName ?? fallbackSiteName()}</h1>

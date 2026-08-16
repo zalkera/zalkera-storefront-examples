@@ -8,10 +8,10 @@ import {safeNextPath} from "./oauth.ts";
  *
  * ## 왜 이 파일이 생겼나
  *
- * `safeLinkUrl`·`safeNextPath` 는 주석에 "심의 실측"으로 두 번 이상 고친 이력이 적혀 있는데
+ * `safeLinkUrl`·`safeNextPath` 는 소독기이고
  * **잠금이 한 줄도 없었다.** 그래서 세 번째 결함이 배송됐다 — 입력의 오리진만 보고 정규화한
  * 출력을 그대로 돌려줘서, `/..//evil.example` 이 `//evil.example` 이 되어 `refresh` 라우트가
- * 실제로 `Location: https://evil.example/` 를 냈다(심의가 실 `NextResponse` 로 재현).
+ * 실제로 `Location: https://evil.example/` 가 나간다.
  *
  * 이 값들의 출처는 콘솔·AI·고객 zip·쿼리스트링이라 **전부 신뢰 경계 밖**이다.
  *

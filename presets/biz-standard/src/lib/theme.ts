@@ -23,7 +23,7 @@ const COLOR_KEYS: ReadonlyArray<readonly [string, string]> = [
 ];
 
 /*
- * ── 전역 토큰 knob (memo69 §2.1 · 계약버전 2) ──────────────────────────────
+ * ── 전역 토큰 knob ──────────────────────────────
  * 색과 달리 knob 은 **enum**이다. 백엔드 `site.theme.update` 화이트리스트가 허용값만 저장하지만,
  * 여기서도 매핑 테이블 lookup 으로 한 번 더 봉한다: **사용자 문자열은 어떤 경로로도 style 에 실리지
  * 않는다** — enum 은 테이블 key 조회뿐이고, 없는 값(오염·구버전)은 조용히 버려 @theme 기본값을 유지한다.
@@ -36,7 +36,7 @@ const SYSTEM_STACK =
 
 /*
  * font: --font-sans 스택 교체.
- * TODO(memo69 §2.1 후속): pretendard·noto-serif-kr 의 self-host `@font-face` woff2 서브셋 자산 번들링.
+ * TODO: pretendard·noto-serif-kr 의 self-host `@font-face` woff2 서브셋 자산 번들링.
  * 지금은 폰트 **패밀리명만** 스택 앞에 얹어, 사용자 환경에 설치돼 있으면 쓰고 없으면 폴백한다
  * (외부 CDN 0 유지). 자산이 동봉되면 여기 매핑은 그대로 두고 globals.css 에 @font-face 만 추가하면 된다.
  */

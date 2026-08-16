@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {matchesOAuthState, newOAuthState} from "./oauthState.ts";
 
 /**
- * OAuth state 대조의 **회귀 픽스처**(memo118 ②층).
+ * OAuth state 대조의 **회귀 픽스처**.
  *
  * 이 판정이 막는 것은 ①(Origin↔Host)이 못 막는 유일한 경로다 — 피해자를 우리 콜백 페이지로
  * 톱레벨 이동시킨 뒤 이어지는 same-origin POST. 그래서 **전부 fail-closed** 여야 한다:

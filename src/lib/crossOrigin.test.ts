@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {isJsonContentType, isSameOriginRequest} from "./crossOrigin.ts";
 
 /**
- * 교차사이트 위조 판정의 **회귀 픽스처**(memo118 §8).
+ * 교차사이트 위조 판정의 **회귀 픽스처**.
  *
  * 검사기(`validate-storefront.mjs` X1)는 "가드를 불렀는가"만 본다. **가드가 옳은가**는 여기서만
  * 잠긴다 — 그리고 이 규칙은 한 줄만 흔들려도 조용히 열리는 종류다. 아래 각 테스트는
@@ -38,7 +38,7 @@ test("원 익스플로잇 — 교차사이트 폼 제출은 막힌다", () => {
  * 변이와 무관하다). 케이스 이름을 박지 마라 — 스위트가 바뀌면 같이 낡는다.
  *
  * 재려면 직접 넣고 돌려라:
- *     sed -i 's/=== "same-origin"/!== "cross-site"/' src/lib/crossOrigin.ts && npm test memo118 이 경고한 것은 그 헤더를 **단독으로** 쓰는 설계였고, 우리는 안 쓴다.
+ *     sed -i 's/=== "same-origin"/!== "cross-site"/' src/lib/crossOrigin.ts && npm test 경고 대상은 그 헤더를 **단독으로** 쓰는 설계였고, 우리는 안 쓴다.
  *
  * 그러니 이 파일을 고치는 사람에게: **Origin 규칙을 느슨하게 만들면 `Sec-Fetch-Site` 가 대신
  * 막아 주지 않는다.** 아래 "Origin 비교" 케이스들이 진짜 자물쇠다.

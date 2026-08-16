@@ -2,7 +2,7 @@ import {NextResponse} from "next/server";
 import {apiBase, tenantCode} from "@/lib/env";
 
 /**
- * 미디어 안정 URL — `<img src="/media/{id}">` 와 JSON-LD `image` 가 쓰는 주소(memo 50 W4).
+ * 미디어 안정 URL — `<img src="/media/{id}">` 와 JSON-LD `image` 가 쓰는 주소.
  *
  * **왜 프록시가 필요한가**: 백엔드 공개 미디어는 두 형태인데 둘 다 브라우저·크롤러가 직접 못 쓴다.
  *  - `/api/public/media/{id}/url` → **수 분 뒤 만료되는 presigned URL**. 마크업에 박으면 ISR 로 캐시된
@@ -14,7 +14,7 @@ import {apiBase, tenantCode} from "@/lib/env";
  * 그래서 이 라우트가 헤더를 붙여 백엔드를 부르고 **302 의 Location 만 그대로 넘긴다**.
  *
  * **이미지 바이트를 스트리밍하지 않는다** — 그러면 모든 이미지 트래픽이 Next 런타임을 통과해
- * 밀도 비용이 붙는다(memo 31). 바이트는 스토리지→브라우저 직행하고, 우리는 이미지뷰당 서명 요청
+ * 밀도 비용이 붙는다. 바이트는 스토리지→브라우저 직행하고, 우리는 이미지뷰당 서명 요청
  * 1회만 낸다. `no-store` 인 이유도 백엔드 `/raw` 와 같다 — 302 대상이 곧 만료되므로 이 응답을
  * 캐시하면 죽은 링크를 재사용하게 된다(이미지 바이트는 스토리지 응답 헤더로 브라우저가 캐시한다).
  *

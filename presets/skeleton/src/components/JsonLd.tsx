@@ -1,10 +1,10 @@
 import type {PostDetail, ProductDetail, RatingSummary, SiteConfig} from "@zalkera/client";
 
 /**
- * schema.org JSON-LD 삽입 — 검색·AI 발견 경로의 입장권(memo 50 W1).
+ * schema.org JSON-LD 삽입 — 검색·AI 발견 경로의 입장권.
  *
  * **왜 필요한가**: 구글 리치결과(가격·재고·평점 노출)는 확립된 가치이고, AI 발견(ChatGPT·Gemini 등)은
- * 그 위에 공짜로 얹힌다. 네이버는 자체 에이전트를 돌리며 외부 AI 크롤러를 막으므로(memo 50 §9-3),
+ * 그 위에 공짜로 얹힌다. 네이버는 자체 에이전트를 돌리며 외부 AI 크롤러를 막으므로,
  * 독립 브랜드 사이트가 발견될 수 있는 경로는 네이버 밖이고 그 입장권이 이것이다.
  *
  * **AI 가 이 파일을 고칠 때 지킬 것**:
@@ -26,7 +26,7 @@ export function JsonLd({data}: {data: object}) {
 /**
  * 상품 상세용 Product + Offer(+ AggregateRating).
  *
- * **variant 마다 Offer 를 하나씩** 낸다 — 우리는 항상 variant 단위로 판다(memo 03 A.1). 옵션 없는
+ * **variant 마다 Offer 를 하나씩** 낸다 — 우리는 항상 variant 단위로 판다. 옵션 없는
  * 상품도 default variant 1개라 분기가 없다.
  *
  * **image 는 `/media/{id}` 안정 URL 로 낸다**(W4). presigned URL(`getMediaUrl`)을 여기 넣으면 수 분 뒤

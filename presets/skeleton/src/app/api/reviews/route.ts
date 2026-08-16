@@ -6,7 +6,7 @@ import {isPreview} from "@/lib/preview";
 import {setAuthHint} from "@/lib/authHint";
 
 /**
- * "후기 더 보기" 아일랜드용 페이지 조회 프록시(memo 57 축A 후속) — 브라우저가 이걸 친다.
+ * "후기 더 보기" 아일랜드용 페이지 조회 프록시 — 브라우저가 이걸 친다.
  *
  * **왜 BFF 인가**: availability 와 같은 근거 — 읽기 공개 API 라도 브라우저 직호출은 baseUrl 노출·
  * `X-Tenant` 위조 면을 연다(`/media/[id]`·availability 선례). 인증은 안 붙인다(공개 읽기라 프리뷰에서도 동작).

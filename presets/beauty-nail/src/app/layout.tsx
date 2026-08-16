@@ -36,14 +36,14 @@ export async function generateMetadata(): Promise<Metadata> {
     const seo = parseSeo(config?.seoDefaults);
     const siteName = seo.title ?? config?.companyName ?? fallbackSiteName();
     // 네이버 서치어드바이저 소유확인 메타. 값은 테넌트별로 다르고 브라우저에 그대로 노출되는 공개 문자열이라
-    // memo86 의 BUILD_PUBLIC(`NEXT_PUBLIC_*` 강제) 축으로 주입한다 — 콘솔에서 테넌트가 자기 값을 넣으면
+    // `NEXT_PUBLIC_*` 로 주입한다 — 콘솔에서 테넌트가 자기 값을 넣으면
     // 재빌드로 반영된다. 미설정이면 태그 자체를 내지 않는다(빈 content 는 검증 실패로 잡힌다).
     const naver = process.env.NEXT_PUBLIC_NAVER_SITE_VERIFICATION?.trim();
     return {
         // canonical·og:url 의 상대 경로를 절대 URL 로 해석하는 기준점. 크롤러는 상대 canonical 을 신뢰하지
         // 않으므로 이게 없으면 아래 canonical 이 무의미해진다.
         metadataBase: metadataBaseUrl(),
-        // canonical 정본(memo98 §3.3). `"./"` 는 **라우트별로** 자기 경로를 metadataBase 기준 절대 URL 로
+        // canonical 정본. `"./"` 는 **라우트별로** 자기 경로를 metadataBase 기준 절대 URL 로
         // 해석한다 — layout 한 줄이 전 공개 라우트를 덮으므로 라우트마다 다시 쓰지 않는다(실측 확인:
         // /policies → …/policies, /products/{slug} → …/products/{slug}. 홈으로 뭉개지지 않는다).
         //

@@ -4,7 +4,7 @@ import {cn} from "@/lib/cn";
 
 /**
  * 버튼 프리미티브. 내부는 shadcn 관용구(cva)로 쓰되 **우리 토큰 어휘만** 쓴다 — shadcn 의 변수층
- * (`:root{--primary}` + `@theme inline`)이나 `.dark` 세트는 반입하지 않는다(memo102 §4.1). 남의 토큰
+ * (`:root{--primary}` + `@theme inline`)이나 `.dark` 세트는 반입하지 않는다. 남의 토큰
  * 이름(`bg-card`·`text-muted-foreground` 등)이 섞여 들어오는 것은 validator S6 가 막는다.
  *
  * props 시그니처는 종전과 동일하다 — 이식된 호출부 다수가 이 컴포넌트와 [buttonClasses] 를 쓰고 있어

@@ -11,7 +11,7 @@ import {callbackPath, parseProviderParam} from "@/lib/oauth";
  * 소셜 로그인 **교환** — authorization code 를 백엔드가 토큰으로 바꾼다. 받은 토큰은 httpOnly 쿠키에
  * 저장한다(브라우저 JS 에 노출하지 않는다).
  *
- * 방어가 두 겹이고 **각각 다른 경로**를 막는다(memo118).
+ * 방어가 두 겹이고 **각각 다른 경로**를 막는다.
  *
  *  ① `assertSameOrigin` — 교차사이트 폼 제출. 우리 코드가 한 줄도 안 도는 경로다.
  *  ② `consumeOAuthState` — **콜백 페이지 경유 code 주입.** 공격자가 피해자를

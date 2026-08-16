@@ -1,5 +1,5 @@
 // zalkera-allow-preview-write: 고객 데이터가 아니라 캐시이고, 시크릿 헤더가 없으면 401 이다.
-// zalkera-allow-cross-origin: 시크릿 헤더가 없으면 401 — 앰비언트 권한에 기대지 않는다(memo118 §5).
+// zalkera-allow-cross-origin: 시크릿 헤더가 없으면 401 — 앰비언트 권한에 기대지 않는다.
 //
 // ⚠ 마커의 이유는 **한 줄**이다 — 검사기가 면제 목록에 출력하는 것이 그 한 줄이라, 두 줄로 쓰면
 // 목록에 문장이 잘린 채 찍힌다(그렇게 잘려 있었다). 부연은 아래처럼 마커 밖 주석으로 적는다.
@@ -11,7 +11,7 @@ import {NextResponse} from "next/server";
 import {revalidatePath, revalidateTag} from "next/cache";
 
 /**
- * 온디맨드 revalidate (memo31 §0-12 · §5.1). ISR-우선 서빙에서 신선도를 지키는 정본 경로:
+ * 온디맨드 revalidate. ISR-우선 서빙에서 신선도를 지키는 정본 경로:
  * SEO 페이지는 per-request SSR 하지 않고 CDN 캐시를 서빙하되, **백엔드 데이터가 바뀌면**
  * 백엔드가 이 엔드포인트를 호출해 해당 path/tag 의 캐시를 무효화한다(발행·상품변경 훅).
  *

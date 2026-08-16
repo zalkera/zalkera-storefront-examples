@@ -18,7 +18,7 @@ jobs:
     # ⚠ **`ci.yml` 과 같은 값이어야 한다.** `src/lib/env.ts` 의 `tenantCode()` 는 폴백이 없어서
     #   (없으면 크게 실패하는 게 맞다는 처분) 이 블록이 없으면 `npm run build` 가 **항상 rc 1** 이다 —
     #   그러면 이 워크플로는 구조적으로 영구 적색이고, 아래 lockfile 커밋 스텝에 **도달하지 못한다**.
-    #   심의가 그 상태를 실측했다. 이름은 서빙 인프라·SandboxBuildGate.CI_ENV 와 같은 상수다.
+    #   그 상태를 재는 자리다. 이름은 서빙 인프라가 주입하는 것과 같아야 한다.
     env:
       ZALKERA_API_BASE: http://localhost:8100
       ZALKERA_TENANT: ci-placeholder

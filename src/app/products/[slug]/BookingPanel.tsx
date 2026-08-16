@@ -7,12 +7,12 @@ import {notifyAuthHintChange, useAuthHint} from "@/lib/useAuthHint";
 import {buttonClasses, cn} from "@/components/ui/Button";
 
 /**
- * 예약 슬롯 선택 + 예약 잡기 — **SERVICE 상품의 담기 버튼 자리**(memo 50 §45).
+ * 예약 슬롯 선택 + 예약 잡기 — **SERVICE 상품의 담기 버튼 자리**.
  *
  * ## 왜 클라이언트 아일랜드인가
  * 슬롯 가용성은 **볼라틸**이다 — 옆 손님이 방금 잡으면 바뀐다. 상품 상세는 ISR(`force-static`+300s)이라
  * 서버에서 구우면 **5분 낡은 시간표**를 보여주고 `SLOT_FULL` 을 만든다. 그래서 페이지의 정적성은
- * 그대로 두고(productType 은 사실상 불변이라 stale 무해) 슬롯만 마운트 후 당긴다(memo 31 §0-12 사상).
+ * 그대로 두고(productType 은 사실상 불변이라 stale 무해) 슬롯만 마운트 후 당긴다.
  *
  * SDK 는 서버 전용(baseUrl 노출 금지)이라 여기서 직접 못 부른다 — **BFF 를 거친다**.
  */
@@ -61,7 +61,7 @@ export function BookingPanel({product}: {product: ProductDetail}) {
             const data = await res.json().catch(() => null);
 
             if (!res.ok) {
-                // **401 은 "갱신하라"이지 "로그아웃하라"가 아니다**(memo 50 §24-3). access 는 15분,
+                // **401 은 "갱신하라"이지 "로그아웃하라"가 아니다**. access 는 15분,
                 // refresh 는 30일 — 401 을 로그인으로 보내면 그 30일이 무의미해지고 고객이 15분마다
                 // 재로그인한다. 갱신 경유지로 보내 살아 있는 refresh 로 되살린 뒤 제자리로 돌아온다.
                 // (힌트 쿠키가 stale 인 채 버튼이 "예약하기"로 남아 재클릭 401 무한이 되는 것도 이걸로 끊긴다.)
@@ -115,7 +115,7 @@ export function BookingPanel({product}: {product: ProductDetail}) {
         );
     }
     /*
-     * 슬롯 0 — **개점 준비 중의 정직한 표기**(memo119 §2.4).
+     * 슬롯 0 — **개점 준비 중의 정직한 표기**.
      *
      * 시드는 시술 카탈로그까지만 만들고 예약 캘린더(자원·직원·슬롯·영업시간)는 만들지 않는다. 그것들은
      * 매장의 사실이라 제작자가 발명하면 그럴듯해서 더 위험하다. 그래서 프리셋으로 개시한 직후 이 상태가

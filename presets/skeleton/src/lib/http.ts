@@ -8,7 +8,7 @@ import {isJsonContentType, isSameOriginRequest} from "@/lib/crossOrigin";
  * 세 가지를 다 실어야 클라이언트가 온전히 분기한다:
  *  - `code` — 기계 판독 errorCode(예: NOT_CANCELABLE·TOO_MANY_REQUESTS)로 분기
  *  - `errors` — 400 필드 검증 배열. **이걸 빠뜨리면 폼의 필드별 에러 표시가 죽은 코드가 된다**
- *    (실측 사고: InquiryForm 의 data.errors 분기가 도달 불가였다 — memo 57 §9 F1).
+ *    (실측 사고: InquiryForm 의 data.errors 분기가 도달 불가였다
  */
 export function errorResponse(error: unknown): NextResponse {
     if (error instanceof ZalkeraError) {
@@ -26,7 +26,7 @@ export function errorResponse(error: unknown): NextResponse {
  * ⚠ **이건 CSRF 방어가 아니다.** `Content-Type` 을 보지 않으므로 `<form enctype="text/plain">`
  * 이 보낸 본문도 그대로 파싱된다 — 원 익스플로잇의 운반체가 정확히 그것이었다. 교차사이트
  * 위조를 막는 것은 [assertSameOrigin](①층)과 [assertJsonContentType](③층)이고, 이 함수는
- * **형식 가드**다. 이 오해는 memo118 §7-9 가 DON'T-BUILD 로 명시해 죽인 것이다.
+ * **형식 가드**다. 이 오해는 가 DON'T-BUILD 로 명시해 죽인 것이다.
  */
 export async function readJsonBody(req: Request): Promise<any | null> {
     const body = await req.json().catch(() => null);
@@ -40,7 +40,7 @@ export function invalidBody(): NextResponse {
 }
 
 /**
- * 교차사이트 위조 가드 — **변이 메서드를 export 하는 모든 BFF 라우트의 첫 줄**(memo118).
+ * 교차사이트 위조 가드 — **변이 메서드를 export 하는 모든 BFF 라우트의 첫 줄**.
  *
  * ```ts
  * export async function POST(req: Request) {

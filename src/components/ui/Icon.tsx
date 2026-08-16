@@ -35,7 +35,7 @@ import {
 import type {LucideIcon} from "lucide-react";
 
 /**
- * 아이콘 큐레이션 맵(memo102 §4.4) — 섹션 config 의 `icon` 문자열이 여기 키만 가리킨다.
+ * 아이콘 큐레이션 맵 — 섹션 config 의 `icon` 문자열이 여기 키만 가리킨다.
  *
  * **임의 문자열·전체 lucide 동적 로딩은 하지 않는다**(DON'T-BUILD): 번들이 커지고, 콘솔이 셀렉트를
  * 못 내며, 말로 고치기가 "있는 것 중에 고르기"가 아니라 "이름 맞히기"가 된다. 목록의 정본은 백엔드

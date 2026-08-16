@@ -11,7 +11,7 @@ import {errorResponse} from "@/lib/http";
  *
  * **왜 서버 렌더가 아니라 여기냐**: 슬롯은 볼라틸이다 — 옆 손님이 방금 잡으면 바뀐다. 상품 상세는
  * ISR(`force-static`+300s)이라 거기서 구우면 **5분 낡은 시간표**를 보여주고 `SLOT_FULL` 을 만든다.
- * memo 31 §0-12 사상대로 볼라틸은 클라이언트 아일랜드로 내리고, 그 아일랜드가 이 라우트를 친다.
+ * 볼라틸은 클라이언트 아일랜드로 내리고, 그 아일랜드가 이 라우트를 친다.
  */
 export async function GET(req: Request) {
     const {searchParams} = new URL(req.url);

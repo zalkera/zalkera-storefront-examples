@@ -5,7 +5,7 @@ import {PROVIDER_CONFIG, buildAuthorizeUrl, callbackPath, parseProviderParam} fr
 import {issueOAuthState} from "@/lib/session";
 
 /**
- * 소셜 로그인 **개시** — state 를 서버가 발행해 httpOnly 쿠키에 심고 authorize URL 을 돌려준다(memo118 ②층).
+ * 소셜 로그인 **개시** — state 를 서버가 발행해 httpOnly 쿠키에 심고 authorize URL 을 돌려준다.
  *
  * 종전에는 브라우저가 `crypto.randomUUID()` 로 state 를 만들어 sessionStorage 에 넣었다. 그러면 그 검사는
  * **우리 클라이언트 코드가 실행될 때만** 산다 — BYO 고객이 자기 로그인 화면을 새로 짜거나 AI 가 그 파일을

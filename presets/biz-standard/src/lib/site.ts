@@ -1,6 +1,6 @@
 /**
  * 이 사이트의 공개 절대 URL. JSON-LD·sitemap·robots 는 상대경로를 쓸 수 없다 —
- * 크롤러가 절대 URL 로 정규화해 읽기 때문이다(memo 50 W1).
+ * 크롤러가 절대 URL 로 정규화해 읽기 때문이다.
  *
  * env `ZALKERA_SITE_URL` 로 주입한다(예: https://shop.example.com). 미설정이면 로컬 기본값이라
  * **배포 전 반드시 설정**해야 한다 — 안 그러면 sitemap 이 localhost 를 가리킨다.

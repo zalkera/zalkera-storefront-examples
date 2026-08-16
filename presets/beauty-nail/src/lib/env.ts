@@ -2,7 +2,7 @@
  * 서버 env 접근 단일 지점. 이 골격은 거래처마다 레포로 복제되므로, env 를 읽는 곳이 흩어지면
  * 폴백도 흩어진다(실제로 `src/lib/zalkera.ts` 와 `src/app/media/[id]/route.ts` 가 각자 갖고 있었다).
  *
- * ## env 이름 — `ZALKERA_*` 단독(memo101 컷오버 완료·2026-07-26)
+ * ## env 이름 — `ZALKERA_*` 단독
  *
  * 구 `ONEQUE_*` 폴백은 제거했다. 서빙 인프라(백엔드 스냅샷 `site.env`·오케스트레이터 키 주입)가
  * 신 이름만 방출하므로 폴백이 죽은 코드였고, 두 이름을 남기면 어느 쪽이 진짜인지 흐려진다.
@@ -33,7 +33,7 @@ export function apiBase(): string {
 }
 
 /**
- * 스토어프론트 서버 시크릿 키(`oqsk_…`·memo78/79). **서버 전용** — 모든 백엔드 호출에 `X-Storefront-Key`
+ * 스토어프론트 서버 시크릿 키(`oqsk_…`). **서버 전용** — 모든 백엔드 호출에 `X-Storefront-Key`
  * 로 실려 이 사이트를 인증한다. 관리형(오케스트레이터 서빙)은 기동 시 `ZALKERA_STOREFRONT_KEY` 로 자동 주입되고,
  * BYO 는 콘솔에서 발급해 배포 env 에 넣는다.
  *

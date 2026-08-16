@@ -13,7 +13,7 @@ import {Button} from "@/components/ui/Button";
  */
 export function SocialLoginButtons({consents, disabled}: {consents: ConsentInput[]; disabled: boolean}) {
     /**
-     * 개시는 **서버가 한다**(memo118 ②층). state 를 브라우저가 만들어 sessionStorage 에만 두면,
+     * 개시는 **서버가 한다**. state 를 브라우저가 만들어 sessionStorage 에만 두면,
      * 그 검사는 우리 클라이언트 코드가 실행될 때만 산다 — AI 가 이 파일을 다시 쓰거나 BYO 고객이
      * 자기 로그인 화면을 짜면 조용히 사라진다. 서버가 발행해 httpOnly 쿠키에 심으면 교환 라우트가
      * **어떤 프론트엔드가 붙든 스스로 방어한다.**

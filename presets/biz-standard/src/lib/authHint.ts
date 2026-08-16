@@ -3,7 +3,7 @@ import type {NextResponse} from "next/server";
 /**
  * 로그인 여부 **낙관적 힌트 쿠키** — 비-httpOnly `zalkera_authed`(로그인이면 "1", 아니면 비운다).
  *
- * ## 왜 이게 있나 (ISR/정적 셸의 전제 · memo31 §0-1)
+ * ## 왜 이게 있나 (ISR/정적 셸의 전제)
  * 공개 SEO 셸(레이아웃·헤더)을 정적/ISR 로 CDN 캐시하려면 서버에서 세션(`cookies()`)을 읽을 수 없다 —
  * `cookies()` 는 라우트를 요청마다 동적 렌더로 강제한다(그래서 "auth/개인화가 SSR 을 강제하는가?" 의
  * 답은 **아니오** 다: 로그인 판정을 클라이언트로 내리면 페이지는 정적/ISR 로 남는다).

@@ -20,7 +20,7 @@ export const dynamic = "force-static";
 export const revalidate = 300;
 
 /**
- * ISR 캐시 태그(memo31 §0-1) — site-config(테마·레이아웃, 전 페이지)·products(카탈로그)·
+ * ISR 캐시 태그 — site-config(테마·레이아웃, 전 페이지)·products(카탈로그)·
  * product:{slug}(이 상품만). 백엔드가 해당 태그로 이 상세만 콕 집어 revalidate 한다.
  *
  * generateMetadata 와 페이지가 **같은 인자로** 부르므로 Next request memoization 이 1회로 합친다 —
@@ -80,7 +80,7 @@ export default async function ProductPage({params}: {params: Promise<{slug: stri
     // 후기 첫 페이지 — 저볼라틸이라 이 페이지의 ISR 에 그대로 얹는다(JSON-LD aggregateRating 과 본문 일치).
     // 2페이지부터는 ReviewLoadMore 아일랜드가 BFF 로 당긴다.
     const reviewPage = await zalkera.listProductReviews(product.id, {size: 10}).catch(() => null);
-    // 환불 정책 — Offer 에 실어 리치결과에 "N일 이내 반품·배송비" 가 노출되게 한다(memo 50 W3).
+    // 환불 정책 — Offer 에 실어 리치결과에 "N일 이내 반품·배송비" 가 노출되게 한다.
     // 정책은 부가 정보라 실패해도 상품 페이지는 산다.
     const config = await zalkera.getSiteConfig({tags: ["site-config"]}).catch(() => null);
     const returnPolicy = config ? merchantReturnPolicyJsonLd(config, parsePolicies(config.commercePolicies)) : null;
@@ -88,7 +88,7 @@ export default async function ProductPage({params}: {params: Promise<{slug: stri
 
     return (
         <main className="py-8">
-            {/* 검색·AI 발견용 구조화 데이터(memo 50 W1) — 아래 보이는 내용과 반드시 일치시킨다. */}
+            {/* 검색·AI 발견용 구조화 데이터 — 아래 보이는 내용과 반드시 일치시킨다. */}
             <JsonLd data={productJsonLd(product, rating, base, returnPolicy)} />
             <JsonLd
                 data={breadcrumbJsonLd([

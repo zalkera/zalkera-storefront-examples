@@ -4,7 +4,7 @@ import {useState, useTransition} from "react";
 import {buttonClasses} from "@/components/ui/Button";
 
 /**
- * 후기 작성 폼 — 주문 상세의 배송완료 라인에만 붙는 아일랜드(memo 57 §10).
+ * 후기 작성 폼 — 주문 상세의 배송완료 라인에만 붙는 아일랜드.
  *
  * 구매검증은 백엔드가 하므로 여기선 상태 게이트(부모가 DELIVERED/COMPLETED + productId 존재 라인에만
  * 렌더)만 한다. 401 은 갱신 신호(§24-3), 오류는 `e.code`(BFF 가 code 로 싣는다 — §9 F1 이후 errors 도).
