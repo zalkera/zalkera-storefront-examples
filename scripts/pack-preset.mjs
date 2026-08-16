@@ -90,6 +90,7 @@ import {deflateRawSync} from "node:zlib";
 import {crc32} from "./preset-canvas.mjs";
 import {checkWiringParity} from "./lib/wiring-parity.mjs";
 import {checkVisitorIp} from "./lib/visitor-ip-parity.mjs";
+import {contentManifest} from "./lib/contentManifest.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const PRESETS_DIR = join(ROOT, "presets");
@@ -156,6 +157,9 @@ const SOURCE_EXCLUDES = [
     "scripts/lib/doc-claims.mjs",
     // 배송 문서의 severity 주장을 검사기 행동으로 못박는다 — 우리 문서에 대한 규율이라 정본 전용.
     "scripts/lib/validateSeverity.test.mjs",
+    // 굽는 도구(`pack-preset.mjs`)의 매니페스트 생성 판정과 그 시험 — 그 도구가 정본 전용이라 둘 다 같다.
+    "scripts/lib/contentManifest.mjs",
+    "scripts/lib/packManifest.test.mjs",
     // ⚠ **방문자 IP 검사기도 배송하지 않는다**(4차 심의 · Fable/Opus 동시 판정). 처음엔 고객에게도
     // 쓸모 있다고 보고 실었는데, 네 라운드에 걸쳐 **거짓 양성이 닫히지 않았다** — 타입 전용 import,
     // 헬퍼 경유 `clientIp`, IP 무관 용도로 client 를 쓰는 파일의 동명 자기 함수까지.
@@ -1046,42 +1050,6 @@ function inspect(code, contract) {
         }
     }
     return {code, seedBytes, manifest, assets, publicFiles, content, packSource};
-}
-
-/**
- * 콘텐츠 매니페스트를 **생성**한다(`content/index.ts`).
- *
- * 손으로 유지하지 않는 이유: 매니페스트와 파일 목록이 갈리면 "파일은 있는데 아무도 못 보는 페이지"가
- * 되고, 그 드리프트를 사람이 지키는 것이 이 레포가 내내 진 싸움이다. 파일 목록에서 파생시키면
- * 갈릴 수가 없다. 형상은 템플릿 기본(`content/index.ts`)과 같아서 고객이 손으로 이어 고칠 수 있다.
- */
-function contentManifest(slugs) {
-    const imports = slugs.map((slug) => `import ${identifierOf(slug)} from "./pages/${slug}.json";`).join("\n");
-    const entries = slugs.map((slug) => `    ${identifierOf(slug)},`).join("\n");
-    return `/**
- * 콘텐츠 매니페스트 — **\`content/\` 디렉터리의 유일한 코드**.
- *
- * 페이지 json 을 **정적 import** 해서 slug → 페이지 맵으로 내놓는다. 읽는 쪽은 \`src/lib/content.ts\` 다.
- * 정적 import 라야 dev 에서 json 을 고치면 화면이 즉시 바뀌고(HMR), 빌드 산출물에 콘텐츠가 실린다.
- *
- * **페이지를 하나 만들 때 고치는 곳은 둘뿐이다**: \`content/pages/<slug>.json\` 을 쓰고, 여기에
- * import 한 줄 + 아래 맵에 한 줄.
- */
-import nav from "./nav.json";
-${imports}
-
-/** slug → 페이지 콘텐츠. **키가 곧 URL 경로**다(\`about\` → \`/about\`, \`home\` → \`/\`). */
-export const pages: Record<string, unknown> = {
-${entries}
-};
-
-export {nav};
-`;
-}
-
-/** slug 를 JS 식별자로 — 하이픈은 식별자에 못 쓴다(`our-story` → `our_story`). */
-function identifierOf(slug) {
-    return slug.replace(/-/g, "_");
 }
 
 function write(inspected, version, source, manual) {
