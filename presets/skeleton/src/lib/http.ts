@@ -26,7 +26,7 @@ export function errorResponse(error: unknown): NextResponse {
  * ⚠ **이건 CSRF 방어가 아니다.** `Content-Type` 을 보지 않으므로 `<form enctype="text/plain">`
  * 이 보낸 본문도 그대로 파싱된다 — 원 익스플로잇의 운반체가 정확히 그것이었다. 교차사이트
  * 위조를 막는 것은 [assertSameOrigin](①층)과 [assertJsonContentType](③층)이고, 이 함수는
- * **형식 가드**다. 이 오해는 가 DON'T-BUILD 로 명시해 죽인 것이다.
+ * **형식 가드**다. 이 함수에 Content-Type 검사를 더하지 마라 — 그 판정은 ③층이 진다.
  */
 export async function readJsonBody(req: Request): Promise<any | null> {
     const body = await req.json().catch(() => null);

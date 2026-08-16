@@ -194,6 +194,30 @@ const HISTORY_BASELINE = {
     "src/lib/safeUrl.ts": 4,
 };
 
+/**
+ * ## 규칙 ⓓ — **치환이 깨뜨린 문장을 잡는다**
+ *
+ * 배송 주석을 기계 치환으로 정리하면 두 형상이 남는다. 둘 다 뜻이 사라지고 아무 검사도 안 잡는다.
+ *
+ *   ⑴ **빈 괄호·앞말 잘린 괄호** — `…통과했다 ().` · `…있었다(—`
+ *      괄호 안 내용만 지우고 괄호를 안 지운 자국이다.
+ *   ⑵ **조사 분리** — `배포 게이트 가` · `이 오해는 가 DON'T-BUILD 로`
+ *      영문 식별자 뒤 띄어쓰기 규약을 한글 명사로 치환하면 조사가 떨어져 나가고, 주어가 통째로
+ *      사라지기도 한다.
+ *
+ * **부채 0 으로 건다** — 도입 시점 재고가 0 이라 유예할 이유가 없다.
+ *
+ * 재현: `node scripts/lib/doc-claims.mjs; echo rc=$?` → rc=0
+ */
+const BROKEN_SENTENCE = [
+    // 한글·강조·백틱·닫는괄호 뒤의 빈 괄호, 그리고 여는 괄호 직후의 줄표
+    /[가-힣*`」)] \(\)|\(—/,
+    // 한글 명사와 조사 사이가 벌어진 자리(`… 게이트 가`). 관형사 `이`(이 라우트)는 뺀다 —
+    // 넣으면 오탐 228건으로 시작하고, 오탐이 많은 검사기는 꺼진다.
+    // `가 있다`·`를 없다` 같은 동사 연결도 뺀다.
+    /[가-힣] (가|를) (?!있|없)(?=[A-Za-z가-힣`])/,
+];
+
 /** 근처 몇 줄까지 명령을 찾아 줄 것인가. 넓히면 무관한 명령이 알리바이가 된다. */
 const NEAR = 3;
 
@@ -223,6 +247,7 @@ function main() {
     const bad = [];
     const enforceBad = [];
     const historyBad = [];
+    const brokenBad = [];
     let claims = 0;
     let enforce = 0;
     for (const f of files) {
@@ -248,6 +273,12 @@ function main() {
             }
             // ⓒ 이력 서술.
             if (HISTORY.test(line)) historyBad.push({file: f, line: i + 1, text: line.trim().slice(0, 96)});
+            // ⓓ 치환 파손 — 주석·문서 줄에서만 본다(코드의 `.catch(() => null)` 은 대상이 아니다).
+            if (/^\s*(\/\/|\*|\/\*|\{\/\*|#|>)/.test(line) || f.endsWith(".md")) {
+                if (BROKEN_SENTENCE.some((rx) => rx.test(line))) {
+                    brokenBad.push({file: f, line: i + 1, text: line.trim().slice(0, 96)});
+                }
+            }
         }
     }
     if (enforce === 0) {
@@ -295,7 +326,14 @@ function main() {
         "배송물에 이력 서술이 늘었습니다 — 지금의 규약만 적으십시오.",
         "이력이 갈 곳: 커밋 메시지 · dist-presets/_superseded/README-*.md · 심의 보고서.\n  규칙이 그 형태인 **이유(제약)** 는 남기십시오 — 그건 현재 사실입니다.",
     );
-    if (!rb.ok || !rc2.ok) process.exit(1);
+    const rc3 = ratchet(
+        brokenBad,
+        // 이 검사기 자신은 규칙 설명에서 나쁜 예를 인용하므로 한 건을 든다.
+        {"scripts/lib/doc-claims.mjs": 2},
+        "치환이 깨뜨린 문장이 있습니다 — 빈 괄호이거나 조사가 떨어졌습니다.",
+        "괄호를 지울 때는 괄호째, 낱말을 바꿀 때는 조사까지 보십시오. 부채 상한은 0 입니다.",
+    );
+    if (!rb.ok || !rc2.ok || !rc3.ok) process.exit(1);
 
     if (grown.length) {
         console.error(`[doc-claims] **재현 명령 없는 측정 주장이 늘었습니다.** 새 주장에는 명령을 다십시오.\n`);
@@ -308,7 +346,7 @@ function main() {
         process.exit(1);
     }
     console.log(
-        `문서 규약 검사 통과 — 측정주장 ${claims}건 중 명령없음 ${total}건(상한 ${budget}) · 집행주장 ${enforce}건 중 결과없음 ${rb.total}건(상한 ${rb.budget}) · 이력 ${rc2.total}건(상한 ${rc2.budget}) · 파일 ${files.length}개` +
+        `문서 규약 검사 통과 — 측정주장 ${claims}건 중 명령없음 ${total}건(상한 ${budget}) · 집행주장 ${enforce}건 중 결과없음 ${rb.total}건(상한 ${rb.budget}) · 이력 ${rc2.total}건(상한 ${rc2.budget}) · 파손 ${rc3.total}건 · 파일 ${files.length}개` +
             (paid.length ? `\n  갚은 자리: ${paid.map(([f, n]) => `${f} ${n}→${byFile[f] ?? 0}`).join(" · ")}` : ""),
     );
 }

@@ -164,7 +164,7 @@ function scanSecrets(dir) {
             const r = rel ? `${rel}/${e.name}` : e.name;
             // ⚠ `.git` 은 **건너뛰지 않는다.** 이 함수 머리말이 "git 이력은 되돌릴 수 없어 사후 수습이
             //   불가능하다"고 적어 둔 바로 그 자리인데, 종전엔 스캔에서 빼 놓고 `✅ 시크릿 0` 을 찍었다 —
-            //   시크릿을 `.git/config` 에만 넣은 zip 이 통과했다 (). 카탈로그 팩은 `pack-preset`
+            //   시크릿을 `.git/config` 에만 넣은 zip 이 통과한다. 카탈로그 팩은 `pack-preset`
             //   이 `.git` 을 구조적으로 배제하지만, **업로드 태생 테넌트**는 작업트리를 통째로 zip 하고
             //   이 러너가 그들의 유일한 관문이다.
             if (e.name === "node_modules" || e.name === ".next") continue;
@@ -178,7 +178,7 @@ function scanSecrets(dir) {
             // 위 정크 반려가 1차 방어이고 이것이 2차다.
             if (!SECRET_TEXTUAL.test(e.name) && !SECRET_EXTENSIONLESS.test(e.name)) continue;
             // ⚠ **심링크는 따라가지 않는다.** 신뢰 밖 zip 이라 `docs/harmless.md → /검수자/사설파일`
-            //   하나로 검수자 파일을 읽고 그 내용이 반려문에 실린다 (). 못 읽은 것으로 적어
+            //   하나로 검수자 파일을 읽고 그 내용이 반려문에 실린다. 못 읽은 것으로 적어
             //   "시크릿 0" 이 미측정을 덮지 않게 한다.
             if (e.isSymbolicLink()) {
                 unread.push(`${r} — 심링크라 내용을 읽지 않았습니다(zip 안 실파일로 바꿔 재납품하십시오)`);
@@ -388,7 +388,7 @@ function identityFromFilename(path) {
  *
  * ⚠ **`/tmp` 가 tmpfs(RAM) 인 기계·컨테이너에서는 그 공간이 금방 마른다.** 그러면 이 러너가
  * `Unknown system error -122`(EDQUOT) 같은 문면으로 반려하는데, **멀쩡한 zip 이 그렇게 반려된다**
- * (— 검수자가 원인을 알 수 없는 사유였다). 그래서 실패할 때 그 가능성을 말해 준다.
+ * — 원인을 알 수 없는 사유로 보인다. 그래서 실패할 때 그 가능성을 말해 준다.
  * 미리 공간을 재서 막지는 않는다 — 임계값은 빌드 크기에 달렸고, 짐작한 숫자로 멀쩡한 검수를
  * 거절하는 쪽이 더 나쁘다.
  *
@@ -521,7 +521,7 @@ try {
             //   있는데 거짓이었다.
             //
             // ⚠ **못 잡는 것 둘.** ⑴ 디렉터리형 지목(`public/images/`) — 확장자를 요구하므로 안 걸린다
-            //   (끝슬래시 토큰으로 넓혀 재 보니 4벌 후보 8건이 전부 정당한 부재 서술이라 안 넓혔다).
+            //   (끝슬래시 토큰으로 넓히면 후보가 늘지만 전부 정당한 부재 서술이라 안 넓혔다).
             //   ⑵ 없는 파일을 **예시로** 든 튜토리얼 문장. 이 둘은 사람이 본다.
             const DOC_PATH_TOKEN =
                 /^[A-Za-z0-9_.\-/[\]]+\.(?:tsx?|jsx?|mjs|cjs|json|css|md|png|jpe?g|webp|avif|gif|svg|ico)$/;
@@ -560,7 +560,7 @@ try {
                         name = name.slice(prefix.length + 1);
                     }
                     // ⚠ 엔트리도 **토큰과 같은 함수**를 태운다. 한쪽만 정규화하면 `./src/x.ts` 같은
-                    //   정상 엔트리가 토큰과 안 맞아 **멀쩡한 납품물을 거짓 반려**한다 ().
+                    //   정상 엔트리가 토큰과 안 맞아 **멀쩡한 납품물을 거짓 반려**한다.
                     const norm = insideZip(name);
                     if (norm) zipEntries.add(norm);
                 }
@@ -621,7 +621,7 @@ try {
                 failed = true;
             } else {
                 // ⚠ **읽은 것만 이름을 댄다.** 목록을 그대로 찍으면 못 읽은 문서까지 "검사했다"로
-                //   읽힌다 (— 판정은 옳았는데 ✅ 줄이 세 문서를 다 댔다).
+                //   읽힌다 — 판정이 옳아도 ✅ 줄이 안 읽은 문서까지 대면 그 줄이 거짓이 된다.
                 record("배송 문서 좌표", true, `${readDocs.join("·") || "대상 문서 없음"} — 죽은 좌표 없음`);
             }
         }
@@ -814,7 +814,7 @@ try {
                 //    ⚠ 이걸 여기서 안 돌리면 **집행 지점이 `ci.yml` 하나**가 되는데, 그것은 GitHub 레포가
                 //    있는 테넌트에서만 돈다. 업로드 태생 테넌트는 CI 가 없어 집행이 **0** 이었고,
                 //    `CUSTOMIZE.md` 는 이 명령을 업로드 전 자가 검수로 지목한다 — 즉 고객이 문서대로 다
-                //    해도 가드가 깨진 zip 이 ✅ 를 받았다 ().
+                //    해도 가드가 깨진 zip 이 ✅ 를 받는다.
                 //    스위트가 없으면 node 러너가 `# tests 0` 과 rc 0 을 내므로 **그것도 반려**로 친다.
                 {
                     const t = spawnSync("npm", ["test"], {cwd: root, encoding: "utf8", env: {...process.env, ...BUILD_ENV}, maxBuffer: 32 * 1024 * 1024});

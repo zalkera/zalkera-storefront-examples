@@ -51,7 +51,7 @@ jobs:
         # **팩의 원본**이라 여기서 새는 것은 전 테넌트로 복제된다.
         #
         # ⚠ **이 스텝을 위 스텝 대신 쓰면 안 된다.** `ci.yml` 은 고객 zip 에 실리므로(SOURCE_EXCLUDES 에
-        # 없다) `--gate` 로 바꾸면 **전 테넌트의 CI 가 관문 모드가 되고**, 배포 게이트 가 이 워크플로의
+        # 없다) `--gate` 로 바꾸면 **전 테넌트의 CI 가 관문 모드가 되고**, 배포 게이트가 이 워크플로의
         # 성공을 읽으므로 거짓 양성 하나가 그 사이트의 배포를 무환불로 막는다. 같은 비대칭 때문에
         # 방문자 IP 검사기를 배송에서 뺐다(SOURCE_EXCLUDES 주석). 그래서 **레포 전용 판별자**로 가른다 —
         # 이 파일이 아래 스텝에서 이미 쓰는 관용구다(`presets/` + `scripts/pack-preset.mjs` 의 교집합).
@@ -104,7 +104,17 @@ jobs:
           SPEC=$(node -e '
             const f = require("./scripts/lib/test-floors.json");
             const e = Object.entries(f).filter(([k]) => k !== "_");
-            if (e.length < 4) { console.error("하한표 항목이 " + e.length + "개입니다 — 비었거나 지워졌습니다."); process.exit(1); }
+            // 요구 스위트를 **이름으로** 적는다. 개수만 세면 스위트를 더할 때마다 그만큼 여유가
+            // 생기고, 그 여유는 곧 "하나는 지워도 통과"가 된다.
+            const REQUIRED = [
+              "src/lib/crossOrigin.test.ts",
+              "src/lib/oauthState.test.ts",
+              "src/lib/previewGuard.test.ts",
+              "src/lib/safeUrl.test.ts",
+              "src/lib/safeUrlDrift.test.ts",
+            ];
+            const missing = REQUIRED.filter((k) => !e.some(([n]) => n === k));
+            if (missing.length) { console.error("하한표에 없는 요구 스위트: " + missing.join(" · ")); process.exit(1); }
             for (const [k, v] of e) {
               if (!/^src\/[A-Za-z0-9_\-\/]+\.test\.tsx?$/.test(k)) { console.error("키 형태 위반: " + JSON.stringify(k)); process.exit(1); }
               if (!Number.isInteger(v) || v <= 0) { console.error("하한이 양의 정수가 아닙니다: " + k + " = " + JSON.stringify(v)); process.exit(1); }
@@ -134,7 +144,7 @@ jobs:
         #
         # ■ **행위 검사는 우리 레포에서만 돈다.** 그것은 프리뷰·비프리뷰 빌드를 각각 한 번 더 구우므로
         #   `next build` **1회 시간의 약 2배**가 얹힌다. 그 시간은 테넌트마다 매 푸시·매 PR 에 붙고,
-        #   배포 게이트 가 이 워크플로를 읽으므로 곧 "말로 고치기"의 지연이 된다.
+        #   배포 게이트가 이 워크플로를 읽으므로 곧 "말로 고치기"의 지연이 된다.
         #   재현(빌드 하나 대 빌드+행위검사):
         #     for i in 1 2; do
         #       S=$(date +%s%N); npm run build >/dev/null; M=$(date +%s%N)
@@ -152,7 +162,7 @@ jobs:
         #     반려로 치기 때문이다. 빼면 우리 팩 라운드가 통째로 막힌다.
         #
         #   ⚠ **검사기 부재를 raw 예외로 죽이지 않는다.** 아래 마지막 스텝과 같은 관용구다 —
-        #     `MODULE_NOT_FOUND` 는 조치 불가능한 메시지이고 배포 게이트 를 막는다.
+        #     `MODULE_NOT_FOUND` 는 조치 불가능한 메시지이고 배포 게이트를 막는다.
         run: |
           if [ ! -f scripts/lib/gate-probe.mjs ]; then
             echo "::error::scripts/lib/gate-probe.mjs 가 없습니다 — 프리뷰 관문이 무엇을 덮는지 잴 수단이 사라집니다. 이 검사기는 팩이 배송하는 파일입니다."
@@ -202,8 +212,8 @@ jobs:
             # ⚠ **존재검사가 먼저다.** 아래 루프는 친절한 오류를 내도록 가드가 걸려 있는데, 이 픽스처만
             # 루프 **앞**에서 무방비로 돌았다. 그래서 판별자가 참이 되는 순간(고객이 `presets/` 를 만들고
             # `scripts/pack-preset.mjs` 라는 이름의 파일을 두면 성립한다) raw `MODULE_NOT_FOUND` 로 죽어
-            # **CI 가 영구 적색**이 되고, 배포 게이트 가 이 워크플로를 읽으므로 그 사이트는 "말로 고치기"가
-            # 구조적으로 막힌다 — 이 스텝 주석이 스스로 막겠다고 적은 바로 그 형상이다 ().
+            # **CI 가 영구 적색**이 되고, 배포 게이트가 이 워크플로를 읽으므로 그 사이트는 "말로 고치기"가
+            # 구조적으로 막힌다 — 이 스텝 주석이 스스로 막겠다고 적은 바로 그 형상이다.
             if [ ! -f scripts/lib/visitor-ip-parity.test.mjs ]; then
               echo "::error::이 트리가 잘커라 정본 저장소로 판정됐는데 scripts/lib/visitor-ip-parity.test.mjs 가 없습니다."
               echo "::error::  고객 레포라면 presets/ 또는 scripts/pack-preset.mjs 를 지우십시오(이 검사는 정본 전용)."
