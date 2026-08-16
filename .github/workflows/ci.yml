@@ -96,6 +96,11 @@ jobs:
           #   ⑵ 키는 곧 `node` 의 argv 다. `-` 로 시작하면 파일이 아니라 **플래그**로 해석돼
           #      PR 하나로 이 러너에서 임의 코드가 돈다(`GITHUB_TOKEN` 을 가진 채).
           #      재현: `node --experimental-strip-types --test "--import=./evil.mjs"`
+          #
+          # ⚠ **여기서 안 잡는 것 둘.** ⑴ 하한을 **낮추는** 편집 — 이 파일이 곧 이 레포의 하한이라
+          #   낮춤은 자기 결정이다. 우리 팩에 대해서는 `verify-zip --pack` 이 `REQUIRED_FLOORS` 와
+          #   대조해 반려한다. ⑵ 시험 **내용**을 자명통과로 갈아치우는 것 — 하한은 통과 **개수**만
+          #   세기 때문이다. 그 둘은 코드 리뷰가 본다.
           SPEC=$(node -e '
             const f = require("./scripts/lib/test-floors.json");
             const e = Object.entries(f).filter(([k]) => k !== "_");
@@ -128,21 +133,33 @@ jobs:
         # 정적 파일을 빼는 정당한 완화도 막힌다(`scripts/lib/gate-probe.mjs`).
         #
         # ■ **행위 검사는 우리 레포에서만 돈다.** 그것은 프리뷰·비프리뷰 빌드를 각각 한 번 더 구우므로
-        #   `next build` **1회 시간의 2배**가 잡에 얹힌다 — 이 기계에서 12.84s → 26.54s(12코어, +107%),
-        #   2코어로 조이면 18.65s → 40.77s(+119%). 그 시간은 테넌트마다 매 푸시·매 PR 에 붙고,
+        #   `next build` **1회 시간의 약 2배**가 얹힌다. 그 시간은 테넌트마다 매 푸시·매 PR 에 붙고,
         #   BuildGate 가 이 워크플로를 읽으므로 곧 "말로 고치기"의 지연이 된다.
-        #   재현: `time bash -c 'npm run build && node scripts/lib/gate-behavior.mjs .'`
+        #   재현(빌드 하나 대 빌드+행위검사):
+        #     for i in 1 2; do
+        #       S=$(date +%s%N); npm run build >/dev/null; M=$(date +%s%N)
+        #       node scripts/lib/gate-behavior.mjs . >/dev/null; E=$(date +%s%N)
+        #       echo "build $(( (M-S)/1000000 ))ms · build+gate $(( (E-S)/1000000 ))ms"
+        #     done
+        #   이 기계(12코어)에서 6.4s → 19.9s. 러너 사양에 따라 달라지므로 비율(약 3배)로 읽어라.
         #
         #   그 오라클이 잡는 것은 **팩 소스의 관문이 무력화됐는가**이고, 그건 4벌이 갈리는 것을 막는
         #   우리 문제다 — 보호는 우리가 받고 벌은 고객이 무는 배치가 된다(방문자 IP 검사기를 배송에서
         #   뺀 것과 같은 논리). 고객 zip 에 대한 집행은 `verify-zip --pack` 이 진다.
-        #   등재 검사(`gate-probe`)는 0.03s 라 그대로 둔다.
+        #   등재 검사(`gate-probe`)는 빌드를 더 굽지 않으므로 그대로 둔다.
         #
-        #   ⚠ `gate-behavior.mjs` 자체는 **계속 배송한다.** `verify-zip --pack` 이 zip 안의 그 파일을
-        #     부르고, 부재를 반려로 치기 때문이다. 빼면 우리 팩 라운드가 통째로 막힌다.
+        #   ⚠ `gate-behavior.mjs` 자체는 **계속 배송한다.** `verify-zip --pack` 이 부르고 부재를
+        #     반려로 치기 때문이다. 빼면 우리 팩 라운드가 통째로 막힌다.
+        #
+        #   ⚠ **검사기 부재를 raw 예외로 죽이지 않는다.** 아래 마지막 스텝과 같은 관용구다 —
+        #     `MODULE_NOT_FOUND` 는 조치 불가능한 메시지이고 BuildGate 를 막는다.
         run: |
           node scripts/lib/gate-probe.mjs
           if [ -d presets ] && [ -f scripts/pack-preset.mjs ]; then
+            if [ ! -f scripts/lib/gate-behavior.mjs ]; then
+              echo "::error::scripts/lib/gate-behavior.mjs 가 없습니다 — 관문이 실제로 막는지 잴 수단이 사라집니다. 고객 레포라면 presets/ 또는 scripts/pack-preset.mjs 를 지우십시오."
+              exit 1
+            fi
             node scripts/lib/gate-behavior.mjs .
           fi
 

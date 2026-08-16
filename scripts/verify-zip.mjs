@@ -57,6 +57,11 @@ import {fileURLToPath} from "node:url";
 
 const HERE = resolve(fileURLToPath(import.meta.url), "..");
 const VALIDATOR = join(HERE, "validate-storefront.mjs");
+/**
+ * 행위 검사기 — **이 러너 옆의 사본**이다. zip 안의 것을 부르면 그것을 `exit 0` 으로 갈아 끼우는
+ * 것만으로 오라클이 꺼진다(신뢰 밖 zip 이 자기를 검사할 도구를 고르게 두는 셈이다).
+ */
+const GATE_BEHAVIOR = join(HERE, "lib", "gate-behavior.mjs");
 
 const args = process.argv.slice(2);
 const zipPath = args.find((a) => !a.startsWith("--"));
@@ -830,9 +835,16 @@ try {
                         }
                         effective[f] = Math.max(effective[f] ?? 0, min);
                     }
-                    // ⓒ 요구 스위트가 zip 에 **없으면** 반려. 파일을 지우거나 `{}` 로 비워도 여기서 걸린다.
+                    // ⓒ 요구 스위트 파일이 zip 에 **없으면** 반려.
                     for (const f of Object.keys(REQUIRED_FLOORS)) {
                         if (!existsSync(join(root, f))) bad.push(`${f} 가 없습니다 — 가드를 재는 자리입니다`);
+                    }
+                    // ⓓ 하한표가 **비었으면** 반려. 요구치는 위 `REQUIRED_FLOORS` 로 남아 집행 자체는
+                    //    살지만, 비우는 것은 게이트를 끄려는 시도이고 `ci.yml` 은 그것을 반려한다 —
+                    //    같은 것을 두 정본이 다르게 판정하면 어느 쪽이 참인지 아무도 모르게 된다.
+                    //    재현: `echo '{}' > scripts/lib/test-floors.json && node scripts/verify-zip.mjs <zip>`
+                    if (floors && Object.keys(floors).filter((k) => k !== "_").length < Object.keys(REQUIRED_FLOORS).length) {
+                        bad.push(`하한표 항목이 ${Object.keys(floors).filter((k) => k !== "_").length}개입니다 — 비었거나 지워졌습니다(요구 ${Object.keys(REQUIRED_FLOORS).length}개)`);
                     }
 
                     const short = [];
@@ -915,11 +927,20 @@ try {
                     //     ⚠ **부재를 건너뛰지 않는다.** 이 파일이 없으면 팩이 세운 유일한 행위 오라클이
                     //       꺼진다 — 파일 하나를 지우고 관문을 무력화한 zip 이 항목 수만 하나 줄어든 채
                     //       초록을 받는다. `--pack` 에서 없으면 **반려**다.
-                    if (packMode && !existsSync(join(root, "scripts", "lib", "gate-behavior.mjs"))) {
-                        record("프리뷰 관문 행위", false, "scripts/lib/gate-behavior.mjs 가 없습니다 — 관문이 실제로 막는지 잴 수단이 사라집니다");
+                    //
+                    //     ⚠ **부르는 것은 이 러너 옆의 사본이다**(`HERE/lib/gate-behavior.mjs`). zip 안의
+                    //       것을 부르면 그것을 `exit 0` 으로 갈아 끼우는 것만으로 이 자리가 꺼진다 —
+                    //       위 ⑧-a 가 등재 검사를 인라인한 것과 같은 사유다. `VALIDATOR` 도 같은 규율이다.
+                    //       재현: zip 안 `scripts/lib/gate-behavior.mjs` 를 `process.exit(0)` 으로 바꾸고
+                    //             관문을 무력화한 뒤 `node scripts/verify-zip.mjs <zip> --pack`
+                    if (packMode && !existsSync(GATE_BEHAVIOR)) {
+                        record("프리뷰 관문 행위", false, `${GATE_BEHAVIOR} 가 없습니다 — 관문이 실제로 막는지 잴 수단이 사라집니다`);
+                        failed = true;
+                    } else if (packMode && !existsSync(join(root, "scripts", "lib", "gate-behavior.mjs"))) {
+                        record("프리뷰 관문 행위", false, "zip 에 scripts/lib/gate-behavior.mjs 가 없습니다 — 고객이 그 검사를 돌릴 수 없습니다");
                         failed = true;
                     } else if (packMode) {
-                        const g = spawnSync("node", ["scripts/lib/gate-behavior.mjs", "."], {
+                        const g = spawnSync("node", [GATE_BEHAVIOR, "."], {
                             cwd: root,
                             encoding: "utf8",
                             env: {...process.env, ...BUILD_ENV},

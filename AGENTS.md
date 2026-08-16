@@ -98,7 +98,9 @@ export async function POST(req: Request) {
 - **스킴을 비교하지 마라.** 서빙 오케스트레이터가 `x-forwarded-proto: "http"` 를 넣는데 공개 스킴은
   https 다. 비교하면 전 사이트가 즉시 죽는다. 호스트만 본다.
 - **프리뷰 모드는 쓰기를 막는다 — 그리고 그 판정은 `src/middleware.ts` 한 곳에 있다.**
-  새 라우트는 **아무것도 안 해도 덮인다**(선언 형태·경로·파일명과 무관하다). 라우트 안의
+  새 라우트는 **아무것도 안 해도 덮인다**(선언 형태·파일명과 무관하다). 단 matcher 가 빼는 접두
+  (`_next/static`·`_next/image`·`images/`·`favicon.ico`) 밑은 예외이고,
+  그 형상은 `npm run build && node scripts/lib/gate-probe.mjs` 가 잡는다. 라우트 안의
   `if (isPreview())` 는 이중 방어로 남겨 둔 것이지 그것이 집행 지점은 아니다.
   막으면 안 되는 사정이 있으면 **두 곳**을 같이 고쳐라 — `src/lib/previewGuard.ts` 의
   `PREVIEW_WRITE_ALLOW` 에 경로를 넣고, 그 라우트 파일 **상단**에

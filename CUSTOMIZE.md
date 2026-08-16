@@ -151,8 +151,12 @@ ls public/images 2>/dev/null || echo "이 템플릿에는 동봉된 장식 이�
 보면서도 장바구니·주문·결제·문의 같은 **쓰기가 403 으로 막힙니다.** 로그인·로그아웃은 그 화면들을
 봐야 하므로 막지 않습니다 — 자기 세션만 건드립니다.
 
-차단은 `src/middleware.ts` **한 곳**에서 일어납니다 — 요청의 메서드와 경로만 보므로 **새로 만든
-라우트도 아무것도 안 하고 덮입니다.** 막지 않는 자리는 `src/lib/previewGuard.ts` 의
+차단은 `src/middleware.ts` **한 곳**에서 일어납니다 — 요청의 메서드와 경로만 보므로 선언 형태·
+파일명과 무관하게 **새로 만든 라우트도 아무것도 안 하고 덮입니다.**
+
+⚠ 예외는 matcher 가 빼는 접두(`_next/static`·`_next/image`·`images/`·`favicon.ico`)
+밑입니다. 그 아래에 쓰기 라우트를 만들면(예: `src/app/images/upload/route.ts`) **관문 밖**입니다.
+그 형상은 `node scripts/lib/gate-probe.mjs` 가 잡습니다 — `npm run build` 뒤에 돌려 보십시오. 막지 않는 자리는 `src/lib/previewGuard.ts` 의
 `PREVIEW_WRITE_ALLOW` 목록에 있고, 각 라우트 파일 머리의
 `// zalkera-allow-preview-write: <이유>` 마커에 사유가 적혀 있습니다.
 

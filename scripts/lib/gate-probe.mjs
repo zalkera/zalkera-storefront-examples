@@ -26,7 +26,10 @@ import {join} from "node:path";
 
 const root = process.argv[2] ?? ".next";
 const srcRoot = process.argv[3] ?? ".";
-const appDir = join(srcRoot, "src", "app");
+// `src/app` 이 표준이지만 Next 는 루트 `app/` 도 받는다. 한쪽만 보면 그 배치로 옮긴 트리에서
+// **CI 가 영구 적색**이 된다 — 프로브를 못 만들어 rc 2 를 내기 때문이다.
+// `verify-zip` 의 `derivedRoutes` 도 같은 폴백을 가진다.
+const appDir = existsSync(join(srcRoot, "src", "app")) ? join(srcRoot, "src", "app") : join(srcRoot, "app");
 
 /**
  * 동적 세그먼트에 넣을 대표값. **점을 넣는다** — 확장자 배제 규칙의 구멍은 그 형태에서만 드러난다.

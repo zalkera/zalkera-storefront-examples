@@ -11,12 +11,18 @@ import {isPreviewBlockedWrite} from "@/lib/previewGuard";
  * ## matcher 는 **정적 산출 접두만** 뺀다
  *
  * 관문은 모든 요청에서 엣지 런타임을 한 번 태우고 그 값은 0 이 아니다 — 정적 에셋은 원래 가장 싼
- * 경로라 상대 비용이 크다. 그래서 `_next/static`·`_next/image`·`favicon.ico` 를 빼고, `public/` 을
- * 쓰는 트리에서는 그 최상위(`images/`)도 뺀다.
+ * 경로라 상대 비용이 크다. 그래서 아래 네 접두를 뺀다: `_next/static`·`_next/image`·`images/`·
+ * `favicon.ico`.
  *
- * `public/` 을 새로 만들거나 그 밑에 다른 최상위를 두면 이 목록에 더할 수 있다. 다만 **배제 접두
- * 밑에 쓰기 라우트를 만들면 그 라우트는 관문 밖**이 된다 — 그 형상은 `gate-probe.mjs` 가 잡는다
- * (프로브를 `src/app` 에서 도출하므로 `src/app/images/upload/route.ts` 같은 자리가 바로 걸린다).
+ * ⚠ **이 파일은 배선이라 모든 팩에서 바이트가 같다.** 그러니 여기에 "이 트리에는 `public/` 이
+ *   있다/없다" 처럼 **팩마다 갈리는 사실을 적지 마라** — 어느 팩에서는 반드시 거짓이 된다.
+ *   실제로 걷히는 양은 그 트리가 무엇을 서빙하느냐에 달렸고, 그건 여기서 알 수 없다.
+ *   재현: `node -e 'const m=require("fs").readFileSync("src/middleware.ts","utf8").match(/matcher: (\[.*\])/)[1]; console.log(m)'`
+ *         그리고 `ls public/` 로 그 트리가 실제로 무엇을 갖고 있는지 본다.
+ *
+ * 배제 목록에 더할 수는 있다. 다만 **배제 접두 밑에 쓰기 라우트를 만들면 그 라우트는 관문 밖**이
+ * 된다 — 그 형상은 `gate-probe.mjs` 가 잡는다(프로브를 `src/app` 에서 도출하므로
+ * `src/app/images/upload/route.ts` 같은 자리가 바로 걸린다).
  *
  * ⚠ **확장자로 가르지 마라.** `.*\.[A-Za-z0-9]+$` 로 빼면 **동적 세그먼트에 점이 들어간 쓰기 경로가
  *   통째로 관문 밖**이 된다 — `/api/cart/items/7.0`·`/api/booking/AB.C`·`/api/assets/logo.png` 처럼
@@ -35,14 +41,14 @@ import {isPreviewBlockedWrite} from "@/lib/previewGuard";
  *   우리 레포 CI 와 `verify-zip --pack` 에서 돈다(빌드를 두 번 더 굽는 검사라 고객 CI 에는
  *   안 붙인다. 고객이 부르는 무인자 `verify-zip` 에도 없다).
  *
- * ## 배제로 걷힌 것은 두 접두뿐이다
+ * ## 배제 목록 밖의 정적 파일은 관문을 탄다
  *
- * `_next/static`·`images/` 는 관문 도입 전 수준을 되찾는다. 그 밖의 최상위 정적 파일
- * (`robots.txt`·`sitemap.xml`·`og.png`·`fonts/`·`manifest.webmanifest` …)은 **관문을 탄다** —
- * 배제 목록에 없기 때문이다. "정적 원가를 걷었다"로 읽지 마라.
+ * `robots.txt`·`sitemap.xml`·`og.png`·`fonts/`·`manifest.webmanifest` 처럼 `public/` 최상위에
+ * 놓이는 그 밖의 파일은 배제 목록에 없어 **관문을 탄다**. "정적 원가를 걷었다"로 읽지 마라 —
+ * 걷히는 것은 위 네 접두에 해당하는 요청뿐이고, 그중 실제로 서빙되는 것이 무엇인지는 트리마다 다르다.
  *
- * `public/` 밑에 새 최상위를 만들면(에이전트가 `og.png`·`fonts/` 를 만드는 자리다) 그 에셋도
- * 관문을 탄다. 필요하면 배제 목록에 더하되, **그 밑에 쓰기 라우트를 두면 관문 밖**이 된다.
+ * 에이전트가 `public/og.png`·`public/fonts/` 를 만드는 것은 흔한 일이고, 그 순간 그 에셋도 관문을
+ * 탄다. 필요하면 배제 목록에 더하되, **그 밑에 쓰기 라우트를 두면 관문 밖**이 된다.
  *
  * 원가를 다시 재려면:
  *     node .next/standalone/server.js &   # 관문 있는 빌드와 없는 빌드를 각각
