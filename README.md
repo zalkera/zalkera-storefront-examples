@@ -173,8 +173,9 @@ npm run dev                    # http://localhost:3000
 npm run validate            # ./src 스캔. 위반 있으면 exit 1
 ```
 
-- `use client` 파일이 `@zalkera/client` 를 값으로 import(baseUrl 노출)하면 오류(E1/E2).
-- SEO 라우트가 per-page 동적 SSR 을 강제하면 오류(C1/C1b — ISR-우선 게이트).
+- `use client` 파일이 `@zalkera/client` 를 값으로 import(baseUrl 노출)하면 **경고**(E1/E2) —
+  우리가 서빙할 때(`--gate`)만 오류입니다. `npm run validate` 통과가 안전을 뜻하지 않으니 고치십시오.
+- SEO 라우트가 per-page 동적 SSR 을 강제하면 **경고**(C1/C1b — ISR-우선 게이트). `--gate` 에서 오류.
 - 스타일 규약(위 섹션): 죽은 토큰 `var(--oneq-*)` 참조(S1)·globals.css 배선 소실(S3)은 오류.
   인라인 `style={{}}`(S2)·색 하드코딩(S4)은 **이 레포에서 오류**입니다 — `package.json` 의 `zalkera.styling`
   을 선언한 레포는 그 둘이 error 로 격상됩니다(선언 안 한 레포에서만 경고). 정당한 동적 스타일은

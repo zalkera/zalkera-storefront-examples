@@ -538,7 +538,8 @@ try {
             const DOC_TARGETS = ["CUSTOMIZE.md", "README.md", "AGENTS.md", ".zalkera/ASSETS-LICENSE.md"];
             // 잣대는 검사기 D1(`@zalkera/client` 의 `DOC_PATH_TOKEN`·`DOC_PATH_SKIP_PREFIX`)에서
             // 왔다. 자작 규칙을 쓰면 URL 라우트·예시 파일명이 쏟아진다. 이 파일은 외주에게 단일
-            // 파일로 건네지므로 공용 모듈을 import 하지 않는다(머리말).
+            // 규칙을 여기 두는 이유는 잣대가 D1 과 **같아야** 해서가 아니라 **일부러 다르기** 때문이다
+            // (아래 ⚠ 둘). 공용 모듈로 빼면 그 차이가 지워진다.
             //
             // ⚠ **거울이 아니다 — 두 군데 일부러 다르다. 재동기화할 때 지우지 마라.**
             //   ⑴ **에셋 확장자 7종**(png·jpe?g·webp·avif·gif·svg·ico)을 더 본다. D1 목록은 소스
@@ -941,7 +942,7 @@ try {
                                     record("프리뷰 관문 등재", false, `라우트가 관문 밖입니다 — ${missed.slice(0, 6).join(" · ")}${missed.length > 6 ? ` 외 ${missed.length - 6}개` : ""}`);
                                     failed = true;
                                 } else {
-                                    record("프리뷰 관문 등재", true, `트리에서 도출한 ${routes.length}개 + 미존재 2개 전부 덮임`);
+                                    record("프리뷰 관문 등재", true, `트리에서 도출한 ${routes.length}개 + 미존재 ${SYNTHETIC.length}개 전부 덮임`);
                                 }
                             }
                         }
@@ -1032,6 +1033,7 @@ if (unread.length) {
 console.log("─".repeat(60));
 if (failed) {
     console.error("\n반려 — 위 ❌ 항목을 고쳐 재납품 요청하십시오.");
+console.error("  · ⚠️ [X1~X3] 교차사이트 위조 가드 경고가 있으면 그것도 같이 보십시오 — 이 러너가 안 막습니다.");
     console.error("사람이 추가로 볼 것: 에셋 출처 실제 대조 · 링크 소독(safeUrl) 여부 · 개시 후 화면·색 반영.");
     process.exit(1);
 }
