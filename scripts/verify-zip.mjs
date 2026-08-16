@@ -239,6 +239,83 @@ const PACK_VERSION_REGEX = /^[0-9]+\.[0-9]+\.[0-9]+$/;
 const PACK_VERSION_MAX_LENGTH = 40;
 
 /**
+ * 가드 회귀 스위트의 **하한 정본**. 이 러너가 들고 있다 — `zip` 안의 파일이 아니다.
+ *
+ * ## 왜 zip 을 안 믿나
+ *
+ * 이 러너의 전제는 "납품 zip 은 신뢰 밖"이다. 그런데 하한을 zip 안 데이터 파일에서만 읽으면
+ * **그 파일을 `{}` 로 비우는 것만으로 가드 게이트 전체가 꺼진다** — 루프가 0회 돌고 초록이 난다.
+ * 교차사이트·oauthState·프리뷰 관문·소독기 가드가 옳은지 재는 자리가 한 줄 편집으로 사라진다.
+ *
+ * 그래서 **요구치는 여기**, `scripts/lib/test-floors.json` 은 그 요구를 **올리거나 늘리는** 자리다.
+ * 낮추거나 빠뜨리면 반려한다. `ci.yml` 은 고객 레포의 CI 라 json 을 읽어도 된다 — 어긋나면
+ * 이 검사가 잡는다. 정본이 둘이 아니라, **하나(여기)와 그것을 못 내리는 사본(json)**이다.
+ *
+ * 재현: `node -e 'const f=require("./scripts/lib/test-floors.json");console.log(f)'`
+ */
+const REQUIRED_FLOORS = {
+    "src/lib/crossOrigin.test.ts": 14,
+    "src/lib/oauthState.test.ts": 7,
+    "src/lib/previewGuard.test.ts": 6,
+    "src/lib/safeUrl.test.ts": 4,
+};
+
+/**
+ * 하한 파일의 키로 인정하는 형태. **이 키는 `node` 의 argv 로 들어간다.**
+ *
+ * ⚠ `-` 로 시작하는 문자열은 파일이 아니라 **node 플래그**로 해석된다. zip 이 키를
+ *   `--import=./x.mjs` 로 쓰면 그 코드가 이 러너를 돌리는 기계에서 실행된다 —
+ *   `--ignore-scripts` 로 막아 둔 바로 그 사고가 옆문으로 들어온다.
+ *   재현: `node --experimental-strip-types --test "--import=./evil.mjs"` → evil.mjs 실행 · `# pass` · rc 0
+ *
+ * 점은 `.test.ts` 자리에만 허용한다 — 그래야 `..` 로 트리 밖을 못 가리킨다.
+ */
+const FLOOR_KEY_REGEX = /^src\/[A-Za-z0-9_\-/]+\.test\.tsx?$/;
+
+/**
+ * `src/app` 을 걸어 **이 트리가 실제로 라우팅하는 경로**를 모은다. 못 걸으면 `null`(통과 아님).
+ *
+ * 프리뷰 관문 matcher 가 무엇을 덮어야 하는지의 잣대다. 손으로 적은 목록을 쓰면 그 목록에 없는
+ * 접두를 빼는 순간 영원히 안 잡히므로, 잣대를 트리에서 만든다.
+ *
+ * 동적 세그먼트에는 **점이 든 값**을 넣는다 — 확장자로 가르는 matcher 의 구멍은 그 형태에서만
+ * 드러난다. 재현: `node -e 'console.log(/^\/((?!.*\.[A-Za-z0-9]+$).*)$/.test("/api/cart/items/7.0"))'`
+ *
+ * `scripts/lib/gate-probe.mjs` 와 같은 판정이다. 이 파일은 외주에 바이트 사본으로 나가는
+ * **자기완결 단일 파일**이라 node 내장 밖으로 import 를 늘리지 않는다.
+ */
+function derivedRoutes(appDir) {
+    if (!existsSync(appDir)) return null;
+    const walk = (dir, parts) => {
+        let out = [];
+        let entries;
+        try {
+            entries = readdirSync(dir, {withFileTypes: true});
+        } catch {
+            return null;
+        }
+        if (entries.some((e) => e.isFile() && /^(route|page)\.(t|j)sx?$/.test(e.name))) out.push("/" + parts.filter(Boolean).join("/"));
+        for (const e of entries) {
+            if (!e.isDirectory()) continue;
+            const n = e.name;
+            if (n.startsWith("@") || n.startsWith("_")) continue; // 병렬 라우트·사설 폴더는 주소가 아니다
+            let seg;
+            if (n.startsWith("(") && n.endsWith(")")) seg = null; // 라우트 그룹은 URL 에 안 나온다
+            else if (/^\[\[?\.\.\./.test(n)) seg = "a.b/c.d"; // catch-all
+            else if (n.startsWith("[") && n.endsWith("]")) seg = "7.0"; // 동적 — 점을 넣는다
+            else seg = n;
+            const sub = walk(join(dir, n), seg === null ? parts : [...parts, seg]);
+            if (sub === null) return null;
+            out = out.concat(sub);
+        }
+        return out;
+    };
+    const found = walk(appDir, []);
+    if (found === null || found.length === 0) return null;
+    return [...new Set(found)];
+}
+
+/**
  * `.zalkera/pack.json` 판독. 던지지 않고 판정 재료만 돌려준다(백엔드 판독기와 같은 규율):
  * `{state: "absent"}` · `{state: "ok", manifest}` · `{state: "invalid", reason}`.
  *
@@ -718,18 +795,45 @@ try {
                     const t = spawnSync("npm", ["test"], {cwd: root, encoding: "utf8", env: {...process.env, ...BUILD_ENV}, maxBuffer: 32 * 1024 * 1024});
                     const out = `${t.stdout ?? ""}${t.stderr ?? ""}`;
                     // ⚠ **총합으로 재지 않는다.** `pass >= 1` 이면 스위트를 자명 통과 시험으로 갈아치운
-                    //    zip 이 통과한다. 하한 정본은 `scripts/lib/test-floors.json` 하나이고 `ci.yml` 도
-                    //    같은 파일을 읽는다 — 정본을 둘로 두면 갈린다.
+                    //    zip 이 통과한다. 요구치는 이 러너의 `REQUIRED_FLOORS` 가 들고 있고, zip 안
+                    //    `scripts/lib/test-floors.json` 은 그것을 **올리거나 늘리는** 자리다.
                     let floors = null;
                     try {
                         floors = JSON.parse(readFileSync(join(root, "scripts", "lib", "test-floors.json"), "utf8"));
                     } catch (e) {
                         unread.push(`scripts/lib/test-floors.json — 못 읽었습니다 [${e.code ?? "UNKNOWN"}]`);
                     }
+
+                    // ── 하한표를 **합친다**. zip 은 못 내리고 못 뺀다.
+                    const bad = [];
+                    const effective = {...REQUIRED_FLOORS};
+                    for (const [f, min] of Object.entries(floors ?? {})) {
+                        if (f === "_") continue;
+                        // ⓐ **argv 주입 차단.** 이 키는 곧 `node` 의 인자다 — 형태를 못 맞추면 **반려**한다.
+                        //    조용히 건너뛰면 공격자는 잃을 게 없고, 우리는 하한 하나를 잃는다.
+                        if (!FLOOR_KEY_REGEX.test(f)) {
+                            bad.push(`키 형태 위반 ${JSON.stringify(f).slice(0, 60)}`);
+                            continue;
+                        }
+                        if (!Number.isInteger(min) || min <= 0) {
+                            bad.push(`${f} 하한이 양의 정수가 아닙니다(${JSON.stringify(min)})`);
+                            continue;
+                        }
+                        // ⓑ zip 은 요구치를 **올릴 수만** 있다.
+                        if (f in REQUIRED_FLOORS && min < REQUIRED_FLOORS[f]) {
+                            bad.push(`${f} 하한을 낮췄습니다 ${min} < ${REQUIRED_FLOORS[f]}`);
+                            continue;
+                        }
+                        effective[f] = Math.max(effective[f] ?? 0, min);
+                    }
+                    // ⓒ 요구 스위트가 zip 에 **없으면** 반려. 파일을 지우거나 `{}` 로 비워도 여기서 걸린다.
+                    for (const f of Object.keys(REQUIRED_FLOORS)) {
+                        if (!existsSync(join(root, f))) bad.push(`${f} 가 없습니다 — 가드를 재는 자리입니다`);
+                    }
+
                     const short = [];
-                    if (floors) {
-                        for (const [f, min] of Object.entries(floors)) {
-                            if (f === "_") continue;
+                    if (!bad.length) {
+                        for (const [f, min] of Object.entries(effective)) {
                             const r = spawnSync("node", ["--experimental-strip-types", "--test", f], {
                                 cwd: root,
                                 encoding: "utf8",
@@ -740,12 +844,13 @@ try {
                             if (pass < min) short.push(`${f} ${pass < 0 ? 0 : pass}/${min}`);
                         }
                     }
-                    if (t.status !== 0 || short.length || !floors) {
-                        record("가드 회귀 스위트", false, short.length ? short.join(" · ") : `\n   ${out.trim().split("\n").slice(-8).join("\n   ")}`);
+                    if (t.status !== 0 || bad.length || short.length) {
+                        const why = bad.length ? bad.join(" · ") : short.length ? short.join(" · ") : `\n   ${out.trim().split("\n").slice(-8).join("\n   ")}`;
+                        record("가드 회귀 스위트", false, why);
                         console.error(`   교차사이트·프리뷰·소독기 가드가 옳은지 재는 자리입니다.`);
                         failed = true;
                     } else {
-                        record("가드 회귀 스위트", true, `스위트별 하한 통과(${Object.keys(floors).length - 1}개)`);
+                        record("가드 회귀 스위트", true, `스위트별 하한 통과(${Object.keys(effective).length}개)`);
                     }
                 }
 
@@ -766,19 +871,35 @@ try {
                             unread.push(`.next/server/middleware-manifest.json — 못 읽었습니다 [${e.code ?? "UNKNOWN"}]`);
                         }
                         if (entries !== null) {
-                            // 판정은 **성질**이다 — 쓰기가 닿는 프로브 경로가 전부 덮이는가.
+                            // 판정은 **성질**이다 — 쓰기가 닿는 경로가 전부 덮이는가.
                             // 리터럴 matcher 를 요구하면 정적 파일을 빼는 정당한 완화가 막힌다.
-                            const MUST = ["/api/cart", "/api/cart/items/7", "/api/whatever-new-route", "/", "/checkout", "/some/page"];
-                            const res = entries.flatMap((x) => (x.matchers ?? []).map((m) => new RegExp(m.regexp)));
-                            const missed = MUST.filter((p) => !res.some((r) => r.test(p)));
-                            if (entries.length === 0) {
-                                record("프리뷰 관문 등재", false, "빌드에 안 실렸습니다 — 프리뷰 쓰기 차단이 통째로 꺼집니다");
-                                failed = true;
-                            } else if (missed.length) {
-                                record("프리뷰 관문 등재", false, `쓰기 경로가 관문 밖입니다 — ${missed.join(" · ")}`);
+                            //
+                            // ⚠ 프로브는 **이 zip 의 `src/app` 에서 도출**한다. 손으로 적은 목록을 쓰면
+                            //   그 목록에 없는 접두를 matcher 에서 빼는 순간 영원히 안 잡힌다.
+                            //   `scripts/lib/gate-probe.mjs` 와 같은 판정이지만 **여기 다시 적는다** —
+                            //   이 파일은 외주에 바이트 사본으로 나가는 자기완결 단일 파일이라
+                            //   node 내장 밖으로 import 를 늘리지 않는다. zip 안의 검사기를 불러 쓰면
+                            //   그것을 `exit 0` 으로 갈아 끼우는 것으로 이 자리가 꺼진다.
+                            const appDir = existsSync(join(root, "src", "app")) ? join(root, "src", "app") : join(root, "app");
+                            const routes = derivedRoutes(appDir);
+                            if (routes === null) {
+                                record("프리뷰 관문 등재", false, "src/app 에서 라우트를 도출하지 못했습니다 — 무엇을 덮어야 하는지 알 수 없습니다");
                                 failed = true;
                             } else {
-                                record("프리뷰 관문 등재", true, `쓰기 프로브 ${MUST.length}개 전부 덮임`);
+                                // 트리에 **없는** 경로를 섞는다 — "새 라우트가 아무것도 안 해도 덮인다"는
+                                // 성질은 존재하지 않는 경로로만 잴 수 있다.
+                                const MUST = [...routes, "/api/__gate_probe_new__/1.0", "/__gate_probe_new_page__.item"];
+                                const res = entries.flatMap((x) => (x.matchers ?? []).map((m) => new RegExp(m.regexp)));
+                                const missed = MUST.filter((p) => !res.some((r) => r.test(p)));
+                                if (entries.length === 0) {
+                                    record("프리뷰 관문 등재", false, "빌드에 안 실렸습니다 — 프리뷰 쓰기 차단이 통째로 꺼집니다");
+                                    failed = true;
+                                } else if (missed.length) {
+                                    record("프리뷰 관문 등재", false, `라우트가 관문 밖입니다 — ${missed.slice(0, 6).join(" · ")}${missed.length > 6 ? ` 외 ${missed.length - 6}개` : ""}`);
+                                    failed = true;
+                                } else {
+                                    record("프리뷰 관문 등재", true, `트리에서 도출한 ${routes.length}개 + 미존재 2개 전부 덮임`);
+                                }
                             }
                         }
                     }
@@ -786,7 +907,14 @@ try {
                     // ⑧-b **관문이 실제로 막는가.** 등재 검사는 "실렸는가·무엇을 덮는가"만 본다 —
                     //     판정을 무력화한 관문과 라우트 가드까지 제거한 소스를 못 가른다.
                     //     `--pack` 에서만 돈다(프리뷰·비프리뷰 빌드를 각각 한 번 더 굽는다).
-                    if (packMode && existsSync(join(root, "scripts", "lib", "gate-behavior.mjs"))) {
+                    //
+                    //     ⚠ **부재를 건너뛰지 않는다.** 이 파일이 없으면 팩이 세운 유일한 행위 오라클이
+                    //       꺼진다 — 파일 하나를 지우고 관문을 무력화한 zip 이 항목 수만 하나 줄어든 채
+                    //       초록을 받는다. `--pack` 에서 없으면 **반려**다.
+                    if (packMode && !existsSync(join(root, "scripts", "lib", "gate-behavior.mjs"))) {
+                        record("프리뷰 관문 행위", false, "scripts/lib/gate-behavior.mjs 가 없습니다 — 관문이 실제로 막는지 잴 수단이 사라집니다");
+                        failed = true;
+                    } else if (packMode) {
                         const g = spawnSync("node", ["scripts/lib/gate-behavior.mjs", "."], {
                             cwd: root,
                             encoding: "utf8",

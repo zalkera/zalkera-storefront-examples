@@ -19,9 +19,16 @@ import {isPreviewBlockedWrite} from "@/lib/previewGuard";
  *   파일명·슬러그·자산 id 를 마지막 세그먼트로 받는 자리가 전부 그렇다.
  *   재현: `node -e 'console.log(/^\/((?!_next\/static|.*\.[A-Za-z0-9]+$).*)$/.test("/api/cart/items/7.0"))'`
  *
- * ⚠ **여기를 더 좁히지 마라.** 경로 목록으로 좁히면 빠뜨린 자리가 **조용히** 무방비가 된다.
- *   무엇이 실제로 막히는지는 문면이 아니라 **띄워서** 잰다 — `scripts/lib/gate-behavior.mjs` 가
- *   프리뷰 빌드를 기동해 실 HTTP 로 확인하고, `ci.yml`·`verify-zip` 이 그것을 부른다.
+ * ⚠ **여기를 더 좁히지 마라.** 경로 목록으로 좁히면 빠뜨린 자리가 무방비가 된다.
+ *
+ *   실재 라우트의 접두를 빼면 `scripts/lib/gate-probe.mjs` 가 잡는다 — 그 검사는 프로브를
+ *   고정 목록이 아니라 `src/app` 을 걸어 **이 트리에서 도출**하므로, 무엇을 빼든 그 라우트가
+ *   곧 프로브다. `npm run build` 뒤에 `ci.yml`·`verify-zip` 이 부른다.
+ *   재현: matcher 에 `|api/checkout` 을 넣고 `npm run build && node scripts/lib/gate-probe.mjs`
+ *
+ *   판정 자체를 무력화하면(`if (true) return next()`) 등재 검사는 못 본다. 그것은
+ *   `scripts/lib/gate-behavior.mjs` 가 프리뷰 빌드를 **띄워** 실 HTTP 로 잡는다 —
+ *   `ci.yml` 과 `verify-zip --pack` 에서 돈다(고객이 부르는 무인자 `verify-zip` 에는 없다).
  *
  * 원가를 다시 재려면:
  *     node .next/standalone/server.js &   # 관문 있는 빌드와 없는 빌드를 각각

@@ -77,19 +77,36 @@ jobs:
         # ⚠ **개수로 재지 않는다.** 파일 존재는 빈 파일 하나로, 총 통과 수 하한은 자명 통과 시험
         #   여러 개로 뚫린다 — 개수는 **이름을 재지 않는다.** 그래서 **스위트마다** 하한을 건다.
         #
-        # 하한 14·7·6·4 · 현재치 18·9·6·6(재현: `for f in src/lib/*.test.ts; do node --experimental-strip-types --test "$f" | grep '^# pass'; done`).
+        # 하한값은 `scripts/lib/test-floors.json` 에 있다(재현: `cat scripts/lib/test-floors.json`).
+        # 현재치: `for f in src/lib/*.test.ts; do node --experimental-strip-types --test "$f" | grep '^# pass'; done`
         #   · 큰 스위트는 여유를 뒀다 — 시험을 한둘 더하고 빼는 정상 작업이 게이트를 안 건드리게.
-        #   · **`previewGuard` 는 현재치가 곧 하한이다.** 여섯 중 둘이 통제군(관문 존재·배선 ·
-        #     면제목록↔마커 대칭)이라, 그 둘만 빠져도 관문이 사라진 상태가 초록이 된다.
-        #     시험을 합치거나 줄이려면 이 줄을 **같이** 고쳐라.
+        #   · **`previewGuard` 는 현재치가 곧 하한이다.** 통제군(관문 존재·배선·면제목록↔마커 대칭)이
+        #     섞여 있어 그것만 빠져도 관문이 사라진 상태가 초록이 된다.
+        #     시험을 합치거나 줄이려면 하한 파일을 **같이** 고쳐라.
         run: |
           set -o pipefail
           npm test
           fail=0
           # ⚠ `docsRev.test.ts` 는 여기 없다 — 그것은 **정본 전용**이라 고객 트리에서 skip 되고,
           #   skip 은 `# pass 0` 이라 하한이 거짓 적색을 낸다. 그 시험은 `npm test` 안에서만 돈다.
-          # 하한 정본은 `scripts/lib/test-floors.json` 하나다 — `verify-zip` 도 같은 파일을 읽는다.
-          for s in $(node -e 'const f=require("./scripts/lib/test-floors.json");for(const[k,v]of Object.entries(f))if(k!=="_")console.log(k+":"+v)'); do
+          #
+          # ⚠ **하한표는 검증해서 읽는다.** 두 가지가 이 자리를 조용히 무너뜨린다:
+          #   ⑴ 파일을 `{}` 로 비우면 루프가 0회 돌고 `fail=0` 이 살아남는다 — `set -e` 가 없어
+          #      `$( )` 의 실패도 이 단계를 안 죽인다. 그래서 rc 와 항목 수를 둘 다 본다.
+          #   ⑵ 키는 곧 `node` 의 argv 다. `-` 로 시작하면 파일이 아니라 **플래그**로 해석돼
+          #      PR 하나로 이 러너에서 임의 코드가 돈다(`GITHUB_TOKEN` 을 가진 채).
+          #      재현: `node --experimental-strip-types --test "--import=./evil.mjs"`
+          SPEC=$(node -e '
+            const f = require("./scripts/lib/test-floors.json");
+            const e = Object.entries(f).filter(([k]) => k !== "_");
+            if (e.length < 4) { console.error("하한표 항목이 " + e.length + "개입니다 — 비었거나 지워졌습니다."); process.exit(1); }
+            for (const [k, v] of e) {
+              if (!/^src\/[A-Za-z0-9_\-\/]+\.test\.tsx?$/.test(k)) { console.error("키 형태 위반: " + JSON.stringify(k)); process.exit(1); }
+              if (!Number.isInteger(v) || v <= 0) { console.error("하한이 양의 정수가 아닙니다: " + k + " = " + JSON.stringify(v)); process.exit(1); }
+              console.log(k + ":" + v);
+            }
+          ') || { echo "::error::하한표(scripts/lib/test-floors.json)가 검증을 통과하지 못했습니다 — 가드 게이트를 세울 수 없습니다."; exit 1; }
+          for s in $SPEC; do
             f=${s%:*}; min=${s##*:}
             p=$(node --experimental-strip-types --test "$f" 2>&1 | sed -n 's/^# pass \([0-9]*\)$/\1/p' | tail -1)
             if [ -z "$p" ] || [ "$p" -lt "$min" ]; then
