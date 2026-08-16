@@ -27,18 +27,27 @@ export function newOAuthState(): string {
  * 쿠키 값 ↔ 제출된 state 의 **순수 대조**. 쿠키 입출력에서 갈라 둔 이유는 이 판정이 테스트로
  * 잠겨야 하기 때문이다(`next/headers` 를 import 하는 모듈은 Node 기본 러너가 못 읽는다).
  *
- * 전부 **fail-closed** 다 — 쿠키 부재·파싱 실패·빈 값은 전부 거부한다. 하나라도 통과로 두면
- * "state 를 아예 안 보내면 뚫리는" 구멍이 생긴다.
+ * 전부 **fail-closed** 다 — 쿠키 부재·파싱 실패·**파싱은 됐지만 객체가 아닌 값**·빈 값을 전부
+ * 거부한다. 하나라도 통과로 두면 "state 를 아예 안 보내면 뚫리는" 구멍이 생긴다.
+ *
+ * ⚠ 세 번째 항이 이 목록에 없던 동안 `JSON.parse("null")` → `null` 을 그대로 역참조해 **TypeError**
+ *   가 났다. 호출부(`api/auth/social`)의 `try` 밖이라 예외가 핸들러를 탈출해 **HTTP 500** 이 된다 —
+ *   인증 우회는 아니지만 소셜 로그인이 죽는다. 재현:
+ *   `matchesOAuthState("null", "any", "KAKAO")` → TypeError
  */
 export function matchesOAuthState(raw: string | undefined, state: unknown, provider: unknown): boolean {
     if (!raw || typeof state !== "string" || !state) return false;
 
-    let saved: {state?: unknown; provider?: unknown};
+    let parsed: unknown;
     try {
-        saved = JSON.parse(raw);
+        parsed = JSON.parse(raw);
     } catch {
         return false;
     }
+    // `JSON.parse` 는 `null`·숫자·배열도 **성공**으로 돌려준다. 파싱 성공을 객체로 읽으면 그 셋에서
+    // 죽는다 — `null` 이 특히 그렇다(`typeof null === "object"` 라 typeof 검사만으로는 못 거른다).
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return false;
+    const saved = parsed as {state?: unknown; provider?: unknown};
     // ⚠ 이 줄은 **오늘 동치 가드다**(실측: 지워도 스위트가 전부 통과). 위에서 제출 state 를 "비어 있지 않은
     // 문자열"로 이미 좁혔고 비교가 엄격 동등이라, 쿠키 쪽이 비었거나 문자열이 아니면 어차피 통과할 수
     // 없다. 그래도 남기는 이유는 **위 조건이 느슨해지는 날**을 위해서다 — 그때 이 줄이 없으면
