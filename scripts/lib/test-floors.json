@@ -1,7 +1,7 @@
 {
   "_": "가드 회귀 스위트의 파일별 통과 하한. **현재치와 같게 둔다** — 여유를 두면 그만큼의 가드 시험을 지워도 통과한다(여유 4였을 때 crossOrigin 의 CSRF Content-Type 가드 4건이 통째로 지워지고도 초록이었다). 시험을 더하면 이 값도 같이 올려라. `ci.yml` 이 이 파일을 읽고, `verify-zip` 은 자기 `REQUIRED_FLOORS` 를 요구치로 쓰며 이 파일로는 올리거나 늘릴 수만 있다 — 낮추거나 항목이 모자라면 반려한다. 다만 **시험 내용을 자명통과로 갈아치우는 것은 못 막는다**(통과 개수만 세기 때문). 현재치는 표에서 키를 뽑아 잰다 — `src/lib/*.test.ts` 글롭은 이제 표의 절반만 덮는다.",
   "src/lib/crossOrigin.test.ts": 18,
-  "src/lib/oauthState.test.ts": 9,
+  "src/lib/oauthState.test.ts": 11,
   "src/lib/previewGuard.test.ts": 6,
   "src/lib/safeUrl.test.ts": 6,
   "src/lib/safeUrlDrift.test.ts": 4,

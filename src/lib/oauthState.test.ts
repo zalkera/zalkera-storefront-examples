@@ -56,3 +56,21 @@ test("타입이 어긋나면 막힌다", () => {
 test("발행값은 매번 다르다", () => {
     assert.notEqual(newOAuthState(), newOAuthState());
 });
+
+/**
+ * `JSON.parse` 는 `null`·숫자·배열·문자열도 **성공**으로 돌려준다. "파싱 성공 = 객체" 로 읽으면
+ * 그중 `null` 에서 죽는다 — `typeof null === "object"` 라 typeof 검사만으로는 안 걸러진다.
+ *
+ * 이 축이 빠져 있던 동안 KDoc 은 *"파싱 실패·빈 값 전부 거부"* 라고 적었고, 그 목록에 없던
+ * `"null"` 이 TypeError 를 던졌다. 호출부의 `try` 밖이라 소셜 로그인이 **HTTP 500** 이 된다.
+ */
+test("파싱은 됐지만 객체가 아닌 값은 **거부**한다 — 죽지 않는다", () => {
+    for (const raw of ["null", " null ", "[]", "5", '"s"', "true", "[{}]", '["s"]']) {
+        assert.equal(matchesOAuthState(raw, "s", "KAKAO"), false, `${raw} 가 통과했거나 던졌다`);
+    }
+});
+
+test("통제군 — 정상 쿠키는 그대로 통과한다(과잉차단이 아니다)", () => {
+    assert.equal(matchesOAuthState(JSON.stringify({state: "s", provider: "KAKAO"}), "s", "KAKAO"), true);
+    assert.equal(matchesOAuthState(JSON.stringify({state: "s", provider: "GOOGLE"}), "s", "KAKAO"), false);
+});

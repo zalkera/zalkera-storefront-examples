@@ -8,7 +8,7 @@
 /** 요구 스위트와 그 통과 하한. 현재치와 같게 둔다 — 여유는 그만큼 시험을 지울 수 있게 한다. */
 export const REQUIRED_FLOORS = {
     "src/lib/crossOrigin.test.ts": 18,
-    "src/lib/oauthState.test.ts": 9,
+    "src/lib/oauthState.test.ts": 11,
     "src/lib/previewGuard.test.ts": 6,
     "src/lib/safeUrl.test.ts": 6,
     "src/lib/safeUrlDrift.test.ts": 4,
