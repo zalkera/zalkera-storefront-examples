@@ -10,7 +10,7 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
 import {spawnSync} from "node:child_process";
-import {mkdtempSync, mkdirSync, writeFileSync, rmSync} from "node:fs";
+import {mkdtempSync, mkdirSync, writeFileSync, rmSync, symlinkSync} from "node:fs";
 import {join, dirname} from "node:path";
 import {tmpdir} from "node:os";
 import {fileURLToPath} from "node:url";
@@ -144,6 +144,66 @@ test("트리에 없는 프로브가 반드시 있다 — 새 라우트가 덮이
     });
     // 점이 든 값이어야 확장자 배제 구멍이 드러난다.
     assert.ok(SYNTHETIC.some((p) => /\.[A-Za-z0-9]+$/.test(p)), "점으로 끝나는 프로브가 없다");
+});
+
+test("루트 `app/` 과 `src/app` 이 둘 다 있으면 **루트를 고른다** — Next 와 같은 순서", async () => {
+    // 순서를 뒤집으면 실제로 빌드되는 트리를 아무 검사도 안 본다.
+    // 근거: `node_modules/next/dist/lib/find-pages-dir.js` — "prioritize ./${name} over ./src/${name}"
+    const {appDirOf, derivedRoutes} = await import("./routes.mjs");
+    const dir = mkdtempSync(join(tmpdir(), "both-"));
+    try {
+        for (const [p, f] of [["app/images/upload", "route.ts"], ["src/app/hello", "page.tsx"]]) {
+            mkdirSync(join(dir, p), {recursive: true});
+            writeFileSync(join(dir, p, f), "export async function POST() {}\n");
+        }
+        assert.equal(appDirOf(dir), join(dir, "app"), "루트 `app/` 을 안 골랐다 — Next 와 순서가 다르다");
+        assert.deepEqual(derivedRoutes(appDirOf(dir)), ["/images/upload"]);
+    } finally {
+        rmSync(dir, {recursive: true, force: true});
+    }
+});
+
+test("`src` 가 트리 밖 심링크면 따라가지 않고 **판정 불능**으로 낸다", async () => {
+    // 따라가면 검사기가 링크가 가리킨 디렉터리를 훑고, **그 파일명이 반려문에 실린다** —
+    // 러너는 반려문을 개발자에게 그대로 전달하라고 지시하므로 반출 경로까지 이어진다.
+    const {sourceRoot} = await import("./routes.mjs");
+    const victim = mkdtempSync(join(tmpdir(), "victim-"));
+    const dir = mkdtempSync(join(tmpdir(), "srclink-"));
+    try {
+        writeFileSync(join(victim, "ROSTER.ts"), "export const x = 1;\n");
+        symlinkSync(victim, join(dir, "src"));
+        const {dir: picked, reason} = sourceRoot(dir);
+        assert.equal(picked, null, "심링크를 따라갔다 — 검수자 트리가 검사 대상이 된다");
+        assert.match(reason, /심링크/);
+    } finally {
+        rmSync(dir, {recursive: true, force: true});
+        rmSync(victim, {recursive: true, force: true});
+    }
+});
+
+test("`app` 이 심링크면 라우트 도출을 하지 않는다 — 걷기는 막혀도 **뿌리는 넘어간다**", async () => {
+    const {appDirOf, derivedRoutes} = await import("./routes.mjs");
+    const victim = mkdtempSync(join(tmpdir(), "victim-app-"));
+    const dir = mkdtempSync(join(tmpdir(), "applink-"));
+    try {
+        mkdirSync(join(victim, "secret-tenant"), {recursive: true});
+        writeFileSync(join(victim, "secret-tenant", "page.tsx"), "export default function P() {}\n");
+        symlinkSync(victim, join(dir, "app"));
+        assert.equal(appDirOf(dir), null, "심링크 `app` 을 골랐다 — 트리 밖이 도출 대상이 된다");
+        assert.equal(derivedRoutes(appDirOf(dir)), null, "판정 불능으로 안 떨어졌다");
+    } finally {
+        rmSync(dir, {recursive: true, force: true});
+        rmSync(victim, {recursive: true, force: true});
+    }
+});
+
+test("통제군 — 심링크가 아닌 정상 배치는 두 판정 다 통과한다", async () => {
+    const {sourceRoot, appDirOf} = await import("./routes.mjs");
+    await withFixture({}, (d) => {
+        assert.equal(sourceRoot(d).dir, join(d, "src"));
+        assert.equal(sourceRoot(d).reason, null);
+        assert.equal(appDirOf(d), join(d, "src", "app"));
+    });
 });
 
 test("루트 `app/` 배치에서도 도출한다 — 그 트리에서 CI 가 영구 적색이 되지 않게", async () => {

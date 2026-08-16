@@ -10,8 +10,10 @@ import {test} from "node:test";
 import assert from "node:assert/strict";
 import {spawnSync} from "node:child_process";
 import {mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync} from "node:fs";
-import {join} from "node:path";
+import {join, dirname} from "node:path";
 import {tmpdir} from "node:os";
+import {readFileSync} from "node:fs";
+import {fileURLToPath} from "node:url";
 
 /** 시험용 트리 하나. `evil.mjs` 는 실행되면 흔적을 남긴다. */
 function fixture() {
@@ -79,4 +81,55 @@ test("그 변수를 지우면 요약이 돌아온다 — 하한 파싱이 산다
     } finally {
         rmSync(dir, {recursive: true, force: true});
     }
+});
+
+/**
+ * 위 두 시험은 **node 가 그렇게 동작한다**만 증명한다. 러너가 실제로 그 규율을 쓰는지는
+ * 별개이고, 실제로 두 자리가 빠진 채 초록이었다(규약 검사·산출물 검사기).
+ *
+ * 그래서 **소스에서 뽑아 잰다** — `vendorSet.test.mjs` 와 같은 방식이다.
+ */
+const RUNNER = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "verify-zip.mjs"), "utf8");
+
+/**
+ * 판정 자식 spawn 만 고른다. `unzip`·`chmod` 는 판정을 안 낸다.
+ * 괄호 균형으로 호출을 통째로 뜬다 — 정규식으로 끝을 잡으면 형태가 조금만 달라도 놓친다.
+ */
+function judgingSpawns() {
+    const out = [];
+    let i = 0;
+    while ((i = RUNNER.indexOf("spawnSync(", i)) !== -1) {
+        let depth = 0;
+        let j = i + "spawnSync".length;
+        for (; j < RUNNER.length; j++) {
+            if (RUNNER[j] === "(") depth++;
+            else if (RUNNER[j] === ")") {
+                depth--;
+                if (depth === 0) break;
+            }
+        }
+        const call = RUNNER.slice(i, j + 1);
+        if (!/spawnSync\(\s*"(unzip|chmod)"/.test(call)) {
+            out.push({call, line: RUNNER.slice(0, i).split("\n").length});
+        }
+        i = j + 1;
+    }
+    return out;
+}
+
+test("판정 자식은 **전부** 정규화한 환경으로 띄운다", () => {
+    const spawns = judgingSpawns();
+    assert.ok(spawns.length >= 5, `판정 spawn 을 ${spawns.length}개만 찾았다 — 추출이 깨졌다`);
+    const bare = spawns.filter((s) => !/env:\s*childEnv\(/.test(s.call));
+    assert.deepEqual(
+        bare.map((s) => s.line),
+        [],
+        `상속 환경으로 띄우는 자리: ${bare.map((s) => `${s.line}행`).join(" · ")}`,
+    );
+});
+
+test("신뢰 밖 경로는 `--` 뒤로 넘긴다", () => {
+    const floorRun = judgingSpawns().find((s) => /--experimental-strip-types/.test(s.call) && /"--test"/.test(s.call));
+    assert.ok(floorRun, "하한 스위트를 돌리는 spawn 을 못 찾았다 — 추출이 깨졌다");
+    assert.match(floorRun.call, /"--test",\s*"--",/, `키가 \`--\` 뒤가 아니다:\n${floorRun.call}`);
 });

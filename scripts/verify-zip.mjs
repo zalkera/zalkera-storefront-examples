@@ -61,7 +61,7 @@ import {tmpdir} from "node:os";
 import {fileURLToPath} from "node:url";
 import {judgeFloors, REQUIRED_FLOORS} from "./lib/floors.mjs";
 import {junkTopLevel} from "./lib/junkEntries.mjs";
-import {derivedRoutes, appDirOf, SYNTHETIC} from "./lib/routes.mjs";
+import {derivedRoutes, appDirOf, sourceRoot, SYNTHETIC} from "./lib/routes.mjs";
 
 const HERE = resolve(fileURLToPath(import.meta.url), "..");
 const VALIDATOR = join(HERE, "validate-storefront.mjs");
@@ -723,11 +723,14 @@ try {
         //    실제 납품물(credium)이 후자였다. `src` 를 못 찾으면 루트를 넘긴다 —
         //    validator 는 node_modules·.next 를 스스로 건너뛴다(실측).
         //    설치보다 **앞**에 둔다: 규약 위반은 몇 분짜리 npm ci 를 돌리기 전에 알려주는 게 맞다.
-        const srcDir = existsSync(join(root, "src")) ? join(root, "src") : root;
+        // 소스 루트 선정은 `lib/routes.mjs` 가 든다 — 심링크 봉쇄가 그 판정에 붙어 있다.
+        const srcPick = sourceRoot(root);
+        if (srcPick.reason) unread.push(srcPick.reason);
+        const srcDir = srcPick.dir ?? root;
         // `--gate` — **우리가 서빙 책임을 지는 자리**라 C·E 를 error 로 올린다(X 는 위 참조).
         // 개발자가 손으로 부르는 `npm run validate` 는 같은 규칙을 경고로만 낸다(권고). 기준은
         // "선언했는가"가 아니라 **누가 서빙하는가** 다 — 검사기 머리말의 GATE_MODE 참조.
-        const v = spawnSync("node", [VALIDATOR, srcDir, "--gate"], {cwd: root, encoding: "utf8"});
+        const v = spawnSync("node", [VALIDATOR, srcDir, "--gate"], {cwd: root, encoding: "utf8", env: childEnv()});
         // validator 는 위반을 **stderr** 로 낸다 — stdout 만 잡으면 반려 사유가 빈칸으로 나온다
         // (실제 납품물에 처음 돌렸을 때 그랬다. 왜 반려됐는지 못 알려주는 검수는 쓸모없다).
         //    채널이 갈리므로(요약은 stdout, 위반은 stderr) 합친 뒤 **내용으로** 골라낸다 —
@@ -827,6 +830,7 @@ try {
                     record("산출물 검사기 실행성", true, "check:aeo 스크립트 없음 — 해당 없음");
                 } else {
                     const a = spawnSync("npm", ["run", "check:aeo", "--", "--print-guarantees"], {
+                        env: childEnv(BUILD_ENV),
                         cwd: root,
                         encoding: "utf8",
                         timeout: 2 * 60 * 1000,
