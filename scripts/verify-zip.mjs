@@ -496,7 +496,11 @@ try {
         // ⚠ **`--pack` 모드에서만 잰다.** 납품 zip 은 한 테넌트로 가고 그 문서는 납품사 것이다.
         //   발주 스펙이 약속한 것은 규약 검사이지 문서 위생이 아니다(전제 A).
         if (packMode) {
-            const DOC_TARGETS = ["CUSTOMIZE.md", "README.md", "AGENTS.md"];
+            // `.zalkera/ASSETS-LICENSE.md` 도 본다 — 에셋 출처의 **비고 칸**이 정본 도구 경로를 인용해
+            // zip 에 없는 좌표를 남긴다. 첫 칸의 맨 파일명(`hero.png`)은 아래 루프의 `includes("/")`
+            // 요구가 이미 거른다.
+            // 재현: `unzip -p <zip> .zalkera/ASSETS-LICENSE.md | grep -oE '\`[^\`]+/[^\`]+\`'`
+            const DOC_TARGETS = ["CUSTOMIZE.md", "README.md", "AGENTS.md", ".zalkera/ASSETS-LICENSE.md"];
             // 잣대는 검사기 D1(`@zalkera/client` 의 `DOC_PATH_TOKEN`·`DOC_PATH_SKIP_PREFIX`)에서
             // 왔다. 자작 규칙을 쓰면 URL 라우트·예시 파일명이 쏟아진다. 이 파일은 외주에게 단일
             // 파일로 건네지므로 공용 모듈을 import 하지 않는다(머리말).
