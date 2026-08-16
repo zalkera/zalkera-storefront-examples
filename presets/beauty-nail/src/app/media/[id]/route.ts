@@ -1,5 +1,6 @@
 import {NextResponse} from "next/server";
 import {apiBase, tenantCode} from "@/lib/env";
+import {routeParam} from "@/lib/routeParam";
 
 /**
  * 미디어 안정 URL — `<img src="/media/{id}">` 와 JSON-LD `image` 가 쓰는 주소.
@@ -22,7 +23,8 @@ import {apiBase, tenantCode} from "@/lib/env";
  * URL 생성 지점 1곳 교체로 은퇴한다.
  */
 export async function GET(_req: Request, {params}: {params: Promise<{id: string}>}) {
-    const {id} = await params;
+    const {id: rawParam} = await params;
+    const id = routeParam(rawParam);
     // id 를 그대로 URL 에 이어붙이므로 숫자만 통과시킨다(경로 주입 차단).
     if (!/^\d+$/.test(id)) return new NextResponse(null, {status: 404});
 

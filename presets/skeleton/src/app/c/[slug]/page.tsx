@@ -6,6 +6,7 @@ import {zalkera} from "@/lib/zalkera";
 import {siteUrl} from "@/lib/site";
 import {pageMetadata, withSiteName} from "@/lib/metadata";
 import {JsonLd, breadcrumbJsonLd, collectionPageJsonLd} from "@/components/JsonLd";
+import {routeParam} from "@/lib/routeParam";
 
 /**
  * 상품 카테고리 (RSC · ISR).
@@ -43,7 +44,8 @@ async function findCategory(slug: string): Promise<ProductCategory> {
 }
 
 export async function generateMetadata({params}: {params: Promise<{slug: string}>}): Promise<Metadata> {
-    const {slug} = await params;
+    const {slug: rawParam} = await params;
+    const slug = routeParam(rawParam);
     const category = await findCategory(slug);
     // 상호는 공유 카드에만. layout 과 같은 인자라 fetch 는 1회로 합쳐진다.
     const config = await zalkera.getSiteConfig({tags: ["site-config"]}).catch(() => null);
@@ -58,7 +60,8 @@ export async function generateMetadata({params}: {params: Promise<{slug: string}
 }
 
 export default async function ProductCategoryPage({params}: {params: Promise<{slug: string}>}) {
-    const {slug} = await params;
+    const {slug: rawParam} = await params;
+    const slug = routeParam(rawParam);
     const category = await findCategory(slug);
 
     // 카테고리는 찾았는데 상품 조회가 실패하면 셸은 살린다 — 빈 카테고리와 같은 화면이 된다.

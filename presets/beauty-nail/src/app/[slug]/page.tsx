@@ -6,6 +6,7 @@ import {zalkera} from "@/lib/zalkera";
 import {pageMetadata, withSiteName} from "@/lib/metadata";
 import {siteUrl} from "@/lib/site";
 import {JsonLd, breadcrumbJsonLd, webPageJsonLd} from "@/components/JsonLd";
+import {routeParam} from "@/lib/routeParam";
 
 /**
  * 고정 페이지 (RSC · 정적) — `content/pages/<slug>.json` 을 그린다.
@@ -33,7 +34,8 @@ export function generateStaticParams(): {slug: string}[] {
 }
 
 export async function generateMetadata({params}: {params: Promise<{slug: string}>}): Promise<Metadata> {
-    const {slug} = await params;
+    const {slug: rawParam} = await params;
+    const slug = routeParam(rawParam);
     const page = loadPageContent(slug);
     if (!page) notFound();
     const title = page.seo?.title ?? page.title;
@@ -54,7 +56,8 @@ export async function generateMetadata({params}: {params: Promise<{slug: string}
 }
 
 export default async function StaticPage({params}: {params: Promise<{slug: string}>}) {
-    const {slug} = await params;
+    const {slug: rawParam} = await params;
+    const slug = routeParam(rawParam);
     const page = loadPageContent(slug);
     if (!page) notFound();
 

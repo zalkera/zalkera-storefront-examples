@@ -6,6 +6,7 @@ import {parseSeo} from "@/lib/seo";
 import {siteUrl} from "@/lib/site";
 import {JsonLd, blogPostingJsonLd, breadcrumbJsonLd} from "@/components/JsonLd";
 import {ViewBeacon} from "./ViewBeacon";
+import {routeParam} from "@/lib/routeParam";
 
 /**
  * 블로그/공지 상세 (RSC · ISR). 발행글은 세션 무관 읽기라 상품 상세와 같은 사상으로 굽는다:
@@ -24,7 +25,8 @@ function loadPost(slug: string) {
 }
 
 export async function generateMetadata({params}: {params: Promise<{slug: string}>}): Promise<Metadata> {
-    const {slug} = await params;
+    const {slug: rawParam} = await params;
+    const slug = routeParam(rawParam);
     const post = await loadPost(slug).catch((error) => {
         if (error instanceof ZalkeraError && error.status === 404) notFound();
         throw error;
@@ -37,7 +39,8 @@ export async function generateMetadata({params}: {params: Promise<{slug: string}
 }
 
 export default async function BlogPostPage({params}: {params: Promise<{slug: string}>}) {
-    const {slug} = await params;
+    const {slug: rawParam} = await params;
+    const slug = routeParam(rawParam);
 
     let post;
     try {

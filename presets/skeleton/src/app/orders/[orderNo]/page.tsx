@@ -4,6 +4,7 @@ import {zalkera} from "@/lib/zalkera";
 import {getAccessToken} from "@/lib/session";
 import {OrderActions} from "./OrderActions";
 import {ReviewForm} from "./ReviewForm";
+import {routeParam} from "@/lib/routeParam";
 
 /**
  * 주문 조회 (RSC). 로그인 고객은 토큰으로, 게스트는 ?phone=연락처로 조회한다.
@@ -16,7 +17,8 @@ export default async function OrderPage({
     params: Promise<{orderNo: string}>;
     searchParams: Promise<{phone?: string}>;
 }) {
-    const {orderNo} = await params;
+    const {orderNo: rawParam} = await params;
+    const orderNo = routeParam(rawParam);
     const {phone} = await searchParams;
     const accessToken = await getAccessToken();
     // ⚠️ 서버 사이드(RSC)라 백엔드가 보는 IP 는 방문자가 아니라 이 서버다. 선언하지 않으면 이 사이트의

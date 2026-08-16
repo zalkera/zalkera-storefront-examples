@@ -4,6 +4,7 @@ import {assertSameOrigin, errorResponse} from "@/lib/http";
 import {getAccessToken} from "@/lib/session";
 import {isPreview} from "@/lib/preview";
 import {setAuthHint} from "@/lib/authHint";
+import {routeParam} from "@/lib/routeParam";
 
 /**
  * 예약 취소 — 로그인 필수. 정원이 복원된다.
@@ -25,7 +26,8 @@ export async function DELETE(req: Request, {params}: {params: Promise<{code: str
     if (!accessToken) {
         return NextResponse.json({message: "로그인이 필요합니다."}, {status: 401});
     }
-    const {code} = await params;
+    const {code: rawParam} = await params;
+    const code = routeParam(rawParam);
     try {
         const message = await zalkera.cancelBooking(accessToken, code);
         const response = NextResponse.json({message});

@@ -3,6 +3,7 @@ import {zalkera} from "@/lib/zalkera";
 import {assertJsonContentType, assertSameOrigin, errorResponse, invalidBody, readJsonBody} from "@/lib/http";
 import {getShopSession} from "@/lib/session";
 import {isPreview} from "@/lib/preview";
+import {routeParam} from "@/lib/routeParam";
 
 /**
  * 수량 변경.
@@ -22,7 +23,8 @@ export async function PATCH(req: Request, {params}: {params: Promise<{variantId:
     if (isPreview()) {
         return NextResponse.json({message: "프리뷰 모드에서는 장바구니 변경이 비활성화됩니다."}, {status: 403});
     }
-    const {variantId} = await params;
+    const {variantId: rawParam} = await params;
+    const variantId = routeParam(rawParam);
     const body = await readJsonBody(req);
     if (!body) return invalidBody();
     const {quantity} = body;
@@ -43,7 +45,8 @@ export async function DELETE(req: Request, {params}: {params: Promise<{variantId
     if (isPreview()) {
         return NextResponse.json({message: "프리뷰 모드에서는 장바구니 변경이 비활성화됩니다."}, {status: 403});
     }
-    const {variantId} = await params;
+    const {variantId: rawParam} = await params;
+    const variantId = routeParam(rawParam);
     try {
         return NextResponse.json(await zalkera.removeFromCart(Number(variantId), await getShopSession()));
     } catch (error) {

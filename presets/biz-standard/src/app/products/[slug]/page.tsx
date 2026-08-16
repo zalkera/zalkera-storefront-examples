@@ -9,6 +9,7 @@ import {JsonLd, breadcrumbJsonLd, merchantReturnPolicyJsonLd, parsePolicies, pro
 import {AddToCart} from "./AddToCart";
 import {ReviewList} from "@/components/ReviewList";
 import {BookingPanel} from "./BookingPanel";
+import {routeParam} from "@/lib/routeParam";
 
 /**
  * 상품 상세 (RSC · ISR). ACTIVE 상품만 공개된다 — 없으면 404. 상품 카탈로그는 세션 무관 읽기라
@@ -37,7 +38,8 @@ function loadProduct(slug: string) {
  * layout 의 `title.template`(`%s | 상호`)을 타므로 여기선 상품명만 주면 "상품명 | 상호" 가 된다.
  */
 export async function generateMetadata({params}: {params: Promise<{slug: string}>}): Promise<Metadata> {
-    const {slug} = await params;
+    const {slug: rawParam} = await params;
+    const slug = routeParam(rawParam);
     // 404 면 notFound() 로 빠져 메타데이터를 낼 일이 없다(페이지도 같은 판정을 한다).
     const product = await loadProduct(slug).catch((error) => {
         if (error instanceof ZalkeraError && error.status === 404) notFound();
@@ -64,7 +66,8 @@ export async function generateMetadata({params}: {params: Promise<{slug: string}
 }
 
 export default async function ProductPage({params}: {params: Promise<{slug: string}>}) {
-    const {slug} = await params;
+    const {slug: rawParam} = await params;
+    const slug = routeParam(rawParam);
 
     let product;
     try {
