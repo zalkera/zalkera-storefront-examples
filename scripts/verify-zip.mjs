@@ -70,6 +70,7 @@ const VALIDATOR = join(HERE, "validate-storefront.mjs");
  * 것만으로 오라클이 꺼진다(신뢰 밖 zip 이 자기를 검사할 도구를 고르게 두는 셈이다).
  */
 const GATE_BEHAVIOR = join(HERE, "lib", "gate-behavior.mjs");
+const CONTENT_ROUTES = join(HERE, "lib", "content-routes.mjs");
 
 const args = process.argv.slice(2);
 const zipPath = args.find((a) => !a.startsWith("--"));
@@ -273,6 +274,7 @@ function effectiveRoot(dir) {
  *     lib/junkEntries.mjs          ← 조기 반려 판정
  *     lib/routes.mjs               ← 관문 등재 프로브 도출
  *     lib/gate-behavior.mjs        ← `--pack` 의 관문 행위 검사
+ *     lib/content-routes.mjs       ← 콘텐츠 페이지가 실제로 서는가
  *
  *   재현: 다른 디렉터리에 `verify-zip.mjs` 만 두고 돌리면 `ERR_MODULE_NOT_FOUND` 로 죽고,
  *         `validate-storefront.mjs` 만 빠뜨리면 `❌ 규약 검사 — MODULE_NOT_FOUND` 로 **정상 납품이
@@ -908,6 +910,23 @@ try {
                 if (!run("npm run build", "npm", ["run", "build"])) {
                     failed = true;
                 } else {
+                    // ⑧-z **콘텐츠 페이지가 실제로 서는가.** `content/pages/<slug>.json` 을 넣으면 그
+                    //     주소가 생긴다는 약속을 재는 검사가 없어서, 네 게이트가 전부 초록인 채로
+                    //     페이지가 사라지는 형태가 셋 있었다(한글 slug 404 · 매니페스트 축약 표기 ·
+                    //     예약 세그먼트 그림자화). 원인이 아니라 **증상**을 잰다.
+                    //     ⚠ **러너 옆 사본을 쓴다** — zip 안의 것을 부르면 `exit 0` 으로 갈아 끼우는 것만으로
+                    //       이 자리가 꺼진다(위 관문 등재와 같은 규율).
+                    {
+                        const cr = spawnSync("node", [CONTENT_ROUTES, root], {cwd: root, encoding: "utf8", env: childEnv()});
+                        const out = [cr.stdout, cr.stderr].filter(Boolean).join("\n").trim();
+                        if (cr.status === 0) {
+                            record("콘텐츠 페이지 라우트", true, out.split("\n")[0]?.replace(/^✅\s*/, "") ?? "");
+                        } else {
+                            record("콘텐츠 페이지 라우트", false, out.split("\n").slice(0, 4).join(" · "));
+                            failed = true;
+                        }
+                    }
+
                     // ⑧-a **프리뷰 관문이 빌드에 실렸는가.** 재는 것은 소스가 아니라 **Next 가 방금 실은
                     //     산출물**이다. 관문(`src/middleware.ts`)이 등재되지 않으면 프리뷰 쓰기 차단이
                     //     조용히 전부 꺼지는데, 소스를 읽는 검사는 그 형상을 못 본다 — 파일이 멀쩡해도

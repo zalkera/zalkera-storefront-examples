@@ -24,6 +24,7 @@ export const VENDOR_SET = [
     "lib/junkEntries.mjs",
     "lib/routes.mjs",
     "lib/gate-behavior.mjs",
+    "lib/content-routes.mjs",
 ];
 
 test("목록의 파일이 전부 실재한다", () => {

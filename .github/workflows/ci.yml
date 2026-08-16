@@ -186,6 +186,13 @@ jobs:
             node scripts/lib/gate-behavior.mjs .
           fi
 
+      - name: 콘텐츠 페이지가 실제로 서는가
+        # `content/pages/<slug>.json` 을 넣으면 그 주소가 생긴다 — 배송 문서가 그렇게 가르친다.
+        # 그런데 그 약속을 재는 검사가 없어서, 넷이 전부 초록인 채로 페이지가 사라지는 형태가
+        # 셋 있었다(한글 slug 404 · 매니페스트 축약 표기 · 예약 세그먼트 그림자화).
+        # 원인이 아니라 **증상**을 잰다 — 빌드가 만든 산출물이 이 페이지를 내놓는가.
+        run: node scripts/lib/content-routes.mjs
+
       - name: 서빙 산출물 (.next/standalone/server.js)
         # `next build` 성공은 **서빙된다**를 뜻하지 않는다. 잘커라 호스팅은 `next start` 가
         # 아니라 자기완결 산출물을 `node server.js` 로 띄우므로, standalone 이 안 나오면 이 레포의
