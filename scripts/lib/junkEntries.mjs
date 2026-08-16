@@ -10,7 +10,8 @@ export const JUNK_TOP = ["node_modules", ".next", ".git"];
 
 /**
  * @param entries `unzip -Z1` 의 줄들
- * @returns 발견된 최상위 이름(정렬·중복 제거). 비어 있으면 통과.
+ * @returns 발견된 **경로**(정렬·중복 제거). 이름만 돌려주면 한 겹 감싸인 zip 에서 고객이
+ *          루트를 뒤져도 그 자리를 못 찾는다. 비어 있으면 통과.
  */
 export function junkTopLevel(entries) {
     const found = new Set();
@@ -19,8 +20,8 @@ export function junkTopLevel(entries) {
         if (!line) continue;
         // zip 은 `pack/node_modules/...` 처럼 한 겹 감싸일 수 있다. 앞 두 조각까지만 본다.
         const parts = line.split("/").filter(Boolean);
-        for (const p of parts.slice(0, 2)) {
-            if (JUNK_TOP.includes(p)) found.add(p);
+        for (let i = 0; i < Math.min(2, parts.length); i++) {
+            if (JUNK_TOP.includes(parts[i])) found.add(parts.slice(0, i + 1).join("/"));
         }
     }
     return [...found].sort();

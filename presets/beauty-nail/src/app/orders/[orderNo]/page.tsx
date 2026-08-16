@@ -6,7 +6,7 @@ import {OrderActions} from "./OrderActions";
 import {ReviewForm} from "./ReviewForm";
 
 /**
- * 주문 조회 (RSC). 로그인 고객은 토큰으로, 게스트는 ?phone=연락처 로 조회한다.
+ * 주문 조회 (RSC). 로그인 고객은 토큰으로, 게스트는 ?phone=연락처로 조회한다.
  * 배송 정보도 함께 보여준다(있으면).
  */
 export default async function OrderPage({

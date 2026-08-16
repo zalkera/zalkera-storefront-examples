@@ -8,6 +8,10 @@
  */
 import {test} from "node:test";
 import assert from "node:assert/strict";
+import {spawnSync} from "node:child_process";
+import {mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync} from "node:fs";
+import {join} from "node:path";
+import {tmpdir} from "node:os";
 import {judgeFloors, REQUIRED_FLOORS, FLOOR_KEY_REGEX} from "./floors.mjs";
 
 /** 요구 스위트가 전부 있는 트리. */
@@ -73,6 +77,36 @@ test("하한이 양의 정수가 아니면 반려한다", () => {
  * 통제군을 같이 둔다 — node 가 정말 그렇게 해석하는지 먼저 확인한다. 안 그러면 무엇을 막았는지
  * 모르는 시험이 된다.
  */
+test("통제군 — node 는 `--import=` 를 파일이 아니라 플래그로 먹는다", () => {
+    // 이 시험들이 무엇을 막는지 보이려면 위험이 실재함을 먼저 확인해야 한다.
+    //
+    // ⚠ 셋을 실제 호출과 맞춰야 통제군이 선다:
+    //   ⑴ 돌 시험 파일이 하나는 있어야 한다 — 없으면 자식이 안 떠서 `--import` 가 발화하지 않는다.
+    //   ⑵ 인자 순서가 `verify-zip` 과 같아야 한다 — 키를 **마지막 위치 인자**로 준다. 위치 인자
+    //      뒤에 두면 node 가 그것을 파일로 보고 플래그로 안 먹는다.
+    //   ⑶ 판정을 stdout 이 아니라 **파일 흔적**으로 한다 — 이 시험 자신이 `--test` 안에서 돌아
+    //      중첩 실행에서는 자식 출력이 그대로 안 올라온다.
+    //   ⑷ 상속된 `NODE_TEST_CONTEXT` 를 **지운다** — 그것이 남으면 자식 러너가 다른 모드로 돌아
+    //      `--import` 이 발화하지 않고, 통제군이 "위험이 없다"고 잘못 말한다.
+    const dir = mkdtempSync(join(tmpdir(), "floors-ctl-"));
+    try {
+        const marker = join(dir, "EVIL-RAN");
+        writeFileSync(join(dir, "evil.mjs"), `import {writeFileSync as w} from "node:fs";\nw(${JSON.stringify(marker)}, "1");\n`);
+        mkdirSync(join(dir, "src", "lib"), {recursive: true});
+        writeFileSync(join(dir, "src", "lib", "probe.test.ts"), 'import {test} from "node:test";\ntest("t", () => {});\n');
+        const env = {...process.env};
+        delete env.NODE_TEST_CONTEXT;
+        spawnSync(process.execPath, ["--experimental-strip-types", "--test", "--import=./evil.mjs"], {
+            cwd: dir,
+            env,
+            encoding: "utf8",
+        });
+        assert.equal(existsSync(marker), true, "node 가 그 인자를 플래그로 안 먹었다 — 이 시험의 전제가 깨졌다");
+    } finally {
+        rmSync(dir, {recursive: true, force: true});
+    }
+});
+
 test("argv 플래그로 해석되는 키를 전부 반려한다", () => {
     const attacks = [
         "--import=./evil.mjs",

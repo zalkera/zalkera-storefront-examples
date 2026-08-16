@@ -78,7 +78,7 @@ jobs:
         #   여러 개로 뚫린다 — 개수는 **이름을 재지 않는다.** 그래서 **스위트마다** 하한을 건다.
         #
         # 하한값은 `scripts/lib/test-floors.json` 에 있다(재현: `cat scripts/lib/test-floors.json`).
-        # 현재치: `for f in src/lib/*.test.ts; do node --experimental-strip-types --test "$f" | grep '^# pass'; done`
+        # 현재치는 표에서 키를 뽑아 잰다 — `src/lib/*.test.ts` 글롭은 표의 절반만 덮는다.
         #   · 하한은 **현재치와 같다.** 여유를 두면 그만큼의 가드 시험을 지워도 통과한다 —
         #     여유 4였을 때 crossOrigin 의 CSRF Content-Type 가드 4건이 통째로 지워지고도 초록이었다.
         #     통제군(관문 존재·배선·면제목록↔마커 대칭)이 섞여 있어 그것만 빠져도 관문이 사라진
@@ -223,8 +223,7 @@ jobs:
               exit 1
             fi
             node scripts/lib/visitor-ip-parity.test.mjs
-            node scripts/lib/doc-claims.mjs
-            for checker in scripts/lib/wiring-parity.mjs scripts/lib/visitor-ip-parity.mjs; do
+            for checker in scripts/lib/doc-claims.mjs scripts/lib/wiring-parity.mjs scripts/lib/visitor-ip-parity.mjs; do
               if [ ! -f "$checker" ]; then
                 echo "::error::이 트리가 잘커라 정본 저장소로 판정됐는데 $checker 가 없습니다."
                 echo "::error::  고객 레포라면 presets/ 또는 scripts/pack-preset.mjs 를 지우십시오(이 검사는 정본 전용)."

@@ -61,6 +61,7 @@ import {tmpdir} from "node:os";
 import {fileURLToPath} from "node:url";
 import {judgeFloors, REQUIRED_FLOORS} from "./lib/floors.mjs";
 import {junkTopLevel} from "./lib/junkEntries.mjs";
+import {derivedRoutes, appDirOf, SYNTHETIC} from "./lib/routes.mjs";
 
 const HERE = resolve(fileURLToPath(import.meta.url), "..");
 const VALIDATOR = join(HERE, "validate-storefront.mjs");
@@ -240,8 +241,11 @@ function effectiveRoot(dir) {
  * 거울과 같은 자리). 그래서 서버가 거부하는 것을 **여기서 같은 사유로** 먼저 말한다 — 판정의 정본은 서버이고
  * 이것은 싼 조기 경보다.
  *
- * ⚠ **이 파일은 외주에게 단일 파일로 건네지므로**(`backend/doc/vendor/verify-zip.mjs` 바이트 사본) 공용
- *   모듈을 import 하지 않는다. 사본이 아니라 거울인 이유를 주석이 지고, 갈림은 서버 400 이 잡는다.
+ ⚠ 이 규칙은 서버 판정의 **거울**이지 사본이 아니다 — 갈리면 서버가 400 으로 잡는다.
+ *
+ * ⚠ 이 러너는 `backend/doc/vendor/` 로 나간다. 단일 파일이 아니라 `verify-zip.mjs` + `lib/` 를
+ *   **같이** 건네야 한다(`lib/floors.mjs`·`lib/junkEntries.mjs`·`lib/routes.mjs`). 하나만 갱신하면
+ *   `ERR_MODULE_NOT_FOUND` 로 죽는다.
  */
 const PACK_MANIFEST_PATH = ".zalkera/pack.json";
 const PACK_MANIFEST_REV = 1;
@@ -251,48 +255,6 @@ const PACK_VERSION_REGEX = /^[0-9]+\.[0-9]+\.[0-9]+$/;
 const PACK_VERSION_MAX_LENGTH = 40;
 
 
-/**
- * `src/app` 을 걸어 **이 트리가 실제로 라우팅하는 경로**를 모은다. 못 걸으면 `null`(통과 아님).
- *
- * 프리뷰 관문 matcher 가 무엇을 덮어야 하는지의 잣대다. 손으로 적은 목록을 쓰면 그 목록에 없는
- * 접두를 빼는 순간 영원히 안 잡히므로, 잣대를 트리에서 만든다.
- *
- * 동적 세그먼트에는 **점이 든 값**을 넣는다 — 확장자로 가르는 matcher 의 구멍은 그 형태에서만
- * 드러난다. 재현: `node -e 'console.log(/^\/((?!.*\.[A-Za-z0-9]+$).*)$/.test("/api/cart/items/7.0"))'`
- *
- * `scripts/lib/gate-probe.mjs` 와 같은 판정이다. 이 파일은 외주에 바이트 사본으로 나가는
- * **자기완결 단일 파일**이라 node 내장 밖으로 import 를 늘리지 않는다.
- */
-function derivedRoutes(appDir) {
-    if (!existsSync(appDir)) return null;
-    const walk = (dir, parts) => {
-        let out = [];
-        let entries;
-        try {
-            entries = readdirSync(dir, {withFileTypes: true});
-        } catch {
-            return null;
-        }
-        if (entries.some((e) => e.isFile() && /^(route|page)\.(t|j)sx?$/.test(e.name))) out.push("/" + parts.filter(Boolean).join("/"));
-        for (const e of entries) {
-            if (!e.isDirectory()) continue;
-            const n = e.name;
-            if (n.startsWith("@") || n.startsWith("_")) continue; // 병렬 라우트·사설 폴더는 주소가 아니다
-            let seg;
-            if (n.startsWith("(") && n.endsWith(")")) seg = null; // 라우트 그룹은 URL 에 안 나온다
-            else if (/^\[\[?\.\.\./.test(n)) seg = "a.b/c.d"; // catch-all
-            else if (n.startsWith("[") && n.endsWith("]")) seg = "7.0"; // 동적 — 점을 넣는다
-            else seg = n;
-            const sub = walk(join(dir, n), seg === null ? parts : [...parts, seg]);
-            if (sub === null) return null;
-            out = out.concat(sub);
-        }
-        return out;
-    };
-    const found = walk(appDir, []);
-    if (found === null || found.length === 0) return null;
-    return [...new Set(found)];
-}
 
 /**
  * `.zalkera/pack.json` 판독. 던지지 않고 판정 재료만 돌려준다(백엔드 판독기와 같은 규율):
@@ -702,21 +664,22 @@ try {
 
         // ⑤ 규약 검사 — **정본 참조 실행**(사본 0).
         //
-        //    두 축이 다르게 걸린다:
+        //    세 축이 다르게 걸린다:
         //     · **스타일·콘텐츠 규약(S·N)** — `package.json` 의 `zalkera.*` 를 **선언한 레포에서만** error.
-        //       선언은 자발이고, 안 하면 경고이거나 스킵이다(요건 1 — 어휘를 강제할 수 없다).
-        //     · **서빙 책임 축(X·C·E)** — 선언과 **무관하게** 여기서는 error. `--gate` 가 그 뜻이다.
-        //       근거는 선언이 아니라 **누가 서빙하는가**다: 이 도구는 우리가 서빙할 납품물을 재는 자리다.
-        //
-        //    ⚠ 종전 주석은 "선언이 없으면 validator 가 스스로 스킵한다"였는데 **X·C·E 에는 거짓**이었다
-        //    (선언을 지워도 error 로 남았다 — 실측). 스펙 문면과도 갈라져 있었고, 이제 셋을 하나로 맞춘다.
+        //       선언은 자발이고, 안 하면 경고이거나 스킵이다(어휘를 강제할 수 없다).
+        //     · **C·E** — 선언과 무관하게 `--gate` 에서 error. 근거는 선언이 아니라 **누가 서빙하는가**다.
+        //     · **X1~X3(교차사이트 위조 가드)** — **어느 모드에서도 경고**다. `--gate` 가 이 축은 안 올린다.
+        //       즉 이 러너는 변이 라우트에 가드가 하나도 없는 zip 에도 ✅ 를 준다. 그 축은 사람이 본다 —
+        //       `README.md`·`CUSTOMIZE.md` 가 고객에게 같은 말을 한다.
+        //       재현: 라우트에서 `assertSameOrigin` 을 지우고
+        //             `node scripts/validate-storefront.mjs ./src --gate; echo rc=$?` → `⚠️ [X1]` · rc=0
         //
         //    소스 루트는 고정이 아니다: Next.js 는 `src/app` 과 루트 `app` 을 **둘 다** 허용하고,
         //    실제 납품물(credium)이 후자였다. `src` 를 못 찾으면 루트를 넘긴다 —
         //    validator 는 node_modules·.next 를 스스로 건너뛴다(실측).
         //    설치보다 **앞**에 둔다: 규약 위반은 몇 분짜리 npm ci 를 돌리기 전에 알려주는 게 맞다.
         const srcDir = existsSync(join(root, "src")) ? join(root, "src") : root;
-        // `--gate` — **우리가 서빙 책임을 지는 자리**라 서빙 축(X·C·E)을 error 로 올린다.
+        // `--gate` — **우리가 서빙 책임을 지는 자리**라 C·E 를 error 로 올린다(X 는 위 참조).
         // 개발자가 손으로 부르는 `npm run validate` 는 같은 규칙을 경고로만 낸다(권고). 기준은
         // "선언했는가"가 아니라 **누가 서빙하는가** 다 — 검사기 머리말의 GATE_MODE 참조.
         const v = spawnSync("node", [VALIDATOR, srcDir, "--gate"], {cwd: root, encoding: "utf8"});
@@ -901,19 +864,17 @@ try {
                             //
                             // ⚠ 프로브는 **이 zip 의 `src/app` 에서 도출**한다. 손으로 적은 목록을 쓰면
                             //   그 목록에 없는 접두를 matcher 에서 빼는 순간 영원히 안 잡힌다.
-                            //   `scripts/lib/gate-probe.mjs` 와 같은 판정이지만 **여기 다시 적는다** —
-                            //   이 파일은 외주에 바이트 사본으로 나가는 자기완결 단일 파일이라
-                            //   node 내장 밖으로 import 를 늘리지 않는다. zip 안의 검사기를 불러 쓰면
-                            //   그것을 `exit 0` 으로 갈아 끼우는 것으로 이 자리가 꺼진다.
-                            const appDir = existsSync(join(root, "src", "app")) ? join(root, "src", "app") : join(root, "app");
-                            const routes = derivedRoutes(appDir);
+                            //   판정은 `scripts/lib/routes.mjs` 하나다 — `gate-probe` 도 같은 것을 부른다.
+                            //   **zip 안의 검사기를 불러 쓰지 않는다**: 그것을 `exit 0` 으로 갈아 끼우는 것만으로
+                            //   이 자리가 꺼진다. 이 러너 옆 사본을 쓴다.
+                            const routes = derivedRoutes(appDirOf(root));
                             if (routes === null) {
                                 record("프리뷰 관문 등재", false, "src/app 에서 라우트를 도출하지 못했습니다 — 무엇을 덮어야 하는지 알 수 없습니다");
                                 failed = true;
                             } else {
                                 // 트리에 **없는** 경로를 섞는다 — "새 라우트가 아무것도 안 해도 덮인다"는
                                 // 성질은 존재하지 않는 경로로만 잴 수 있다.
-                                const MUST = [...routes, "/api/__gate_probe_new__/1.0", "/__gate_probe_new_page__.item"];
+                                const MUST = [...routes, ...SYNTHETIC];
                                 const res = entries.flatMap((x) => (x.matchers ?? []).map((m) => new RegExp(m.regexp)));
                                 const missed = MUST.filter((p) => !res.some((r) => r.test(p)));
                                 if (entries.length === 0) {
@@ -1020,4 +981,5 @@ if (failed) {
 console.log("\n기계 검사 통과. **아직 인수 확정이 아닙니다** — 다음은 사람 몫입니다:");
 console.log("  · 에셋 매니페스트와 실제 이미지 대조(출처·라이선스)");
 console.log("  · href 가 소독을 타는지(오픈 리다이렉트 — 기계가 못 잡는 자리)");
+console.log("  · ⚠️ [X1~X3] 교차사이트 위조 가드 경고 — **어느 모드에서도 경고**라 이 러너가 안 막는다");
 console.log("  · 실제 개시 후 화면 확인 + 콘솔에서 색 1회 바꿔 반영 확인");

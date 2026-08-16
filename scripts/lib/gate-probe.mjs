@@ -21,70 +21,22 @@
  *
  * 사용: `node scripts/lib/gate-probe.mjs [.next 경로] [소스 루트]`   (rc 0 통과 · 1 위반 · 2 실행 불능)
  */
-import {readFileSync, readdirSync, existsSync} from "node:fs";
+import {readFileSync} from "node:fs";
 import {join} from "node:path";
+import {derivedRoutes, appDirOf, SYNTHETIC} from "./routes.mjs";
 
 const root = process.argv[2] ?? ".next";
 const srcRoot = process.argv[3] ?? ".";
-// `src/app` 이 표준이지만 Next 는 루트 `app/` 도 받는다. 한쪽만 보면 그 배치로 옮긴 트리에서
-// **CI 가 영구 적색**이 된다 — 프로브를 못 만들어 rc 2 를 내기 때문이다.
-// `verify-zip` 의 `derivedRoutes` 도 같은 폴백을 가진다.
-const appDir = existsSync(join(srcRoot, "src", "app")) ? join(srcRoot, "src", "app") : join(srcRoot, "app");
-
-/**
- * 동적 세그먼트에 넣을 대표값. **점을 넣는다** — 확장자 배제 규칙의 구멍은 그 형태에서만 드러난다.
- * 재현: `node -e 'console.log(/^\/((?!_next\/static|.*\.[A-Za-z0-9]+$).*)$/.test("/api/cart/items/7.0"))'`
- */
-const DYN = "7.0";
-const CATCH_ALL = ["a.b", "c.d"];
-
-/** 트리에 **없는** 경로. 새 라우트가 아무것도 안 하고 덮이는가를 이것으로만 잴 수 있다. */
-const SYNTHETIC = ["/api/__gate_probe_new__/1.0", "/__gate_probe_new_page__.item"];
 
 /** 정적 파일 — 빠져도 된다(빠지는 것이 낫다). */
 const MAY_SKIP = ["/_next/static/chunk.js", "/images/hero.png", "/favicon.ico"];
 
-/** `src/app` 한 세그먼트를 URL 조각으로. `null` 이면 그 세그먼트를 버리고, `false` 면 라우트째 버린다. */
-function segment(name) {
-    if (name.startsWith("(") && name.endsWith(")")) return null; // 라우트 그룹 — URL 에 안 나온다
-    if (name.startsWith("@")) return false; // 병렬 라우트 — 독립 주소가 아니다
-    if (name.startsWith("_")) return false; // 사설 폴더 — 라우팅 대상이 아니다
-    if (name.startsWith("[[...") && name.endsWith("]]")) return CATCH_ALL.join("/");
-    if (name.startsWith("[...") && name.endsWith("]")) return CATCH_ALL.join("/");
-    if (name.startsWith("[") && name.endsWith("]")) return DYN;
-    return name;
-}
-
-/** `src/app` 을 걸어 라우팅되는 경로를 모은다. */
-function derive(dir, parts = []) {
-    let out = [];
-    let entries;
-    try {
-        entries = readdirSync(dir, {withFileTypes: true});
-    } catch (e) {
-        console.error(`[gate-probe] ${dir} 를 못 읽었습니다 [${e.code ?? "UNKNOWN"}] — 못 잰 것은 통과가 아닙니다.`);
-        process.exit(2);
-    }
-    const hasHandler = entries.some((e) => e.isFile() && /^(route|page)\.(t|j)sx?$/.test(e.name));
-    if (hasHandler) out.push("/" + parts.filter(Boolean).join("/"));
-    for (const e of entries) {
-        if (!e.isDirectory()) continue;
-        const seg = segment(e.name);
-        if (seg === false) continue;
-        out = out.concat(derive(join(dir, e.name), seg === null ? parts : [...parts, seg]));
-    }
-    return out;
-}
-
-if (!existsSync(appDir)) {
-    console.error(`[gate-probe] ${appDir} 가 없습니다 — 프로브를 도출할 수 없습니다(통과가 아닙니다).`);
+const appDir = appDirOf(srcRoot);
+const derived = derivedRoutes(appDir);
+if (derived === null) {
+    // 트리가 없거나 라우트가 0 이면 **판정 불능**이다. 프로브 0개로 초록을 내면 안 된다.
+    console.error(`[gate-probe] ${appDir} 에서 라우트를 도출하지 못했습니다 — 통과가 아닙니다.`);
     console.error("  소스 루트가 다르면 두 번째 인자로 주십시오: node scripts/lib/gate-probe.mjs .next <소스루트>");
-    process.exit(2);
-}
-const derived = [...new Set(derive(appDir))];
-if (derived.length === 0) {
-    // 트리는 있는데 라우트가 0 이면 **걷기가 깨진 것**이다. 프로브 0개로 초록을 내면 안 된다.
-    console.error(`[gate-probe] ${appDir} 에서 라우트를 하나도 못 찾았습니다 — 걷기가 깨졌습니다(통과가 아닙니다).`);
     process.exit(2);
 }
 const MUST = [...derived, ...SYNTHETIC];

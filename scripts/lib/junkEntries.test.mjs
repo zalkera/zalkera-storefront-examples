@@ -17,12 +17,17 @@ test("최상위 node_modules·.next·.git 을 찾는다", () => {
 });
 
 test("한 겹 감싼 zip 에서도 찾는다", () => {
-    assert.deepEqual(junkTopLevel(["pack/node_modules/x.js", "pack/package.json"]), ["node_modules"]);
-    assert.deepEqual(junkTopLevel(["wrapped-pack/.next/a"]), [".next"]);
+    assert.deepEqual(junkTopLevel(["pack/node_modules/x.js", "pack/package.json"]), ["pack/node_modules"]);
+    assert.deepEqual(junkTopLevel(["wrapped-pack/.next/a"]), ["wrapped-pack/.next"]);
 });
 
 test("여럿이면 전부 정렬해 돌려준다", () => {
     assert.deepEqual(junkTopLevel([".git/c", ".next/a", "node_modules/b"]), [".git", ".next", "node_modules"]);
+});
+
+test("한 겹 감싼 자리는 **경로**로 대야 고객이 찾는다", () => {
+    assert.deepEqual(junkTopLevel(["docs/node_modules/x.js"]), ["docs/node_modules"]);
+    assert.deepEqual(junkTopLevel(["vendor/.git/config"]), ["vendor/.git"]);
 });
 
 test("이름이 비슷한 정상 경로를 벌하지 않는다", () => {

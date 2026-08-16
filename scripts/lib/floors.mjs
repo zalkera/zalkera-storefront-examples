@@ -12,9 +12,9 @@ export const REQUIRED_FLOORS = {
     "src/lib/previewGuard.test.ts": 6,
     "src/lib/safeUrl.test.ts": 6,
     "src/lib/safeUrlDrift.test.ts": 4,
-    "scripts/lib/floors.test.mjs": 13,
+    "scripts/lib/floors.test.mjs": 14,
     "scripts/lib/gateProbe.test.mjs": 9,
-    "scripts/lib/junkEntries.test.mjs": 7,
+    "scripts/lib/junkEntries.test.mjs": 8,
 };
 
 /**
