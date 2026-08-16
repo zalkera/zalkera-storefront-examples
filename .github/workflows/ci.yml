@@ -70,27 +70,17 @@ jobs:
         # devDependency 추가가 0이다(node 22 필요). 검사기 X1 은 "가드를 불렀는가"만 보므로
         # **가드가 옳은가**는 이 스텝에서만 잠긴다.
         #
-        # ⚠ **그래서 픽스처가 없으면 실패해야 한다.** 글롭이 아무것도 안 무는 경우 node 러너는
-        # `# tests 0` 과 함께 **rc 0** 을 낸다 — 파일을 지우는 것만으로 이 잠금이 조용히 초록이 된다.
-        #
+        # ⚠ **픽스처가 없으면 실패해야 한다.** 글롭이 아무것도 안 물면 node 러너는 `# tests 0` 과
+        # 함께 rc 0 을 낸다 — 파일을 지우는 것만으로 이 잠금이 조용히 초록이 된다.
         #   재현: `node --experimental-strip-types --test 'src/lib/GHOST.test.ts'; echo rc=$?`
-        #   → `Could not find …` **rc 1** · `# pass` 줄 0건. 즉 없는 **파일을 지정하면** 러너가 rc 1 로
-        #   끊고, `bash -e` 가 대입문에서 그대로 죽는다(아래 `-z` 분기까지 못 간다 — 그 분기는
-        #   "`# pass` 파싱 실패" 쪽 방어다). 어느 경로든 fail-closed 지만, 파일 삭제 시나리오에서는
-        #   아래 `::error` 문구가 로그에 안 남는다는 점은 알고 있어라.
         #
-        # ⚠ **개수로 재지 않는다 — 두 판이 그렇게 뚫렸다.**
-        #   ⑴ 존재 기준(`find src -name '*.test.ts'`) → **빈 파일 하나(`touch`)로 뚫림**.
-        #   ⑵ 총 통과 수 하한(20) → **빈 파일 25개**로, 또는 실 스위트를 지우고 **자명 통과 시험
-        #      21건으로 대체**해서 뚫림(둘 다 심의 실측 rc 0). 개수는 **이름을 재지 않는다.**
+        # ⚠ **개수로 재지 않는다.** 파일 존재는 빈 파일 하나로, 총 통과 수 하한은 자명 통과 시험
+        #   여러 개로 뚫린다 — 개수는 **이름을 재지 않는다.** 그래서 **스위트마다** 하한을 건다.
         #
-        # 그래서 **가드 스위트마다** 하한을 건다. 현재치는 18·9·6·6 이다(docsRev 는 위 사유로 제외).
-        #   · 큰 스위트(crossOrigin 18→14 · oauthState 9→7 · safeUrl 6→4)는 여유를 뒀다 — 시험을
-        #     한둘 더하고 빼는 정상 작업이 게이트를 건드리지 않게.
-        #   · **`previewGuard` 는 현재치(6)가 곧 하한이다.** 여섯 중 둘이 통제군(관문 존재·배선 ·
-        #     면제목록↔마커 대칭)이라 그것만 빼도 관문이 통째로 사라진 상태가 초록이 된다.
-        #     ⚠ 실제로 그랬다 — 스위트를 3건에서 6건으로 갈면서 **이 줄을 안 따라 올려**, 통제군 둘과
-        #     `src/middleware.ts` 를 지워도 `pass 4 ≥ 3` 으로 전 게이트가 초록이었다(심의 실측).
+        # 하한 14·7·6·4 · 현재치 18·9·6·6(재현: `for f in src/lib/*.test.ts; do node --experimental-strip-types --test "$f" | grep '^# pass'; done`).
+        #   · 큰 스위트는 여유를 뒀다 — 시험을 한둘 더하고 빼는 정상 작업이 게이트를 안 건드리게.
+        #   · **`previewGuard` 는 현재치가 곧 하한이다.** 여섯 중 둘이 통제군(관문 존재·배선 ·
+        #     면제목록↔마커 대칭)이라, 그 둘만 빠져도 관문이 사라진 상태가 초록이 된다.
         #     시험을 합치거나 줄이려면 이 줄을 **같이** 고쳐라.
         run: |
           set -o pipefail
@@ -111,31 +101,14 @@ jobs:
       - name: Build (next build)
         run: npm run build
 
-      - name: 프리뷰 관문이 빌드에 실렸는가 (.next/server/middleware-manifest.json)
-        # ⚠ **재는 것은 소스가 아니라 Next 가 방금 실은 산출물이다.**
-        #   프리뷰 쓰기 차단의 집행 지점은 `src/middleware.ts` 하나인데, 그것이 **등재되지 않으면
-        #   조용히 전부 무방비**가 된다. 소스를 읽는 검사는 그 형상을 못 본다 — 파일은 멀쩡히 있고
-        #   내용도 맞는데 Next 가 안 싣는 경우가 있기 때문이다: 위치 오류·`matcher` 오염, 그리고
-        #   **Next 16 이 이 규약을 deprecated 로 선언했다**(빌드마다 경고한다). 판을 올리는 날
-        #   규약이 사라지면 집행이 죽는데 소스 검사는 초록을 유지한다.
-        #   그래서 매니페스트를 잰다 — 규약 이름이 바뀌든 판이 오르든 여기서 시끄러워진다.
-        run: |
-          node -e '
-            const m = require("./.next/server/middleware-manifest.json");
-            const e = Object.values(m.middleware ?? {});
-            if (e.length === 0) {
-              console.error("::error::프리뷰 관문이 빌드에 안 실렸습니다 — 쓰기 차단이 통째로 꺼집니다.");
-              console.error("::error::  src/middleware.ts 의 위치·이름·export 를 보고, Next 판을 올렸다면 규약(proxy) 이행이 필요합니다.");
-              process.exit(1);
-            }
-            const wide = e.some((x) => (x.matchers ?? []).some((mm) => mm.regexp === "^/.*$"));
-            if (!wide) {
-              console.error("::error::관문 matcher 가 좁혀졌습니다 — 빠진 경로가 조용히 무방비가 됩니다.");
-              console.error("::error::  현재: " + JSON.stringify(e.flatMap((x) => x.matchers ?? [])));
-              process.exit(1);
-            }
-            console.log("관문 등재 확인 — 항목 " + e.length + " · matcher 전 경로");
-          '
+      - name: 프리뷰 관문이 빌드에 실렸는가
+        # 재는 것은 소스가 아니라 **Next 가 방금 실은 산출물**이다. 관문이 등재되지 않으면 프리뷰
+        # 쓰기 차단이 통째로 꺼지는데, 소스를 읽는 검사는 그 형상을 못 본다 — 파일이 멀쩡해도 위치
+        # 오류·matcher 오염·규약 변경으로 안 실릴 수 있다.
+        #
+        # 판정은 **성질**이다: 쓰기가 닿는 프로브 경로가 전부 덮이는가. 리터럴 matcher 를 요구하면
+        # 정적 파일을 빼는 정당한 완화도 막힌다(`scripts/lib/gate-probe.mjs`).
+        run: node scripts/lib/gate-probe.mjs
 
       - name: 서빙 산출물 (.next/standalone/server.js)
         # memo145 — `next build` 성공은 **서빙된다**를 뜻하지 않는다. 잘커라 호스팅은 `next start` 가
@@ -180,6 +153,7 @@ jobs:
               exit 1
             fi
             node scripts/lib/visitor-ip-parity.test.mjs
+            node scripts/lib/doc-claims.mjs
             for checker in scripts/lib/wiring-parity.mjs scripts/lib/visitor-ip-parity.mjs; do
               if [ ! -f "$checker" ]; then
                 echo "::error::이 트리가 잘커라 정본 저장소로 판정됐는데 $checker 가 없습니다."

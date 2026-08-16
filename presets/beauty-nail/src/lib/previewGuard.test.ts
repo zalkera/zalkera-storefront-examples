@@ -8,25 +8,22 @@ import {MUTATING_METHODS, PREVIEW_WRITE_ALLOW, isPreviewBlockedWrite} from "./pr
 /**
  * **프리뷰 쓰기 차단의 회귀 픽스처.**
  *
- * ## 이 파일이 재는 것이 바뀌었다 — 그 이유를 먼저 읽어라
+ * 집행은 `src/middleware.ts` 가 한다. 이 파일은 그 판정(`previewGuard.ts` 의 순수 함수)을 전수로
+ * 시험하고, **관문이 실제로 배선돼 있는지**를 통제군으로 확인한다.
  *
- * 종전 판들은 `route.ts` 를 **텍스트로 파싱**해 "핸들러마다 `isPreview()` 를 불렀는가"를 봤고,
- * 그 파서가 **네 판 연속** 뚫렸다(이력은 `previewGuard.ts` 머리말). 마지막 구멍은 주석을 문자열보다
- * 먼저 지우는 바람에 **URL 문자열 두 개 사이가 통째로 증발**하는 것이었고, 심의가 배송 라우트에서
- * 프리뷰 쓰기를 운영 백엔드까지 보내는 것을 실 HTTP 로 실증했다.
+ * ## 통제군이 필요한 이유
  *
- * 그래서 판정을 **미들웨어**(`src/middleware.ts`)로 옮겼다. 이제 **판정 시험**은 순수 함수를 전수로
- * 본다 — 거기엔 파싱이 없으니 파서 구멍도 없다.
+ * 판정 함수가 아무리 옳아도 **관문이 없으면 아무 일도 안 일어난다.** 그래서 파일 존재·배선과
+ * 면제 목록↔라우트 마커 대칭을 같이 건다.
  *
- * ⚠ 다만 아래 **통제군 둘은 여전히 파일을 읽는 문면 검사**다. "관문이 있고 판정을 부르는가"만 보므로
- *   몸통을 비우고 호출을 주석으로 남긴 변이는 못 잡는다(심의 실측). 그 자리는 **빌드 산출물**이
- *   진다 — `ci.yml` 과 `verify-zip` 이 `middleware-manifest.json` 에 관문이 실렸는지 잰다.
+ * ⚠ 그 통제군 둘은 **파일을 읽는 문면 검사**다. "관문이 있고 판정을 부르는가"만 보므로 몸통을
+ *   비우고 호출을 주석으로 남긴 변이는 못 잡는다. 그 자리는 **빌드 산출물**이 진다 —
+ *   `ci.yml` 과 `verify-zip` 이 `middleware-manifest.json` 에 관문이 실렸는지 잰다.
  *
- * ## 그래도 통제군은 둔다
+ * ## 소스를 파싱해 규약 준수를 재지 마라
  *
- * 순수 함수가 아무리 옳아도 **미들웨어가 없으면 아무 일도 안 일어난다.** 그래서 파일 존재와 배선
- * (미들웨어가 이 판정을 실제로 부르는가)을 같이 건다. 그리고 면제 목록이 배송 라우트의 마커와
- * 어긋나지 않는지도 본다 — 목록은 한 곳뿐이지만, 한 곳이라도 낡을 수 있다.
+ * `route.ts` 를 텍스트로 읽어 "핸들러마다 가드를 불렀는가"를 판정하는 방식은 선언 형태·재수출·
+ * 자르기 경계·리터럴 제거에서 전부 샌다. 사유는 `previewGuard.ts` 머리말에 있다.
  */
 const SRC = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -75,21 +72,31 @@ test("통제군 — 미들웨어가 실제로 있고 이 판정을 부른다(없
     assert.match(code, /isPreviewBlockedWrite/, "미들웨어가 판정을 안 부른다");
     assert.match(code, /\bisPreview\(\)/, "미들웨어가 프리뷰 여부를 안 본다");
     assert.match(code, /status:\s*403/, "미들웨어가 403 을 안 낸다");
-    // matcher 로 범위를 좁히면 빠뜨린 경로가 **조용히** 무방비가 된다 — 그것이 네 번 반복된 실패다.
-    assert.doesNotMatch(code, /export\s+const\s+config\b/, "matcher 를 두지 마라(좁히면 조용히 샌다)");
+    // matcher 는 **정적 파일만** 뺀다. 경로 목록으로 좁히면 빠뜨린 자리가 조용히 무방비가 된다.
+    // 무엇을 덮는지는 여기서 문면으로 재지 않고 **빌드 산출물**로 잰다(`scripts/lib/gate-probe.mjs`)
+    // — 여기서는 부정 목록 형태인지만 본다.
+    const matcher = code.match(/matcher:\s*\[([^\]]*)\]/)?.[1] ?? "";
+    if (matcher) {
+        assert.match(matcher, /\(\?!/, "matcher 는 부정 목록이어야 한다 — 열거로 좁히면 새 경로가 샌다");
+    }
 });
 
 test("통제군 — 면제 목록이 배송 라우트의 마커와 일치한다", () => {
-    const api = join(SRC, "app", "api");
+    // 걷기는 `src/app` 루트에서 시작한다 — 라우트 그룹(`(bff)/api/...`)으로 재배치해도 따라간다.
+    const appDir = join(SRC, "app");
     const walk = (d: string): string[] =>
         readdirSync(d, {withFileTypes: true}).flatMap((e) =>
             e.isDirectory() ? walk(join(d, e.name)) : e.name.startsWith("route.") ? [join(d, e.name)] : [],
         );
-    const files = walk(api);
-    assert.ok(files.length >= 10, `route 파일을 ${files.length}개만 찾았다 — 걷기가 깨졌다`);
+    const files = walk(appDir);
+    assert.ok(files.length >= 10, `src/app 아래 route 파일을 ${files.length}개만 찾았다 — 걷기가 깨졌다`);
     const marked = files
         .filter((f) => /^\/\/ zalkera-allow-preview-write:[ \t]*\S/m.test(readFileSync(f, "utf8")))
-        .map((f) => dirname(f).slice(join(SRC, "app").length))
+        .map((f) =>
+            dirname(f)
+                .slice(appDir.length)
+                .replace(/\/\([^)]+\)/g, ""),
+        )
         .sort();
     assert.deepEqual(
         marked,

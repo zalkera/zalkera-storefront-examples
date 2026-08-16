@@ -13,7 +13,6 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "validate": "node scripts/validate-storefront.mjs",
-        "check:wiring": "node scripts/lib/wiring-parity.mjs",
     "check:aeo": "node scripts/check-aeo-surfaces.mjs",
     "test": "node --experimental-strip-types --test 'src/**/*.test.ts'",
     "format": "prettier --write --cache .",

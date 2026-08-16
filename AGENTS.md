@@ -87,7 +87,7 @@ export async function POST(req: Request) {
 - **왜 "첫 구문"인가**: `cookies()` 변이는 뒤에 만드는 `NextResponse` 에 그대로 합류한다. 가드보다 앞에
   쿠키를 쓰면 **403 차단 응답에 `Set-Cookie` 가 실려** 방어가 무의미해진다(실측 재현됨).
 - **가드를 감싸지 마라.** 헬퍼로 한 겹 두르거나(`const guard = (r) => assertSameOrigin(r)`) 중첩 함수 안에
-  넣으면 검사기가 못 따라가 **error 로 막는다**(안전한 방향의 실패다). 부르는 자리에서 직접 불러라.
+  넣으면 검사기가 못 따라가 경고를 낸다 — **막아 주지는 않는다.** 부르는 자리에서 직접 불러라.
   `try { … }` 로 감싼 본문은 괜찮다 — 가드가 여전히 먼저 돈다.
 - **읽기 `GET` 은 면제**다. 단 그 근거가 "이 코드베이스에 CORS 헤더가 0건이라 교차 오리진 JS 가 응답을
   못 읽는다"이므로 — **`Access-Control-Allow-Origin` 을 추가하지 마라.** 면제의 전제가 무너진다.
@@ -163,17 +163,27 @@ const access = {accessToken, phone, context: {clientIp: visitorIp(await headers(
 **`@zalkera/client` 를 어떻게 부르는가**로 구성되므로, 자기 조합을 만드는 방법은 **안 쓰는 능력의 파일을
 지우는 것**입니다. 지워도 플랫폼 계약은 안 깨집니다 — 아래 "중립 배선"만 건드리지 마십시오.
 
-| 능력 | 지우면 되는 것 | 남는 client 호출 |
-|---|---|---|
-| **기업 홈페이지** (항상 필요) | — | `getSiteConfig` · `content/` 로더 |
-| **쇼핑몰** | `src/app/{cart,checkout,payment,orders,mypage,login,auth}/` · `src/app/api/{cart,checkout,orders,payment,auth,reviews,consents}/` · `src/app/products/` · `src/app/c/` · `src/components/{Review*,LogoutButton,MarketingConsent}.tsx` · `src/lib/{oauth,oauthState,session,authHint,useAuthHint}.ts` · 헤더의 장바구니·로그인 | `listProducts` · `getProduct` · `listProductCategories` · 장바구니·주문 계열 |
-| **예약** | `src/app/api/booking/` · `src/components/ProductRail.tsx`(시술 진열) | 예약 슬롯 계열 |
-| **게시판·블로그** | `src/app/blog/` · `src/app/api/posts/` | `listPosts` · `getPost` |
-| **문의·리드** | `src/app/contact/` · `src/app/api/{inquiry,lead}/` · `src/components/LeadForm.tsx` | 리드 제출 |
+⚠ **행은 독립이 아닙니다.** 아래 "함께 손대야 하는 것" 칸을 빼먹으면 타입체크·빌드가 깨집니다.
+그리고 **이 문서가 지운 파일을 백틱으로 가리키고 있으면 `validate` 가 `[D1]` 에러를 냅니다** — 지운
+행의 좌표는 이 문서(§레시피↔구현 좌표표 포함)에서도 같이 지우십시오.
+
+한 행을 지웠으면 **`npm run typecheck && npm run build && npm run validate` 를 돌려 확인**하십시오.
+
+| 능력 | 지우면 되는 것 | 함께 손대야 하는 것 | 남는 client 호출 |
+|---|---|---|---|
+| **기업 홈페이지** (항상 필요) | — | — | `getSiteConfig` · `content/` 로더 |
+| **쇼핑몰** | `src/app/{cart,checkout,payment,orders,mypage,login,auth}/` · `src/app/api/{cart,checkout,orders,payment,auth,reviews,consents}/` · `src/app/products/` · `src/app/c/` · `src/components/{Review*,LogoutButton,MarketingConsent}.tsx` · `src/lib/{oauth,oauthState}.ts` · 헤더의 장바구니·로그인 | `src/app/page.tsx` 가 상품 진열을 부르면 그 줄도 (얼굴 파일이라 프리셋마다 다릅니다) | `listProducts` · `getProduct` · `listProductCategories` · 장바구니·주문 계열 |
+| **예약** | `src/app/api/booking/` · `src/components/ProductRail.tsx`(시술 진열) | `ProductRail` 을 부르는 `src/app/page.tsx` 의 줄 · `src/app/products/[slug]/BookingPanel.tsx` (쇼핑몰 행의 `products/` 안에 삽니다) | 예약 슬롯 계열 |
+| **게시판·블로그** | `src/app/blog/` · `src/app/api/posts/` | — | `listPosts` · `getPost` |
+| **문의·리드** | `src/app/contact/` · `src/app/api/{inquiry,lead}/` | ⚠ `src/components/LeadForm.tsx` 는 **계약 어휘 섹션**(`LeadCtaSection`)이 씁니다. 지우려면 그 섹션과 그것을 쓰는 `content/` 페이지도 같이 지우십시오 | 리드 제출 |
 
 **중립 배선 — 지우지 마십시오** (능력이 아니라 플랫폼 계약입니다):
 `src/lib/theme.ts` + layout 의 테마 주입 · `src/app/media/[id]/` 프록시 · `src/app/api/revalidate/` ·
-`src/lib/{crossOrigin,safeUrl,env,buildEnv}.ts` · `robots.ts`·`sitemap.ts` · `src/lib/content.ts`.
+`src/lib/{crossOrigin,safeUrl,env,buildEnv}.ts` · `robots.ts`·`sitemap.ts` · `src/lib/content.ts` ·
+`src/middleware.ts` + `src/lib/previewGuard.ts`(프리뷰 쓰기 차단) ·
+**`src/lib/{session,authHint,useAuthHint}.ts`** — 세션 배선은 쇼핑몰 전용이 아닙니다. 예약·리뷰·동의
+라우트와 `SiteHeader` 가 씁니다(재현: `grep -rl '@/lib/session\|@/lib/authHint\|@/lib/useAuthHint' src`).
+쇼핑몰·예약·회원 기능을 **전부** 지울 때만 함께 지웁니다.
 이 절 아래 "테마 주입 배선 — 지우지 마라"와 "BFF 라우트 — 교차사이트 위조 가드"가 그 상세입니다.
 
 **표현은 지우는 게 아니라 다시 씁니다.** 헤더·푸터는 사이트가 소유하는 외양이라, 반응형 드로어든
@@ -358,7 +368,11 @@ npx prettier --list-different --cache .   # 아무것도 안 나오면 바꿀 �
 
 검사기가 **둘**이고, 재는 대상이 다르다. 하나로 합치지 마라 — 소스가 규약대로여도 산출물에 그래프가 안 나갈 수 있고, 그 반대도 가능하다.
 
-**① 소스 검사 — `npm run validate`**(`scripts/validate-storefront.mjs`, CI 게이트). 어휘 사본이 여러 레포에 흩어져 있어 사람 주석 규약으로는 갈라짐을 못 막으므로, 기계가 센다 — **C2** 는 렌더러 switch 가 `SECTION_CONTRACT` 를 덮는지, **S6** 는 남의 토큰 어휘가 섞였는지, **N1~N5** 는 위 콘텐츠 좌표의 형상(매니페스트·섹션 형상·참조 무결·`sortOrder` 잔존·id 형 직기입)을 본다. **X1** 은 변이 라우트 핸들러마다 교차사이트 가드가 **본문 첫 구문**에 있고 반환값이 차단에 쓰이는지(위 BFF 절), **X2** 는 읽기 GET 면제의 전제인 "CORS 헤더 0건"이 유지되는지, **X3** 는 OAuth state 쿠키의 1회용 소각과 `sameSite` 를 본다 — X1 은 파일이 아니라 **핸들러 본문 단위**로 재므로 화살표 export·`GET` 에만 건 가드·반환값 버리기·가드를 뒤로 미루기·주석이나 문자열로 위장한 가드가 전부 걸린다. 이 레포는 `tailwind-tokens`·`content=source` 둘 다 선언한 레포라 그 위반이 **에러**로 막힌다. 최종 판정은 push 후 CI(GitHub Actions) 결과다.
+**① 소스 검사 — `npm run validate`**(`scripts/validate-storefront.mjs`, CI 게이트). 어휘 사본이 여러 레포에 흩어져 있어 사람 주석 규약으로는 갈라짐을 못 막으므로, 기계가 센다 — **C2** 는 렌더러 switch 가 `SECTION_CONTRACT` 를 덮는지, **S6** 는 남의 토큰 어휘가 섞였는지, **N1~N5** 는 위 콘텐츠 좌표의 형상(매니페스트·섹션 형상·참조 무결·`sortOrder` 잔존·id 형 직기입)을 본다. **X1** 은 변이 라우트 핸들러마다 교차사이트 가드가 **본문 첫 구문**에 있고 반환값이 차단에 쓰이는지(위 BFF 절), **X2** 는 읽기 GET 면제의 전제인 "CORS 헤더 0건"이 유지되는지, **X3** 는 OAuth state 쿠키의 1회용 소각과 `sameSite` 를 본다 — X1 은 파일이 아니라 **핸들러 본문 단위**로 재므로 화살표 export·`GET` 에만 건 가드·반환값 버리기·가드를 뒤로 미루기·주석이나 문자열로 위장한 가드가 전부 걸린다. 이 레포는 `tailwind-tokens`·`content=source` 둘 다 선언한 레포라 **S·N 규칙 위반이 에러**로 막힌다.
+**X1~X3 는 선언과 무관하게 경고다 — 기계가 막지 않는다.** 그 축은 "우리 심볼을 썼는가"를 재지
+"교차 오리진을 실제로 막았는가"를 재지 못하므로, 통과가 안전을 뜻하지 않는다. 경고가 보이면 네가 고쳐라.
+재현: 변이 라우트에서 `assertSameOrigin` 두 줄을 지우고 `npm run validate` → `⚠️ [X1]` 에 rc 0.
+최종 판정은 push 후 CI(GitHub Actions) 결과다.
 
 **이 문서 자신도 검사 대상이다 — `D1`.** validator 가 이 파일의 백틱 경로가 실재하는지 센다. 죽은 좌표는 문서 위생 문제가 아니라 **토큰 원가**이기 때문이다: codegen 이 이 문서를 가장 먼저 읽으므로, 없는 파일을 가리키면 에이전트가 찾다가 제 좌표를 짜 버린다(2026-07-30 실측에서 실제로 났다 — 페이지 신설 지시에서 콘텐츠 계약 대신 라우트를 새로 짰다). **좌표를 고칠 때는 파일을 옮긴 커밋과 같은 커밋에서 고쳐라.** `D2` 는 짝 방향으로, `llms.txt` 가 본보기로 지목한 경로가 이 레포에 있는지 센다(본보기 레포 전용).
 

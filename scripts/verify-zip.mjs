@@ -116,6 +116,7 @@ const ENV_KEEP = /\.(example|sample|template)$/;
 const SECRET_CONTENT = [
     ["AWS 액세스키", /\bAKIA[0-9A-Z]{16}\b/],
     ["개인키 블록", /-----BEGIN [A-Z ]{0,20}PRIVATE KEY-----/],
+    ["SSH 개인키", /-----BEGIN OPENSSH PRIVATE KEY-----/],
     ["결제 라이브 시크릿", /\b(?:sk_live_|live_sk_)[0-9A-Za-z]{8,}/],
     ["GitHub 토큰", /\b(?:gh[pousr]_[0-9A-Za-z]{20,}|github_pat_[0-9A-Za-z_]{20,})\b/],
     ["Slack 토큰", /\bxox[abprs]-[0-9A-Za-z-]{10,}\b/],
@@ -128,7 +129,8 @@ const SECRET_CONTENT = [
 ];
 const SECRET_TEXTUAL = /\.(m?[jt]sx?|cjs|json|md|txt|ya?ml|sh|html?|css|toml|ini|conf|env)$/i;
 /** 확장자가 없는데 자격증명이 앉는 이름들. `.git/config` 이 이 그물 밖이라 통과한 전례가 있다. */
-const SECRET_EXTENSIONLESS = /^(config|credentials|\.netrc|_netrc|\.npmrc|\.pgpass|authorized_keys|known_hosts)$/i;
+const SECRET_EXTENSIONLESS =
+    /^(config|credentials|\.git-credentials|\.netrc|_netrc|\.npmrc|\.pgpass|authorized_keys|known_hosts|id_rsa|id_dsa|id_ecdsa|id_ed25519)$/i;
 const SECRET_CONTENT_MAX = 2 * 1024 * 1024;
 
 /**
@@ -646,7 +648,11 @@ try {
 
         // lockfile 이 없으면 설치를 시도하지 않는다 — `npm ci` 가 usage 덤프를 뱉어,
         // 이미 형상 단계에서 잡은 사실을 읽기 어려운 형태로 한 번 더 말할 뿐이다.
-        if (hasPkg && lock) {
+        // ⚠ **이미 반려가 서면 설치·빌드를 돌리지 않는다.** 정크·시크릿 같은 되돌릴 수 없는 사유는
+        //   어차피 재포장이 필요하므로 뒤 항목을 더 알려 줘도 쓸모가 없는데, 그대로 두면 10초 넘게
+        //   임시 600MB·RSS 1.9GB 를 더 쓴다.
+        //   (재현: `.git` 을 넣은 zip 으로 `node scripts/verify-zip.mjs <zip>` 벽시계를 재 보라.)
+        if (hasPkg && lock && !failed) {
             // ⑥ 의존 설치 + 빌드 — 재현 가능한 빌드인지. 오래 걸려서 맨 뒤에 둔다.
             const run = (label, cmd, cmdArgs) => {
                 const r = spawnSync(cmd, cmdArgs, {
@@ -739,15 +745,19 @@ try {
                             unread.push(`.next/server/middleware-manifest.json — 못 읽었습니다 [${e.code ?? "UNKNOWN"}]`);
                         }
                         if (entries !== null) {
-                            const wide = entries.some((x) => (x.matchers ?? []).some((m) => m.regexp === "^/.*$"));
+                            // 판정은 **성질**이다 — 쓰기가 닿는 프로브 경로가 전부 덮이는가.
+                            // 리터럴 matcher 를 요구하면 정적 파일을 빼는 정당한 완화가 막힌다.
+                            const MUST = ["/api/cart", "/api/cart/items/7", "/api/whatever-new-route", "/", "/checkout", "/some/page"];
+                            const res = entries.flatMap((x) => (x.matchers ?? []).map((m) => new RegExp(m.regexp)));
+                            const missed = MUST.filter((p) => !res.some((r) => r.test(p)));
                             if (entries.length === 0) {
                                 record("프리뷰 관문 등재", false, "빌드에 안 실렸습니다 — 프리뷰 쓰기 차단이 통째로 꺼집니다");
                                 failed = true;
-                            } else if (!wide) {
-                                record("프리뷰 관문 등재", false, `matcher 가 좁혀졌습니다 — ${JSON.stringify(entries.flatMap((x) => x.matchers ?? []))}`);
+                            } else if (missed.length) {
+                                record("프리뷰 관문 등재", false, `쓰기 경로가 관문 밖입니다 — ${missed.join(" · ")}`);
                                 failed = true;
                             } else {
-                                record("프리뷰 관문 등재", true, `항목 ${entries.length} · matcher 전 경로`);
+                                record("프리뷰 관문 등재", true, `쓰기 프로브 ${MUST.length}개 전부 덮임`);
                             }
                         }
                     }
