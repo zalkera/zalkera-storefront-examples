@@ -32,11 +32,22 @@ import {isPreviewBlockedWrite} from "@/lib/previewGuard";
  *
  *   판정 자체를 무력화하면(`if (true) return next()`) 등재 검사는 못 본다. 그것은
  *   `scripts/lib/gate-behavior.mjs` 가 프리뷰 빌드를 **띄워** 실 HTTP 로 잡는다 —
- *   `ci.yml` 과 `verify-zip --pack` 에서 돈다(고객이 부르는 무인자 `verify-zip` 에는 없다).
+ *   우리 레포 CI 와 `verify-zip --pack` 에서 돈다(빌드를 두 번 더 굽는 검사라 고객 CI 에는
+ *   안 붙인다. 고객이 부르는 무인자 `verify-zip` 에도 없다).
+ *
+ * ## 배제로 걷힌 것은 두 접두뿐이다
+ *
+ * `_next/static`·`images/` 는 관문 도입 전 수준을 되찾는다. 그 밖의 최상위 정적 파일
+ * (`robots.txt`·`sitemap.xml`·`og.png`·`fonts/`·`manifest.webmanifest` …)은 **관문을 탄다** —
+ * 배제 목록에 없기 때문이다. "정적 원가를 걷었다"로 읽지 마라.
+ *
+ * `public/` 밑에 새 최상위를 만들면(에이전트가 `og.png`·`fonts/` 를 만드는 자리다) 그 에셋도
+ * 관문을 탄다. 필요하면 배제 목록에 더하되, **그 밑에 쓰기 라우트를 두면 관문 밖**이 된다.
  *
  * 원가를 다시 재려면:
  *     node .next/standalone/server.js &   # 관문 있는 빌드와 없는 빌드를 각각
- *     # keep-alive 부하기로 /_next/static/... 과 /api/cart 를 교대 측정
+ *     # keep-alive 부하기로 /_next/static/... · /images/*.png · /robots.txt · /api/cart 를
+ *     # 교대(회전마다 순서 반전)로 측정하고 중앙값을 쓴다. 콜드 부팅과 RSS·VSZ 도 같이 잰다.
  *
  * ## 프리뷰가 아니면 판정 첫 줄에서 빠진다
  *
