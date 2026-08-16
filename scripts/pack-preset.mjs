@@ -154,6 +154,8 @@ const SOURCE_EXCLUDES = [
     // 배송 문서의 측정 주장을 재는 **정본 전용** 검사기다. BASELINE 이 이 레포 파일 경로에 매여 있고
     // `ci.yml` 도 판별자 뒤에서만 부른다 — 고객 트리에 실으면 부를 일 없는 9.8KB 가 전 테넌트에 복제된다.
     "scripts/lib/doc-claims.mjs",
+    // 배송 문서의 severity 주장을 검사기 행동으로 못박는다 — 우리 문서에 대한 규율이라 정본 전용.
+    "scripts/lib/validateSeverity.test.mjs",
     // ⚠ **방문자 IP 검사기도 배송하지 않는다**(4차 심의 · Fable/Opus 동시 판정). 처음엔 고객에게도
     // 쓸모 있다고 보고 실었는데, 네 라운드에 걸쳐 **거짓 양성이 닫히지 않았다** — 타입 전용 import,
     // 헬퍼 경유 `clientIp`, IP 무관 용도로 client 를 쓰는 파일의 동명 자기 함수까지.
