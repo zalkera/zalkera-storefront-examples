@@ -114,6 +114,7 @@ jobs:
               "src/lib/safeUrlDrift.test.ts",
               "scripts/lib/floors.test.mjs",
               "scripts/lib/gateProbe.test.mjs",
+              "scripts/lib/junkEntries.test.mjs",
             ];
             const missing = REQUIRED.filter((k) => !e.some(([n]) => n === k));
             if (missing.length) { console.error("하한표에 없는 요구 스위트: " + missing.join(" · ")); process.exit(1); }

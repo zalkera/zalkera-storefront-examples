@@ -14,6 +14,7 @@ export const REQUIRED_FLOORS = {
     "src/lib/safeUrlDrift.test.ts": 4,
     "scripts/lib/floors.test.mjs": 13,
     "scripts/lib/gateProbe.test.mjs": 9,
+    "scripts/lib/junkEntries.test.mjs": 7,
 };
 
 /**

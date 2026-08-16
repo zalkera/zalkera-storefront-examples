@@ -55,6 +55,7 @@ import {basename, join, relative, resolve} from "node:path";
 import {tmpdir} from "node:os";
 import {fileURLToPath} from "node:url";
 import {judgeFloors, REQUIRED_FLOORS} from "./lib/floors.mjs";
+import {junkTopLevel} from "./lib/junkEntries.mjs";
 
 const HERE = resolve(fileURLToPath(import.meta.url), "..");
 const VALIDATOR = join(HERE, "validate-storefront.mjs");
@@ -378,6 +379,28 @@ let failed = false;
 
 try {
     console.log(`\n납품 검수 — ${zipPath}\n${"─".repeat(60)}`);
+
+    // ①-a **풀기 전에 엔트리 목록으로 거른다.** 산출물·의존성을 통째로 담은 zip 은 어차피 반려인데,
+    //     먼저 풀면 그 크기만큼 임시공간을 쓰고 나서 반려한다. `unzip -Z1` 은 압축을 안 풀어 싸다.
+    //     이 판정의 계약은 `scripts/lib/junkEntries.test.mjs` 가 진다.
+    {
+        const pre = spawnSync("unzip", ["-Z1", resolve(zipPath)], {encoding: "utf8", maxBuffer: 64 * 1024 * 1024});
+        if (pre.error?.code === "ENOENT") {
+            console.error("unzip 이 필요합니다 (apt install unzip).");
+            process.exit(2);
+        }
+        if (pre.status === 0) {
+            const junk = junkTopLevel((pre.stdout ?? "").split("\n"));
+            if (junk.length) {
+                record("정리(산출물·의존성 미포함)", false, `${junk.join(" · ")} 미포함 — zip 에서 빼 주십시오`);
+                console.error(`   푸는 데 임시공간을 쓰기 전에 엔트리 목록만 보고 판정했습니다.`);
+                console.error(`
+반려 — 위 ❌ 항목을 고쳐 재납품 요청하십시오.`);
+                process.exit(1);
+            }
+        }
+        // 목록을 못 읽었으면 여기서 반려하지 않는다 — 아래 언팩이 같은 것을 다시 본다.
+    }
 
     // ① 언팩. unzip 이 없으면 실행 불가(환경 문제)로 2번 종료 — 반려가 아니다.
     const unzip = spawnSync("unzip", ["-q", "-o", resolve(zipPath), "-d", work], {encoding: "utf8"});
