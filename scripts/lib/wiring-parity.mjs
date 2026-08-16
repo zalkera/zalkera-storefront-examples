@@ -74,6 +74,7 @@ export const WIRING_FILES = [
     "src/lib/crossOrigin.test.ts",
     "src/lib/oauthState.test.ts",
     "src/lib/safeUrl.test.ts", // 오픈 리다이렉트 — 잠금이 0건이던 자리라 세 번째 결함이 배송됐다
+    "src/lib/safeUrlDrift.test.ts", // 팩 로컬 소독기와 @zalkera/client 사본의 안전성 판정이 갈리는지
     "src/lib/previewGuard.test.ts",
 ];
 

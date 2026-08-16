@@ -263,7 +263,7 @@ const REQUIRED_FLOORS = {
     "src/lib/oauthState.test.ts": 9,
     "src/lib/previewGuard.test.ts": 6,
     "src/lib/safeUrl.test.ts": 6,
-    "src/lib/safeUrl.drift.test.ts": 4,
+    "src/lib/safeUrlDrift.test.ts": 4,
 };
 
 /**
