@@ -103,6 +103,27 @@ const BUILD_ENV = {
     ZALKERA_OFFLINE_BUILD: "1",
 };
 
+/**
+ * 자식의 판정을 바꾸는 **상속 변수**. 측정 자식을 띄우기 전에 지운다.
+ *
+ * 이 러너가 어떤 환경에서 불릴지 우리가 정하지 못한다 — 이것들이 남아 있으면 자식이 다른 모드로
+ * 돌고, 그 결과를 우리가 판정으로 읽는다. 값이 아니라 **의미**가 바뀌는 자리다.
+ *
+ * `NODE_TEST_CONTEXT` — node 러너가 자식 모드로 돌아 `# pass N` 요약 줄을 안 낸다. 그러면
+ *   하한 파싱이 `-1` 이 되어 **멀쩡한 팩이 전 스위트 0/하한으로 거짓 반려**된다.
+ *   재현: `NODE_TEST_CONTEXT=child-v8 node --experimental-strip-types --test <시험파일> | grep '^# pass'` → 무출력
+ * `NODE_OPTIONS` — 자식 node 에 임의 플래그를 주입한다.
+ * `NEXT_PUBLIC_*_PREVIEW` — 프리뷰 판별자가 이것을 읽어 빌드의 뜻이 바뀐다.
+ */
+const INHERITED_NOISE = ["NODE_TEST_CONTEXT", "NODE_OPTIONS", "NEXT_PUBLIC_ZALKERA_PREVIEW", "NEXT_PUBLIC_ONEQUE_PREVIEW"];
+
+/** 측정 자식에게 줄 환경. 상속 잡음을 지우고 선언한 값만 얹는다. */
+function childEnv(extra = {}) {
+    const env = {...process.env, ...extra};
+    for (const k of INHERITED_NOISE) delete env[k];
+    return env;
+}
+
 /** 검사 결과 한 줄을 찍고 통과 여부를 돌려준다 — 호출부가 `failed` 를 세운다. */
 const record = (name, ok, detail = "") => {
     console.log(`${ok ? "✅" : "❌"} ${name}${detail ? ` — ${detail}` : ""}`);
@@ -746,7 +767,7 @@ try {
                     cwd: root,
                     encoding: "utf8",
                     timeout: 15 * 60 * 1000,
-                    env: {...process.env, ...BUILD_ENV},
+                    env: childEnv(BUILD_ENV),
                 });
                 const ok = r.status === 0;
                 if (!ok) {
@@ -803,7 +824,7 @@ try {
                 //    해도 가드가 깨진 zip 이 ✅ 를 받는다.
                 //    스위트가 없으면 node 러너가 `# tests 0` 과 rc 0 을 내므로 **그것도 반려**로 친다.
                 {
-                    const t = spawnSync("npm", ["test"], {cwd: root, encoding: "utf8", env: {...process.env, ...BUILD_ENV}, maxBuffer: 32 * 1024 * 1024});
+                    const t = spawnSync("npm", ["test"], {cwd: root, encoding: "utf8", env: childEnv(BUILD_ENV), maxBuffer: 32 * 1024 * 1024});
                     const out = `${t.stdout ?? ""}${t.stderr ?? ""}`;
                     // ⚠ **총합으로 재지 않는다.** `pass >= 1` 이면 스위트를 자명 통과 시험으로 갈아치운
                     //    zip 이 통과한다. 요구치는 이 러너의 `REQUIRED_FLOORS` 가 들고 있고, zip 안
@@ -822,10 +843,14 @@ try {
                     const short = [];
                     if (!bad.length) {
                         for (const [f, min] of Object.entries(effective)) {
-                            const r = spawnSync("node", ["--experimental-strip-types", "--test", f], {
+                            // ⚠ `--` 로 경로를 **구조적으로** 분리한다. 이것이 없으면 `-` 로 시작하는 키가
+                            //   파일이 아니라 node 플래그로 해석돼 그 코드가 이 기계에서 돈다.
+                            //   위 키 형태 검사는 심층 방어다 — 열거식이라 넓힐 때마다 침식되므로 유일한 방어로 두지 않는다.
+                            //   재현: `node --test --import=./evil.mjs` → 실행됨 · `node --test -- --import=./evil.mjs` → 실행 안 됨
+                            const r = spawnSync("node", ["--experimental-strip-types", "--test", "--", f], {
                                 cwd: root,
                                 encoding: "utf8",
-                                env: {...process.env, ...BUILD_ENV},
+                                env: childEnv(BUILD_ENV),
                                 maxBuffer: 32 * 1024 * 1024,
                             });
                             const pass = Number(`${r.stdout ?? ""}`.match(/^# pass (\d+)$/m)?.[1] ?? -1);
@@ -913,7 +938,7 @@ try {
                         const g = spawnSync("node", [GATE_BEHAVIOR, "."], {
                             cwd: root,
                             encoding: "utf8",
-                            env: {...process.env, ...BUILD_ENV},
+                            env: childEnv(BUILD_ENV),
                             maxBuffer: 32 * 1024 * 1024,
                         });
                         const gout = `${g.stdout ?? ""}${g.stderr ?? ""}`.trim();

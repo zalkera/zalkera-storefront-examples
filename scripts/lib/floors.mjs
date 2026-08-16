@@ -15,6 +15,7 @@ export const REQUIRED_FLOORS = {
     "scripts/lib/floors.test.mjs": 14,
     "scripts/lib/gateProbe.test.mjs": 9,
     "scripts/lib/junkEntries.test.mjs": 8,
+    "scripts/lib/childEnv.test.mjs": 5,
 };
 
 /**

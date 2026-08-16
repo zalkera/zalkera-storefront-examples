@@ -60,6 +60,12 @@ const root = process.argv[2] ?? ".";
 const PREVIEW_ENV_NAMES = ["NEXT_PUBLIC_ZALKERA_PREVIEW", "NEXT_PUBLIC_ONEQUE_PREVIEW"];
 
 /**
+ * 자식의 **판정을 바꾸는** 상속 변수. 프리뷰 이름과 같은 부류다 — 값이 아니라 뜻이 바뀐다.
+ * 이 검사기가 어떤 환경에서 불릴지 우리가 정하지 못하므로 띄우기 전에 지운다.
+ */
+const INHERITED_NOISE = ["NODE_TEST_CONTEXT", "NODE_OPTIONS"];
+
+/**
  * 띄운 자식 전부. `process.exit` 은 `try/finally` 의 `finally` 를 **건너뛴다**(실측:
  * `node -e 'try{process.exit(3)}finally{console.log("x")}'` → 아무것도 안 찍힌다).
  * 그래서 정리를 `finally` 에만 두면 프로브 실패 한 번에 서버가 고아로 남아 RSS 를 무기한 붙든다.
@@ -92,7 +98,7 @@ function build(preview) {
     //   도 수용한다 — 하나만 지우면 환경에 구 이름이 있을 때 "비프리뷰" 빌드가 실제로는 프리뷰가 되고,
     //   음성 통제군이 전부 걸려 **정상 팩을 거짓 반려**한다.
     //   재현: `NEXT_PUBLIC_ONEQUE_PREVIEW=1 node scripts/lib/gate-behavior.mjs .`
-    for (const k of PREVIEW_ENV_NAMES) delete env[k];
+    for (const k of [...PREVIEW_ENV_NAMES, ...INHERITED_NOISE]) delete env[k];
     if (preview) env[PREVIEW_ENV_NAMES[0]] = "1";
     const r = spawnSync("npm", ["run", "build"], {cwd: root, env, encoding: "utf8", maxBuffer: 64 * 1024 * 1024});
     if (r.status !== 0) {
@@ -130,7 +136,7 @@ async function serve(preview, fn) {
     // ⚠ 런타임 환경도 빌드와 **같은 선언**이어야 한다. 판별자는 서버에서 다시 읽히므로, 여기에
     //   구 이름이 남아 있으면 비프리뷰 빌드가 실행 시점에 프리뷰로 돌아 음성 통제군이 전부 걸린다.
     const env = {...process.env, PORT: String(port), HOSTNAME: "127.0.0.1"};
-    for (const k of PREVIEW_ENV_NAMES) delete env[k];
+    for (const k of [...PREVIEW_ENV_NAMES, ...INHERITED_NOISE]) delete env[k];
     if (preview) env[PREVIEW_ENV_NAMES[0]] = "1";
     const srv = spawn(process.execPath, ["server.js"], {
         cwd: sa,
