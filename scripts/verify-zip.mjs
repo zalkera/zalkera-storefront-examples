@@ -116,7 +116,6 @@ const ENV_KEEP = /\.(example|sample|template)$/;
 const SECRET_CONTENT = [
     ["AWS 액세스키", /\bAKIA[0-9A-Z]{16}\b/],
     ["개인키 블록", /-----BEGIN [A-Z ]{0,20}PRIVATE KEY-----/],
-    ["SSH 개인키", /-----BEGIN OPENSSH PRIVATE KEY-----/],
     ["결제 라이브 시크릿", /\b(?:sk_live_|live_sk_)[0-9A-Za-z]{8,}/],
     ["GitHub 토큰", /\b(?:gh[pousr]_[0-9A-Za-z]{20,}|github_pat_[0-9A-Za-z_]{20,})\b/],
     ["Slack 토큰", /\bxox[abprs]-[0-9A-Za-z-]{10,}\b/],
