@@ -265,8 +265,23 @@ function effectiveRoot(dir) {
  ⚠ 이 규칙은 서버 판정의 **거울**이지 사본이 아니다 — 갈리면 서버가 400 으로 잡는다.
  *
  * ⚠ 이 러너는 `backend/doc/vendor/` 로 나간다. 단일 파일이 아니라 `verify-zip.mjs` + `lib/` 를
- *   **같이** 건네야 한다(`lib/floors.mjs`·`lib/junkEntries.mjs`·`lib/routes.mjs`). 하나만 갱신하면
- *   `ERR_MODULE_NOT_FOUND` 로 죽는다.
+ *   **같이** 건네야 한다. 런타임 의존은 여섯이고, 빠지면 그 검사가 통째로 죽는다:
+ *
+ *     verify-zip.mjs
+ *     validate-storefront.mjs      ← 규약 검사(`VALIDATOR`)를 spawn 한다
+ *     lib/floors.mjs               ← 하한 판정
+ *     lib/junkEntries.mjs          ← 조기 반려 판정
+ *     lib/routes.mjs               ← 관문 등재 프로브 도출
+ *     lib/gate-behavior.mjs        ← `--pack` 의 관문 행위 검사
+ *
+ *   재현: 다른 디렉터리에 `verify-zip.mjs` 만 두고 돌리면 `ERR_MODULE_NOT_FOUND` 로 죽고,
+ *         `validate-storefront.mjs` 만 빠뜨리면 `❌ 규약 검사 — MODULE_NOT_FOUND` 로 **정상 납품이
+ *         전부 반려**된다. 그 목록은 `scripts/lib/vendorSet.test.mjs` 가 잠근다.
+ *
+ *   ⚠ 파일만으로는 안 된다. `validate-storefront.mjs` 는 `@zalkera/client` 를 **자기 경로 기준**으로
+ *     찾는다(검사 대상 zip 이 그 해석을 가로채지 못하게 하는 설계다). 그러니 사본을 받는 쪽은
+ *     그 디렉터리에서 `npm i @zalkera/client` 를 한 번 해야 한다. 안 하면 `rc 2` 로 멈추고
+ *     "규약 검사가 0줄 돌았습니다"로 반려한다 — 못 잰 것을 통과로 읽지 않는다.
  */
 const PACK_MANIFEST_PATH = ".zalkera/pack.json";
 const PACK_MANIFEST_REV = 1;
@@ -285,11 +300,19 @@ const PACK_VERSION_MAX_LENGTH = 40;
  */
 function readPackManifest(root) {
     const file = join(root, PACK_MANIFEST_PATH);
-    if (!existsSync(file)) return {state: "absent"};
-    // 심링크를 따라가면 zip 이 이 러너로 **검수자 파일시스템을 읽는다** — 그 내용·키·크기가
-    // 반려문에 실린다. 시크릿 스캔·문서 좌표 검사가 쓰는 것과 같은 규율로 막는다.
-    if (lstatSync(file).isSymbolicLink()) return {state: "invalid", reason: "심링크입니다 — 읽지 않았습니다"};
-    if (!statSync(file).isFile()) return {state: "absent"};
+    // ⚠ **`lstat` 을 먼저 본다.** `existsSync` 는 심링크를 따라가므로 그것을 앞에 두면 대상의
+    //   존재 여부가 `absent` 와 `invalid` 로 갈려 **검수자 파일시스템에 대한 존재 오라클**이 된다.
+    //   판정을 못 뒤집더라도 신호는 새므로 순서를 뒤집지 마라.
+    let st;
+    try {
+        st = lstatSync(file);
+    } catch {
+        return {state: "absent"};
+    }
+    // 심링크를 따라가면 zip 이 이 러너로 검수자 파일을 읽는다 — 그 내용·키·크기가 반려문에 실린다.
+    // 시크릿 스캔·문서 좌표 검사가 쓰는 것과 같은 규율이다.
+    if (st.isSymbolicLink()) return {state: "invalid", reason: "심링크입니다 — 읽지 않았습니다"};
+    if (!st.isFile()) return {state: "absent"};
 
     // 캡은 **파싱 전에** 잰다 — 매니페스트는 신원 선언이지 데이터 운반체가 아니다.
     const bytes = readFileSync(file);
