@@ -54,6 +54,7 @@ import {existsSync, lstatSync, mkdtempSync, readFileSync, readdirSync, rmSync, s
 import {basename, join, relative, resolve} from "node:path";
 import {tmpdir} from "node:os";
 import {fileURLToPath} from "node:url";
+import {judgeFloors, REQUIRED_FLOORS} from "./lib/floors.mjs";
 
 const HERE = resolve(fileURLToPath(import.meta.url), "..");
 const VALIDATOR = join(HERE, "validate-storefront.mjs");
@@ -243,40 +244,6 @@ const PACK_CODE_REGEX = /^[a-z0-9][a-z0-9-]{0,39}$/;
 const PACK_VERSION_REGEX = /^[0-9]+\.[0-9]+\.[0-9]+$/;
 const PACK_VERSION_MAX_LENGTH = 40;
 
-/**
- * 가드 회귀 스위트의 **하한 정본**. 이 러너가 들고 있다 — `zip` 안의 파일이 아니다.
- *
- * ## 왜 zip 을 안 믿나
- *
- * 이 러너의 전제는 "납품 zip 은 신뢰 밖"이다. 그런데 하한을 zip 안 데이터 파일에서만 읽으면
- * **그 파일을 `{}` 로 비우는 것만으로 가드 게이트 전체가 꺼진다** — 루프가 0회 돌고 초록이 난다.
- * 교차사이트·oauthState·프리뷰 관문·소독기 가드가 옳은지 재는 자리가 한 줄 편집으로 사라진다.
- *
- * 그래서 **요구치는 여기**, `scripts/lib/test-floors.json` 은 그 요구를 **올리거나 늘리는** 자리다.
- * 낮추거나 빠뜨리면 반려한다. `ci.yml` 은 고객 레포의 CI 라 json 을 읽어도 된다 — 어긋나면
- * 이 검사가 잡는다. 정본이 둘이 아니라, **하나(여기)와 그것을 못 내리는 사본(json)**이다.
- *
- * 재현: `node -e 'const f=require("./scripts/lib/test-floors.json");console.log(f)'`
- */
-const REQUIRED_FLOORS = {
-    "src/lib/crossOrigin.test.ts": 18,
-    "src/lib/oauthState.test.ts": 9,
-    "src/lib/previewGuard.test.ts": 6,
-    "src/lib/safeUrl.test.ts": 6,
-    "src/lib/safeUrlDrift.test.ts": 4,
-};
-
-/**
- * 하한 파일의 키로 인정하는 형태. **이 키는 `node` 의 argv 로 들어간다.**
- *
- * ⚠ `-` 로 시작하는 문자열은 파일이 아니라 **node 플래그**로 해석된다. zip 이 키를
- *   `--import=./x.mjs` 로 쓰면 그 코드가 이 러너를 돌리는 기계에서 실행된다 —
- *   `--ignore-scripts` 로 막아 둔 바로 그 사고가 옆문으로 들어온다.
- *   재현: `node --experimental-strip-types --test "--import=./evil.mjs"` → evil.mjs 실행 · `# pass` · rc 0
- *
- * 점은 `.test.ts` 자리에만 허용한다 — 그래야 `..` 로 트리 밖을 못 가리킨다.
- */
-const FLOOR_KEY_REGEX = /^src\/[A-Za-z0-9_\-/]+\.test\.tsx?$/;
 
 /**
  * `src/app` 을 걸어 **이 트리가 실제로 라우팅하는 경로**를 모은다. 못 걸으면 `null`(통과 아님).
@@ -829,43 +796,9 @@ try {
                         unread.push(`scripts/lib/test-floors.json — 못 읽었습니다 [${e.code ?? "UNKNOWN"}]`);
                     }
 
-                    // ── 하한표를 **합친다**. zip 은 못 내리고 못 뺀다.
-                    const bad = [];
-                    const effective = {...REQUIRED_FLOORS};
-                    for (const [f, min] of Object.entries(floors ?? {})) {
-                        if (f === "_") continue;
-                        // ⓐ **argv 주입 차단.** 이 키는 곧 `node` 의 인자다 — 형태를 못 맞추면 **반려**한다.
-                        //    조용히 건너뛰면 공격자는 잃을 게 없고, 우리는 하한 하나를 잃는다.
-                        if (!FLOOR_KEY_REGEX.test(f)) {
-                            bad.push(`키 형태 위반 ${JSON.stringify(f).slice(0, 60)}`);
-                            continue;
-                        }
-                        if (!Number.isInteger(min) || min <= 0) {
-                            bad.push(`${f} 하한이 양의 정수가 아닙니다(${JSON.stringify(min)})`);
-                            continue;
-                        }
-                        // ⓑ zip 은 요구치를 **올릴 수만** 있다.
-                        if (f in REQUIRED_FLOORS && min < REQUIRED_FLOORS[f]) {
-                            bad.push(`${f} 하한을 낮췄습니다 ${min} < ${REQUIRED_FLOORS[f]}`);
-                            continue;
-                        }
-                        effective[f] = Math.max(effective[f] ?? 0, min);
-                    }
-                    // ⓒ 요구 스위트 파일이 zip 에 **없으면** 반려.
-                    for (const f of Object.keys(REQUIRED_FLOORS)) {
-                        if (!existsSync(join(root, f))) bad.push(`${f} 가 없습니다 — 가드를 재는 자리입니다`);
-                    }
-                    // ⓓ 하한표가 **비었으면** 반려. 요구치는 위 `REQUIRED_FLOORS` 로 남아 집행 자체는
-                    //    살지만, 비우는 것은 게이트를 끄려는 시도이고 `ci.yml` 은 그것을 반려한다 —
-                    //    같은 것을 두 정본이 다르게 판정하면 어느 쪽이 참인지 아무도 모르게 된다.
-                    //    ⚠ 재현은 **zip 안**을 고쳐야 한다 — 이 러너는 하한표를 푼 트리에서 읽으므로
-                    //      cwd 의 파일을 고치는 것은 판정에 닿지 않는다(고치고도 rc=0 이 난다).
-                    //      `unzip -q <zip> -d /tmp/t && echo '{}' > /tmp/t/scripts/lib/test-floors.json`
-                    //      `&& python3 -c "import shutil;shutil.make_archive('/tmp/mut','zip','/tmp/t')"`
-                    //      `&& node scripts/verify-zip.mjs /tmp/mut.zip`
-                    if (floors && Object.keys(floors).filter((k) => k !== "_").length < Object.keys(REQUIRED_FLOORS).length) {
-                        bad.push(`하한표 항목이 ${Object.keys(floors).filter((k) => k !== "_").length}개입니다 — 비었거나 지워졌습니다(요구 ${Object.keys(REQUIRED_FLOORS).length}개)`);
-                    }
+                    // 판정은 `scripts/lib/floors.mjs` 하나다 — 여기 다시 적으면 사본이 갈린다.
+                    // 그 판정의 계약은 `scripts/lib/floors.test.mjs` 가 진다.
+                    const {bad, effective} = judgeFloors(floors, (f) => existsSync(join(root, f)));
 
                     const short = [];
                     if (!bad.length) {

@@ -60,6 +60,7 @@
  */
 import {readFileSync, readdirSync, statSync} from "node:fs";
 import {join} from "node:path";
+import {pathToFileURL} from "node:url";
 
 /** 측정 주장을 선언하는 낱말. 넓히기 전에 오탐률을 재라. */
 const CLAIM = /실측|재 ?봤|재 ?보니|측정했|세어 ?보니/;
@@ -128,14 +129,20 @@ const BASELINE = {
  * ⚠ 명령만 있고 결과가 없어 통과하던 문장이 실제로 거짓이었다(`ci.yml`·`verify-zip` 이 부른다 —
  *   `--pack` 에서만 불렀다). 그래서 둘 다 요구한다.
  *
- * 고치는 법: 주장을 지우거나, 옆에 이렇게 적어라.
- *     재현: `npm run build && node scripts/lib/gate-probe.mjs; echo rc=$?` → rc=1
+ * 고치는 법은 둘이고, **첫째가 정석**이다.
+ *   ⑴ **시험으로 옮긴다.** 시험 이름이 곧 주장이고 `assert` 가 곧 예상 결과이며, `npm test` 가
+ *      매번 다시 잰다. 주석 속 재현 명령은 쓸 때 한 번 돌고 그 뒤로는 아무도 안 돌린다 —
+ *      그래서 조용히 썩는다.
+ *   ⑵ 옆에 명령과 결과를 적는다: 재현: `node scripts/lib/gate-probe.mjs; echo rc=$?` → rc=1
+ *
+ * 그래서 **시험 파일은 이 규칙에서 뺀다.** 면제가 아니라 더 강한 검증을 인정하는 것이다 —
+ * 시험 안의 주장은 실행되고, 거짓이 되면 CI 가 죽는다.
  */
-const ENFORCE_CLAIM = /잡[는힌]다|잡[습힙]니다|막[는힌]다|막[습힙]니다|반려한다|반려합니다|덮인다|덮입니다|걸린다|걸립니다|부른다|부릅니다|본다\b|봅니다/;
+export const ENFORCE_CLAIM = /잡[는힌]다|잡[습힙]니다|막[는힌]다|막[습힙]니다|반려한다|반려합니다|덮인다|덮입니다|걸린다|걸립니다|부른다|부릅니다|본다\b|봅니다/;
 /** 그 주장의 주어가 기계이거나 이 파일 자신인 것. 사람·업무 서술은 여기 안 걸린다. */
-const ENFORCE_AGENT = /gate-probe|gate-behavior|verify-zip|doc-claims|wiring-parity|validate-storefront|ci\.yml|middleware|previewGuard|관문|검사기|러너|여기서|이 검사|라우트/;
+export const ENFORCE_AGENT = /gate-probe|gate-behavior|verify-zip|doc-claims|wiring-parity|validate-storefront|ci\.yml|middleware|previewGuard|관문|검사기|러너|여기서|이 검사|라우트/;
 /** **예상 결과** — 돌려보지 않으면 못 쓴다. */
-const EXPECTED = /rc\s*=|rc\s*[0-9]|→|# pass|# fail|exit\s*[0-9]|❌|✅/;
+export const EXPECTED = /rc\s*=|rc\s*[0-9]|→|# pass|# fail|exit\s*[0-9]|❌|✅/;
 
 /**
  * ## 규칙 ⓒ — **배송물에 이력을 쓰지 않는다**
@@ -147,7 +154,7 @@ const EXPECTED = /rc\s*=|rc\s*[0-9]|→|# pass|# fail|exit\s*[0-9]|❌|✅/;
  * 이력이 갈 곳: 커밋 메시지 · `dist-presets/_superseded/README-*.md` · 심의 보고서.
  * 규칙이 그 형태인 **이유(제약)** 는 남긴다 — 그건 현재 사실이다.
  */
-const HISTORY = /종전 ?판|이전 ?판|옛 ?판|[0-9]+판째|판 연속|직전 ?판|내 실수|심의 실측|심의가 잡|20[0-9]{2}-[01][0-9]-[0-3][0-9]|3\.0\.[0-9]+/;
+export const HISTORY = /종전 ?판|이전 ?판|옛 ?판|[0-9]+판째|판 연속|직전 ?판|내 실수|심의 실측|심의가 잡|20[0-9]{2}-[01][0-9]-[0-3][0-9]|3\.0\.[0-9]+/;
 
 /** 규칙 ⓑ 의 파일별 부채 상한(래칫). 줄일 수는 있어도 늘릴 수 없다. */
 const ENFORCE_BASELINE = {
@@ -209,7 +216,7 @@ const HISTORY_BASELINE = {
  *
  * 재현: `node scripts/lib/doc-claims.mjs; echo rc=$?` → rc=0
  */
-const BROKEN_SENTENCE = [
+export const BROKEN_SENTENCE = [
     // 한글·강조·백틱·닫는괄호 뒤의 빈 괄호, 그리고 여는 괄호 직후의 줄표
     /[가-힣*`」)] \(\)|\(—/,
     // 한글 명사와 조사 사이가 벌어진 자리(`… 게이트 가`). 관형사 `이`(이 라우트)는 뺀다 —
@@ -265,7 +272,8 @@ function main() {
                 if (!near.some((l) => CMD.test(l))) bad.push({file: f, line: i + 1, text: line.trim().slice(0, 96)});
             }
             // ⓑ 집행 주장 — 명령**과** 예상 결과를 둘 다 요구한다.
-            if (ENFORCE_CLAIM.test(line) && ENFORCE_AGENT.test(line)) {
+            //    시험 파일은 뺀다: 그 파일의 주장은 `npm test` 가 매번 실행해 확인한다.
+            if (!/\.test\.(ts|tsx|mjs|cjs|js)$/.test(f) && ENFORCE_CLAIM.test(line) && ENFORCE_AGENT.test(line)) {
                 enforce++;
                 if (!(near.some((l) => CMD.test(l)) && near.some((l) => EXPECTED.test(l)))) {
                     enforceBad.push({file: f, line: i + 1, text: line.trim().slice(0, 96)});
@@ -360,4 +368,4 @@ function existsSafe(p) {
     }
 }
 
-main();
+if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) main();

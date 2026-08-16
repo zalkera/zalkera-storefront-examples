@@ -112,11 +112,13 @@ jobs:
               "src/lib/previewGuard.test.ts",
               "src/lib/safeUrl.test.ts",
               "src/lib/safeUrlDrift.test.ts",
+              "scripts/lib/floors.test.mjs",
+              "scripts/lib/gateProbe.test.mjs",
             ];
             const missing = REQUIRED.filter((k) => !e.some(([n]) => n === k));
             if (missing.length) { console.error("하한표에 없는 요구 스위트: " + missing.join(" · ")); process.exit(1); }
             for (const [k, v] of e) {
-              if (!/^src\/[A-Za-z0-9_\-\/]+\.test\.tsx?$/.test(k)) { console.error("키 형태 위반: " + JSON.stringify(k)); process.exit(1); }
+              if (!/^(src|scripts)\/[A-Za-z0-9_\-\/]+\.test\.(tsx?|mjs)$/.test(k)) { console.error("키 형태 위반: " + JSON.stringify(k)); process.exit(1); }
               if (!Number.isInteger(v) || v <= 0) { console.error("하한이 양의 정수가 아닙니다: " + k + " = " + JSON.stringify(v)); process.exit(1); }
               console.log(k + ":" + v);
             }
