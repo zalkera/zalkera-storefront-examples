@@ -715,7 +715,7 @@ try {
                 //    해도 가드가 깨진 zip 이 ✅ 를 받았다(심의 실측).
                 //    스위트가 없으면 node 러너가 `# tests 0` 과 rc 0 을 내므로 **그것도 반려**로 친다.
                 {
-                    const t = spawnSync("npm", ["test"], {cwd: root, encoding: "utf8", env: BUILD_ENV, maxBuffer: 32 * 1024 * 1024});
+                    const t = spawnSync("npm", ["test"], {cwd: root, encoding: "utf8", env: {...process.env, ...BUILD_ENV}, maxBuffer: 32 * 1024 * 1024});
                     const out = `${t.stdout ?? ""}${t.stderr ?? ""}`;
                     // ⚠ **총합으로 재지 않는다.** `pass >= 1` 이면 스위트를 자명 통과 시험으로 갈아치운
                     //    zip 이 통과한다. 하한 정본은 `scripts/lib/test-floors.json` 하나이고 `ci.yml` 도
@@ -733,7 +733,7 @@ try {
                             const r = spawnSync("node", ["--experimental-strip-types", "--test", f], {
                                 cwd: root,
                                 encoding: "utf8",
-                                env: BUILD_ENV,
+                                env: {...process.env, ...BUILD_ENV},
                                 maxBuffer: 32 * 1024 * 1024,
                             });
                             const pass = Number(`${r.stdout ?? ""}`.match(/^# pass (\d+)$/m)?.[1] ?? -1);
@@ -790,7 +790,7 @@ try {
                         const g = spawnSync("node", ["scripts/lib/gate-behavior.mjs", "."], {
                             cwd: root,
                             encoding: "utf8",
-                            env: BUILD_ENV,
+                            env: {...process.env, ...BUILD_ENV},
                             maxBuffer: 32 * 1024 * 1024,
                         });
                         const gout = `${g.stdout ?? ""}${g.stderr ?? ""}`.trim();
