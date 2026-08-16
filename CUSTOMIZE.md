@@ -155,7 +155,7 @@ ls public/images 2>/dev/null || echo "이 템플릿에는 동봉된 장식 이�
 파일명과 무관하게 **새로 만든 라우트도 아무것도 안 하고 덮입니다.**
 
 ⚠ 예외는 matcher 가 빼는 접두(`_next/static`·`_next/image`·`images/`·`favicon.ico`)
-밑입니다. 그 아래에 쓰기 라우트를 만들면(예: `src/app/images/upload/route.ts`) **관문 밖**입니다.
+밑입니다. 그 아래(예: `src/app/images/`)에 쓰기 라우트를 만들면 **관문 밖**입니다.
 그 형상은 `node scripts/lib/gate-probe.mjs` 가 잡습니다 — `npm run build` 뒤에 돌려 보십시오. 막지 않는 자리는 `src/lib/previewGuard.ts` 의
 `PREVIEW_WRITE_ALLOW` 목록에 있고, 각 라우트 파일 머리의
 `// zalkera-allow-preview-write: <이유>` 마커에 사유가 적혀 있습니다.
