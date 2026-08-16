@@ -52,6 +52,10 @@ const MUST_STAY_INTERNAL = [
     "/%2e%2e//evil.example",
     "/a/b/../..//evil.example",
     "/./..//evil.example",
+    // 센티넬 호스트 — 출처 비교만으로는 자기 자신을 못 거른다. 두 사본이 같이 틀리면
+    // 드리프트 검사도 초록이 되므로 코퍼스가 이 형태를 들고 있어야 한다.
+    "/..//zalkera.invalid",
+    "/a/b/../..//zalkera.invalid",
     // 고전
     "//evil.example",
     "javascript:alert(1)",
@@ -76,7 +80,7 @@ test("드리프트 검사가 실제로 값을 본다(하한)", () => {
     assert.ok(CORPUS.length >= 18, `코퍼스가 ${CORPUS.length}개뿐이다 — 이 검사가 공허해진다`);
     // 소독기를 안 거치면 실제로 밖으로 나가는 표본이 충분히 있어야 한다. 없으면 무엇도 안 막는 셈이다.
     const escaping = MUST_STAY_INTERNAL.filter(escapes).length;
-    assert.ok(escaping >= 6, `밖으로 나가는 표본이 ${escaping}개뿐이다 — 코퍼스가 무뎌졌다`);
+    assert.ok(escaping >= 8, `밖으로 나가는 표본이 ${escaping}개뿐이다 — 코퍼스가 무뎌졌다`);
 });
 
 test("팩 로컬과 @zalkera/client 의 safeLinkUrl 이 같은 안전성 판정을 낸다", () => {

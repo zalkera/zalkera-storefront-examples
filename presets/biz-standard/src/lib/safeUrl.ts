@@ -38,6 +38,11 @@ export function internalPath(raw: string): string | null {
     } catch {
         return null;
     }
+    // 출처 비교만으로는 **센티넬 자신**을 못 거른다 — 정규화 결과가 `//zalkera.invalid` 가 되면
+    // 그 호스트가 곧 `DUMMY_ORIGIN` 이라 재판정을 통과한다. 이 상수를 해석 가능한 도메인으로
+    // 바꾸는 순간 실제 이탈이 되므로 형태로 한 번 더 거른다.
+    // 재현: `node -e 'console.log(new URL("/..//zalkera.invalid","https://zalkera.invalid").pathname)'` → //zalkera.invalid
+    if (out.startsWith("//")) return null;
     try {
         if (new URL(out, DUMMY_ORIGIN).origin !== DUMMY_ORIGIN) return null;
     } catch {
