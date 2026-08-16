@@ -17,8 +17,11 @@
  *   "존재하는 경로"가 되고, 그 핸들러가 프리뷰에서 같은 403·코드를 내면 관문이 없어도 통과한다.
  *   `[slug]/page.tsx` 를 `[slug]/route.ts` 로 바꾸면 페이지 프로브도 같다.
  *   재현: 관문을 무력화하고 `src/app/api/[...gate]/route.ts` 에 프리뷰일 때만 403 을 내는 핸들러를 두면 rc 0.
- *   즉 이 검사는 **관문을 지우는 실수**는 잡지만 **관문을 사칭하는 의도**는 못 잡는다. 후자는
- *   `gate-probe.mjs` 의 트리 도출(캐치올이 프로브 경로를 삼키는지)과 사람 검수가 본다.
+ *   즉 이 검사는 **관문을 지우는 실수**는 잡지만 **관문을 사칭하는 의도**는 못 잡는다.
+ *   그리고 **그 축을 보는 기계는 없다** — `gate-probe.mjs` 는 matcher 정규식이 경로를 덮는지만
+ *   보므로 관문을 무력화하고 캐치올을 더해도 통과한다. 사칭은 **사람 검수가 유일**하다.
+ *   재현: 관문을 `if (true) return NextResponse.next()` 로 두고
+ *         `npm run build && node scripts/lib/gate-probe.mjs; echo rc=$?` → rc=0
  *
  * **점 있는 경로**를 같이 태운다. matcher 를 확장자로 가르면 동적 세그먼트에 점이 든 쓰기 경로가
  * 통째로 관문 밖이 되는데, 그 형상은 등재 검사가 못 본다(프로브 목록이 같은 전제 위에 서기 때문).
@@ -210,8 +213,11 @@ const off = await serve(false, probe);
 const bad = on.out.filter((r) => r.status !== 403 || r.code !== "PREVIEW_READ_ONLY");
 // 음성 통제군에서 **프로브의 4xx·5xx 는 정상이다** — 그 경로는 존재하지 않으므로 404 가 맞고,
 // `[slug]` 가 받는 페이지 프로브는 콘텐츠가 없어 500 이 난다. 여기서 위반은 **관문이 돈 흔적**
-// 하나뿐이다. 상태 전체를 위반으로 치면 정상 팩이 거짓 반려된다 — 비프리뷰 서버에 물어 보면
-// 404·404·404·500 이 나온다. 재현: `node scripts/lib/gate-behavior.mjs .` (통과 줄의 괄호 안 값)
+// 하나뿐이다. 상태 전체를 위반으로 치면 정상 팩이 거짓 반려된다 — 비프리뷰 서버는 그 경로들에
+// 4xx 를 낸다(존재하지 않는 경로이므로 정답이다).
+// 재현: 비프리뷰로 굽고 띄운 뒤 직접 물어라 — 통과 줄에는 프로브 상태가 안 실린다.
+//   `NEXT_PUBLIC_ZALKERA_PREVIEW= npm run build && (cd .next/standalone && PORT=41999 node server.js &)`
+//   `curl -s -o /dev/null -w '%{http_code}\n' -X DELETE http://127.0.0.1:41999/api/__gate_probe__/7.0`
 // "서버가 통째로 죽었는가"는 아래 `off.home` 이 진다 — 그것이 이 통제군의 몫이다.
 const falsePositive = off.out.filter((r) => r.status === 403 || r.code === "PREVIEW_READ_ONLY");
 

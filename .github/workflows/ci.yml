@@ -79,10 +79,10 @@ jobs:
         #
         # 하한값은 `scripts/lib/test-floors.json` 에 있다(재현: `cat scripts/lib/test-floors.json`).
         # 현재치: `for f in src/lib/*.test.ts; do node --experimental-strip-types --test "$f" | grep '^# pass'; done`
-        #   · 큰 스위트는 여유를 뒀다 — 시험을 한둘 더하고 빼는 정상 작업이 게이트를 안 건드리게.
-        #   · **`previewGuard` 는 현재치가 곧 하한이다.** 통제군(관문 존재·배선·면제목록↔마커 대칭)이
-        #     섞여 있어 그것만 빠져도 관문이 사라진 상태가 초록이 된다.
-        #     시험을 합치거나 줄이려면 하한 파일을 **같이** 고쳐라.
+        #   · 하한은 **현재치와 같다.** 여유를 두면 그만큼의 가드 시험을 지워도 통과한다 —
+        #     여유 4였을 때 crossOrigin 의 CSRF Content-Type 가드 4건이 통째로 지워지고도 초록이었다.
+        #     통제군(관문 존재·배선·면제목록↔마커 대칭)이 섞여 있어 그것만 빠져도 관문이 사라진
+        #     상태가 초록이 된다. 시험을 더하거나 합치면 하한 파일을 **같이** 고쳐라.
         run: |
           set -o pipefail
           npm test
@@ -97,7 +97,7 @@ jobs:
           #      PR 하나로 이 러너에서 임의 코드가 돈다(`GITHUB_TOKEN` 을 가진 채).
           #      재현: `node --experimental-strip-types --test "--import=./evil.mjs"`
           #
-          # ⚠ **여기서 안 잡는 것 둘.** ⑴ 하한을 **낮추는** 편집 — 이 파일이 곧 이 레포의 하한이라
+          # ⚠ **여기서 안 잡는 것.** ⑴ 하한을 **낮추는** 편집 — 이 파일이 곧 이 레포의 하한이라
           #   낮춤은 자기 결정이다. 우리 팩에 대해서는 `verify-zip --pack` 이 `REQUIRED_FLOORS` 와
           #   대조해 반려한다. ⑵ 시험 **내용**을 자명통과로 갈아치우는 것 — 하한은 통과 **개수**만
           #   세기 때문이다. 그 둘은 코드 리뷰가 본다.
@@ -154,6 +154,10 @@ jobs:
         #   ⚠ **검사기 부재를 raw 예외로 죽이지 않는다.** 아래 마지막 스텝과 같은 관용구다 —
         #     `MODULE_NOT_FOUND` 는 조치 불가능한 메시지이고 BuildGate 를 막는다.
         run: |
+          if [ ! -f scripts/lib/gate-probe.mjs ]; then
+            echo "::error::scripts/lib/gate-probe.mjs 가 없습니다 — 프리뷰 관문이 무엇을 덮는지 잴 수단이 사라집니다. 이 검사기는 팩이 배송하는 파일입니다."
+            exit 1
+          fi
           node scripts/lib/gate-probe.mjs
           if [ -d presets ] && [ -f scripts/pack-preset.mjs ]; then
             if [ ! -f scripts/lib/gate-behavior.mjs ]; then

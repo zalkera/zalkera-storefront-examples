@@ -30,7 +30,12 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # ⚠ **`ci.yml` 과 같아야 한다.** `npm test` 가 `--experimental-strip-types` 를 쓰는데
+          #   node 20 은 그 플래그를 모른다(`bad option`, rc=9). 그러면 이 워크플로가 구조적으로
+          #   영구 적색이고 아래 lockfile 커밋 스텝에 도달하지 못한다 — 즉 이 팩으로 개시한
+          #   모든 테넌트의 client 승급이 정지한다. `package.json` 의 `engines` 가 잣대다.
+          #   재현: `npx --yes node@20 --experimental-strip-types --test 'src/**/*.test.ts'; echo rc=$?`
+          node-version: 22
 
       - run: npm install          # lockfile 재생성 + 설치
       # 고객 zip 은 루트 `llms.txt`(= client 운반본의 사본)를 나른다. client 를 올리면 그 사본도

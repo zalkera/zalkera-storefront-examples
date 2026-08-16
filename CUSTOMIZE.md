@@ -154,11 +154,16 @@ ls public/images 2>/dev/null || echo "이 템플릿에는 동봉된 장식 이�
 차단은 `src/middleware.ts` **한 곳**에서 일어납니다 — 요청의 메서드와 경로만 보므로 선언 형태·
 파일명과 무관하게 **새로 만든 라우트도 아무것도 안 하고 덮입니다.**
 
-⚠ 예외는 matcher 가 빼는 접두(`_next/static`·`_next/image`·`images/`·`favicon.ico`)
-밑입니다. 그 아래(예: `src/app/images/`)에 쓰기 라우트를 만들면 **관문 밖**입니다.
-그 형상은 `node scripts/lib/gate-probe.mjs` 가 잡습니다 — `npm run build` 뒤에 돌려 보십시오. 막지 않는 자리는 `src/lib/previewGuard.ts` 의
-`PREVIEW_WRITE_ALLOW` 목록에 있고, 각 라우트 파일 머리의
-`// zalkera-allow-preview-write: <이유>` 마커에 사유가 적혀 있습니다.
+막지 않는 자리는 `src/lib/previewGuard.ts` 의 `PREVIEW_WRITE_ALLOW` 목록에 있고, 각 라우트 파일
+머리의 `// zalkera-allow-preview-write: <이유>` 마커에 사유가 적혀 있습니다.
+
+> ⚠ **예외가 하나 있습니다.** matcher 가 빼는 접두(`_next/static`·`_next/image`·`images/`·
+> `favicon.ico`) 밑에 쓰기 라우트를 만들면(예: `src/app/images/` 아래) **관문 밖**입니다.
+> 그 형상은 빌드 뒤에 이것으로 확인하십시오:
+>
+> ```bash
+> npm run build && node scripts/lib/gate-probe.mjs
+> ```
 
 > ⚠ `ZALKERA_OFFLINE_BUILD` 는 **이 용도가 아닙니다.** 백엔드 없이 빌드를 돌리는 CI 를 위한
 > 플래그이고, 화면 확인에 쓰는 물건이 아닙니다. (덧붙이면 이 플래그는 **지금 아무것도 바꾸지 않습니다** —
@@ -295,7 +300,7 @@ node scripts/verify-zip.mjs ../내사이트.zip
 | 고치고 싶은 것 | 가장 싼 길 | 왜 |
 |---|---|---|
 | 색·글꼴·모서리·여백 | **콘솔**(§1) | 무료·즉시·재빌드 없음. 소스로 가도 되지만 같은 결과에 시간과 재업로드가 더 듭니다 |
-| 시작 페이지의 문구·이미지 | **콘솔**(§1) | 무료. 페이지 편집에서 바로 바뀝니다 |
+| 시작 페이지의 문구·이미지 | **소스**(§2 — `content/pages/home.json`) | 재업로드 1회. 콘솔에는 페이지 편집이 없습니다 |
 | 소스에 박힌 문구·배너·섹션 구조 | **AI**(콘솔 "말로 고치기") 또는 손 | 화면 코드(JSX)를 고치는 일입니다. AI 는 §3 규약까지 함께 맞춰 주고, 손으로 하면 올리기 전에 `npm run validate` 로 직접 확인합니다 |
 | 새 페이지·새 섹션 추가 | **AI** 또는 개발자 손 | 라우팅·계약·검사기 규약을 한꺼번에 맞추는 일입니다 |
 | 이미 있는 디자인의 미세 조정(간격·크기) | 개발자 손 또는 AI | 둘 다 됩니다 |

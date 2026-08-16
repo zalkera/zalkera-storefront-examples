@@ -259,10 +259,10 @@ const PACK_VERSION_MAX_LENGTH = 40;
  * 재현: `node -e 'const f=require("./scripts/lib/test-floors.json");console.log(f)'`
  */
 const REQUIRED_FLOORS = {
-    "src/lib/crossOrigin.test.ts": 14,
-    "src/lib/oauthState.test.ts": 7,
+    "src/lib/crossOrigin.test.ts": 18,
+    "src/lib/oauthState.test.ts": 9,
     "src/lib/previewGuard.test.ts": 6,
-    "src/lib/safeUrl.test.ts": 4,
+    "src/lib/safeUrl.test.ts": 6,
 };
 
 /**
@@ -565,6 +565,21 @@ try {
                 }
             }
 
+            // ⚠ **문서의 부재를 통과로 읽지 않는다.** 좌표 검사는 "있는 문서에 죽은 좌표가 없는가"만
+            //   보므로, 문서를 전부 지우면 `대상 문서 없음 — 죽은 좌표 없음` 으로 초록이 난다.
+            //   이 팩의 1차 소비자는 코딩 에이전트이고 `AGENTS.md` 가 그 입구다 — 없으면 팩이 아니다.
+            //   `--pack` 에서만 요구한다(고객 zip 은 자기 문서 구성을 자기가 정한다).
+            //   재현: `unzip <zip> -d /tmp/t && rm /tmp/t/{AGENTS,CUSTOMIZE,README}.md` 후 재압축해 `--pack`
+            if (packMode) {
+                const missingDocs = ["AGENTS.md", "CUSTOMIZE.md", "README.md"].filter((d) => !existsSync(join(root, d)));
+                if (missingDocs.length) {
+                    record("배송 문서 존재", false, `카탈로그 팩에 없습니다 — ${missingDocs.join(" · ")}`);
+                    failed = true;
+                } else {
+                    record("배송 문서 존재", true, "AGENTS.md · CUSTOMIZE.md · README.md");
+                }
+            }
+
             const dead = [];
             const readDocs = [];
             for (const doc of DOC_TARGETS) {
@@ -842,7 +857,11 @@ try {
                     // ⓓ 하한표가 **비었으면** 반려. 요구치는 위 `REQUIRED_FLOORS` 로 남아 집행 자체는
                     //    살지만, 비우는 것은 게이트를 끄려는 시도이고 `ci.yml` 은 그것을 반려한다 —
                     //    같은 것을 두 정본이 다르게 판정하면 어느 쪽이 참인지 아무도 모르게 된다.
-                    //    재현: `echo '{}' > scripts/lib/test-floors.json && node scripts/verify-zip.mjs <zip>`
+                    //    ⚠ 재현은 **zip 안**을 고쳐야 한다 — 이 러너는 하한표를 푼 트리에서 읽으므로
+                    //      cwd 의 파일을 고치는 것은 판정에 닿지 않는다(고치고도 rc=0 이 난다).
+                    //      `unzip -q <zip> -d /tmp/t && echo '{}' > /tmp/t/scripts/lib/test-floors.json`
+                    //      `&& python3 -c "import shutil;shutil.make_archive('/tmp/mut','zip','/tmp/t')"`
+                    //      `&& node scripts/verify-zip.mjs /tmp/mut.zip`
                     if (floors && Object.keys(floors).filter((k) => k !== "_").length < Object.keys(REQUIRED_FLOORS).length) {
                         bad.push(`하한표 항목이 ${Object.keys(floors).filter((k) => k !== "_").length}개입니다 — 비었거나 지워졌습니다(요구 ${Object.keys(REQUIRED_FLOORS).length}개)`);
                     }

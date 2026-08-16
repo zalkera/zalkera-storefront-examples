@@ -22,7 +22,7 @@ import {isPreviewBlockedWrite} from "@/lib/previewGuard";
  *
  * 배제 목록에 더할 수는 있다. 다만 **배제 접두 밑에 쓰기 라우트를 만들면 그 라우트는 관문 밖**이
  * 된다 — 그 형상은 `gate-probe.mjs` 가 잡는다(프로브를 `src/app` 에서 도출하므로
- * `src/app/images/upload/route.ts` 같은 자리가 바로 걸린다).
+ * `src/app/images/` 밑에 만든 쓰기 라우트가 바로 걸린다).
  *
  * ⚠ **확장자로 가르지 마라.** `.*\.[A-Za-z0-9]+$` 로 빼면 **동적 세그먼트에 점이 들어간 쓰기 경로가
  *   통째로 관문 밖**이 된다 — `/api/cart/items/7.0`·`/api/booking/AB.C`·`/api/assets/logo.png` 처럼
