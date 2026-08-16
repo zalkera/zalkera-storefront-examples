@@ -21,7 +21,7 @@ next-env.d.ts
 dist-presets
 
 # 미리보기 스냅샷 산출물 — 재생성 가능한 사진이라 원장이 아니다(만드는 도구는 배송물에 없다).
-# 거처는 S3+CDN 의 버전 고정 프리픽스다(memo116 §3).
+# 거처는 S3+CDN 의 버전 고정 프리픽스다.
 dist-preview
 
 # 에이전트 격리 워크트리 — 팩 게이트의 DIRTY_TREE 를 유발하고 git add -A 로 gitlink 가 섞인다

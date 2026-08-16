@@ -22,8 +22,13 @@ const DUMMY_ORIGIN = "https://zalkera.invalid";
  *
  * ⚠ **입력이 아니라 돌려주는 값을 판정한다.** `/..//evil.example` 은 입력 판정을 통과하고 정규화
  *   결과가 `//evil.example` 이 되며, 그 값이 href·`Location` 으로 소비되면 프로토콜 상대 URL 로
- *   읽힌다. 그래서 자기 출력이 자기 입력 판정을 다시 통과해야 한다 — 그 멱등성을 여기서 건다.
+ *   읽힌다.
  *   재현: `node -e 'console.log(new URL("/..//evil.example","https://zalkera.invalid").pathname)'` → //evil.example
+ *
+ *   그 부류는 아래 `out.startsWith("//")` 가 전부 먼저 잡는다. 뒤의 출처 재판정은 **오늘 동치
+ *   가드**다 — 지워도 시험이 전부 통과한다. 그래도 남기는 이유는 파서 정규화가 `//` 로 시작하지
+ *   않으면서 출처를 바꾸는 형태를 낼 가능성이 남기 때문이고, 그때는 재판정만이 잡는다.
+ *   두 줄 중 **`//` 줄을 지우지 마라** — 센티넬 호스트(`//zalkera.invalid`)는 재판정이 못 잡는다.
  *
  * ⚠ **이 함수가 판정의 단 하나의 자리다.** 새 소비자가 생기면 규칙을 옮겨 적지 말고 이것을 불러라.
  *   `@zalkera/client` 의 같은 이름 함수와 판정이 갈리면 `safeUrlDrift.test.ts` 가 잡는다.

@@ -25,10 +25,15 @@
  *
  * ── 검수 빌드는 **서빙 빌드의 조건을 닮아야 한다** ──────────────────────────────
  * 그래서 설치를 `npm ci --ignore-scripts --include=dev` 로 돈다(샌드박스 `build.sh` 와 같은 플래그).
- * 근거 둘: ⑴ 서빙 박스는 공급망 RCE 를 막으려 postinstall 을 **실행하지 않는다**. 검수만
- * 실행하면 postinstall 산출에 기대는 소스가 여기서 ✅ 를 받고 서빙에서 죽는다 — ⑧이 막으려는 것과
- * 같은 종류의 거짓이다. ⑵ 납품 zip 은 **신뢰 밖 코드**다. 그 postinstall 을 검수자 기계에서 돌리는 것은
- * 그 자체로 사고다. `--include=dev` 는 이 러너에서는 기본 동작이지만, NODE_ENV=production 인 CI 러너에서
+ * 근거: 서빙 박스는 공급망 RCE 를 막으려 postinstall 을 **실행하지 않는다**. 검수만 실행하면
+ * postinstall 산출에 기대는 소스가 여기서 ✅ 를 받고 서빙에서 죽는다 — ⑧이 막으려는 것과 같은
+ * 종류의 거짓이다.
+ *
+ * ⚠ **`--ignore-scripts` 를 격리 수단으로 읽지 마라.** 이 러너는 그 뒤에 `npm run build`·`npm test`·
+ *   `npm run check:aeo` 를 돌리고 `--pack` 에서는 빌드를 두 번 더 굽는다 — 즉 **zip 의 스크립트를
+ *   검수자 기계에서 실행한다.** 빌드 없이 서빙 요건을 잴 방법이 없어 그렇게 설계했다.
+ *   신뢰할 수 없는 zip 을 검수한다면 **일회용 컨테이너나 VM 에서 돌려라.** 이 러너는 격리하지 않는다.
+ *   `--include=dev` 는 이 러너에서는 기본 동작이지만, NODE_ENV=production 인 CI 러너에서
  * 돌 때 devDeps 가 빠져 멀쩡한 납품물이 거짓 반려되는 것을 막는다(샌드박스가 같은 이유로 붙였다).
  * 반대로 **일부러 다르게 두는 축**도 있다: `ZALKERA_OFFLINE_BUILD=1` — 러너에 백엔드가 없다는 선언이다
  * (아래 `BUILD_ENV` 주석 참조 — 이 플래그는 지금 동작을 바꾸지 않는다).
@@ -297,7 +302,11 @@ function derivedRoutes(appDir) {
  */
 function readPackManifest(root) {
     const file = join(root, PACK_MANIFEST_PATH);
-    if (!existsSync(file) || !statSync(file).isFile()) return {state: "absent"};
+    if (!existsSync(file)) return {state: "absent"};
+    // 심링크를 따라가면 zip 이 이 러너로 **검수자 파일시스템을 읽는다** — 그 내용·키·크기가
+    // 반려문에 실린다. 시크릿 스캔·문서 좌표 검사가 쓰는 것과 같은 규율로 막는다.
+    if (lstatSync(file).isSymbolicLink()) return {state: "invalid", reason: "심링크입니다 — 읽지 않았습니다"};
+    if (!statSync(file).isFile()) return {state: "absent"};
 
     // 캡은 **파싱 전에** 잰다 — 매니페스트는 신원 선언이지 데이터 운반체가 아니다.
     const bytes = readFileSync(file);
@@ -363,6 +372,30 @@ function identityFromFilename(path) {
  * 다른 자리에서 돌리려면 `TMPDIR` 을 디스크 경로로 주면 된다(`os.tmpdir()` 이 그 값을 읽는다).
  */
 const work = mkdtempSync(join(tmpdir(), "zalkera-verify-"));
+
+/**
+ * 작업 트리를 지운다. `process.exit` 은 `try/finally` 의 `finally` 를 건너뛰므로 — 조기 반려가
+ * 그 경로다 — `exit` 훅에도 건다. 어느 경로로 끝나든 남지 않게 한다.
+ *
+ * 정리 실패는 판정이 아니다. `force` 는 ENOENT 만 삼키므로 권한 000 디렉터리가 섞인 zip 은
+ * EACCES 로 던지는데, 그 예외가 판정을 덮어쓰면 반려·통과가 정리 실패로 뒤바뀐다.
+ */
+let workRemoved = false;
+function removeWork() {
+    if (workRemoved || keep) return;
+    workRemoved = true;
+    try {
+        rmSync(work, {recursive: true, force: true});
+    } catch {
+        spawnSync("chmod", ["-R", "u+rwX", work]);
+        try {
+            rmSync(work, {recursive: true, force: true});
+        } catch (e) {
+            console.warn(`\n⚠️  작업 트리를 지우지 못했습니다: ${work} [${e.code ?? "UNKNOWN"}] — 손으로 지우십시오.`);
+        }
+    }
+}
+process.on("exit", removeWork);
 
 /** 실패 문면이 "임시 공간 부족"으로 읽히면 조치를 한 줄 덧붙인다. 아니면 조용히 지나간다. */
 function hintTmpSpace(text) {
@@ -961,23 +994,8 @@ try {
         }
     }
 } finally {
-    if (keep) {
-        console.log(`\n작업 트리 보존: ${work}`);
-    } else {
-        try {
-            rmSync(work, {recursive: true, force: true});
-        } catch {
-            // `force` 는 ENOENT 만 삼킨다 — 권한 000 디렉터리가 섞인 zip 이면 EACCES 로 던지고,
-            // 그 예외가 finally 안에서 나가면 **판정 자체를 덮어쓴다**(반려/통과가 정리 실패로 뒤바뀐다).
-            // 정리 실패는 판정이 아니다. 자리만 알려 주고 판정은 아래에서 그대로 낸다.
-            spawnSync("chmod", ["-R", "u+rwX", work]);
-            try {
-                rmSync(work, {recursive: true, force: true});
-            } catch (e) {
-                console.warn(`\n⚠️  작업 트리를 지우지 못했습니다: ${work} [${e.code ?? "UNKNOWN"}] — 손으로 지우십시오.`);
-            }
-        }
-    }
+    if (keep) console.log(`\n작업 트리 보존: ${work}`);
+    removeWork();
 }
 
 // 못 읽은 자리는 **반려**다. 조용히 건너뛰면 시크릿 스캔이 0줄 돌고도 "동봉 시크릿 없음"으로 읽힌다 —
