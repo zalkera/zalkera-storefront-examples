@@ -1,0 +1,7 @@
+{
+  "_": "가드 회귀 스위트의 파일별 통과 하한. ci.yml 과 verify-zip 이 **둘 다 여기를 읽는다** — 정본을 둘로 두면 갈린다. 현재치는 `for f in src/lib/*.test.ts; do node --experimental-strip-types --test \"$f\" | grep '^# pass'; done` 로 잰다.",
+  "src/lib/crossOrigin.test.ts": 14,
+  "src/lib/oauthState.test.ts": 7,
+  "src/lib/previewGuard.test.ts": 6,
+  "src/lib/safeUrl.test.ts": 4
+}

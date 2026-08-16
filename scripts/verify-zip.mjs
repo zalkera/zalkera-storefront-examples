@@ -717,13 +717,35 @@ try {
                 {
                     const t = spawnSync("npm", ["test"], {cwd: root, encoding: "utf8", env: BUILD_ENV, maxBuffer: 32 * 1024 * 1024});
                     const out = `${t.stdout ?? ""}${t.stderr ?? ""}`;
-                    const pass = Number(out.match(/^# pass (\d+)$/m)?.[1] ?? -1);
-                    if (t.status !== 0 || pass < 1) {
-                        record("가드 회귀 스위트", false, `\n   ${out.trim().split("\n").slice(-8).join("\n   ")}`);
-                        console.error(`   교차사이트·프리뷰·소독기 가드가 옳은지 재는 자리입니다 — 통과 ${pass < 0 ? 0 : pass}건.`);
+                    // ⚠ **총합으로 재지 않는다.** `pass >= 1` 이면 스위트를 자명 통과 시험으로 갈아치운
+                    //    zip 이 통과한다. 하한 정본은 `scripts/lib/test-floors.json` 하나이고 `ci.yml` 도
+                    //    같은 파일을 읽는다 — 정본을 둘로 두면 갈린다.
+                    let floors = null;
+                    try {
+                        floors = JSON.parse(readFileSync(join(root, "scripts", "lib", "test-floors.json"), "utf8"));
+                    } catch (e) {
+                        unread.push(`scripts/lib/test-floors.json — 못 읽었습니다 [${e.code ?? "UNKNOWN"}]`);
+                    }
+                    const short = [];
+                    if (floors) {
+                        for (const [f, min] of Object.entries(floors)) {
+                            if (f === "_") continue;
+                            const r = spawnSync("node", ["--experimental-strip-types", "--test", f], {
+                                cwd: root,
+                                encoding: "utf8",
+                                env: BUILD_ENV,
+                                maxBuffer: 32 * 1024 * 1024,
+                            });
+                            const pass = Number(`${r.stdout ?? ""}`.match(/^# pass (\d+)$/m)?.[1] ?? -1);
+                            if (pass < min) short.push(`${f} ${pass < 0 ? 0 : pass}/${min}`);
+                        }
+                    }
+                    if (t.status !== 0 || short.length || !floors) {
+                        record("가드 회귀 스위트", false, short.length ? short.join(" · ") : `\n   ${out.trim().split("\n").slice(-8).join("\n   ")}`);
+                        console.error(`   교차사이트·프리뷰·소독기 가드가 옳은지 재는 자리입니다.`);
                         failed = true;
                     } else {
-                        record("가드 회귀 스위트", true, `${pass}건 통과`);
+                        record("가드 회귀 스위트", true, `스위트별 하한 통과(${Object.keys(floors).length - 1}개)`);
                     }
                 }
 
@@ -758,6 +780,25 @@ try {
                             } else {
                                 record("프리뷰 관문 등재", true, `쓰기 프로브 ${MUST.length}개 전부 덮임`);
                             }
+                        }
+                    }
+
+                    // ⑧-b **관문이 실제로 막는가.** 등재 검사는 "실렸는가·무엇을 덮는가"만 본다 —
+                    //     판정을 무력화한 관문과 라우트 가드까지 제거한 소스를 못 가른다.
+                    //     `--pack` 에서만 돈다(프리뷰·비프리뷰 빌드를 각각 한 번 더 굽는다).
+                    if (packMode && existsSync(join(root, "scripts", "lib", "gate-behavior.mjs"))) {
+                        const g = spawnSync("node", ["scripts/lib/gate-behavior.mjs", "."], {
+                            cwd: root,
+                            encoding: "utf8",
+                            env: BUILD_ENV,
+                            maxBuffer: 32 * 1024 * 1024,
+                        });
+                        const gout = `${g.stdout ?? ""}${g.stderr ?? ""}`.trim();
+                        if (g.status !== 0) {
+                            record("프리뷰 관문 행위", false, `\n   ${gout.split("\n").slice(-6).join("\n   ")}`);
+                            failed = true;
+                        } else {
+                            record("프리뷰 관문 행위", true, gout.split("\n").pop());
                         }
                     }
 

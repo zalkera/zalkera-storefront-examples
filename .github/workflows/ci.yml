@@ -88,7 +88,8 @@ jobs:
           fail=0
           # ⚠ `docsRev.test.ts` 는 여기 없다 — 그것은 **정본 전용**이라 고객 트리에서 skip 되고,
           #   skip 은 `# pass 0` 이라 하한이 거짓 적색을 낸다. 그 시험은 `npm test` 안에서만 돈다.
-          for s in "src/lib/crossOrigin.test.ts:14" "src/lib/oauthState.test.ts:7" "src/lib/previewGuard.test.ts:6" "src/lib/safeUrl.test.ts:4"; do
+          # 하한 정본은 `scripts/lib/test-floors.json` 하나다 — `verify-zip` 도 같은 파일을 읽는다.
+          for s in $(node -e 'const f=require("./scripts/lib/test-floors.json");for(const[k,v]of Object.entries(f))if(k!=="_")console.log(k+":"+v)'); do
             f=${s%:*}; min=${s##*:}
             p=$(node --experimental-strip-types --test "$f" 2>&1 | sed -n 's/^# pass \([0-9]*\)$/\1/p' | tail -1)
             if [ -z "$p" ] || [ "$p" -lt "$min" ]; then
@@ -108,7 +109,9 @@ jobs:
         #
         # 판정은 **성질**이다: 쓰기가 닿는 프로브 경로가 전부 덮이는가. 리터럴 matcher 를 요구하면
         # 정적 파일을 빼는 정당한 완화도 막힌다(`scripts/lib/gate-probe.mjs`).
-        run: node scripts/lib/gate-probe.mjs
+        run: |
+          node scripts/lib/gate-probe.mjs
+          node scripts/lib/gate-behavior.mjs .
 
       - name: 서빙 산출물 (.next/standalone/server.js)
         # memo145 — `next build` 성공은 **서빙된다**를 뜻하지 않는다. 잘커라 호스팅은 `next start` 가
