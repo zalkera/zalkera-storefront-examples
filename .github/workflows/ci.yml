@@ -124,11 +124,27 @@ jobs:
         # 쓰기 차단이 통째로 꺼지는데, 소스를 읽는 검사는 그 형상을 못 본다 — 파일이 멀쩡해도 위치
         # 오류·matcher 오염·규약 변경으로 안 실릴 수 있다.
         #
-        # 판정은 **성질**이다: 쓰기가 닿는 프로브 경로가 전부 덮이는가. 리터럴 matcher 를 요구하면
+        # 판정은 **성질**이다: 이 트리의 라우트가 전부 덮이는가. 리터럴 matcher 를 요구하면
         # 정적 파일을 빼는 정당한 완화도 막힌다(`scripts/lib/gate-probe.mjs`).
+        #
+        # ■ **행위 검사는 우리 레포에서만 돈다.** 그것은 프리뷰·비프리뷰 빌드를 각각 한 번 더 구우므로
+        #   `next build` **1회 시간의 2배**가 잡에 얹힌다 — 이 기계에서 12.84s → 26.54s(12코어, +107%),
+        #   2코어로 조이면 18.65s → 40.77s(+119%). 그 시간은 테넌트마다 매 푸시·매 PR 에 붙고,
+        #   BuildGate 가 이 워크플로를 읽으므로 곧 "말로 고치기"의 지연이 된다.
+        #   재현: `time bash -c 'npm run build && node scripts/lib/gate-behavior.mjs .'`
+        #
+        #   그 오라클이 잡는 것은 **팩 소스의 관문이 무력화됐는가**이고, 그건 4벌이 갈리는 것을 막는
+        #   우리 문제다 — 보호는 우리가 받고 벌은 고객이 무는 배치가 된다(방문자 IP 검사기를 배송에서
+        #   뺀 것과 같은 논리). 고객 zip 에 대한 집행은 `verify-zip --pack` 이 진다.
+        #   등재 검사(`gate-probe`)는 0.03s 라 그대로 둔다.
+        #
+        #   ⚠ `gate-behavior.mjs` 자체는 **계속 배송한다.** `verify-zip --pack` 이 zip 안의 그 파일을
+        #     부르고, 부재를 반려로 치기 때문이다. 빼면 우리 팩 라운드가 통째로 막힌다.
         run: |
           node scripts/lib/gate-probe.mjs
-          node scripts/lib/gate-behavior.mjs .
+          if [ -d presets ] && [ -f scripts/pack-preset.mjs ]; then
+            node scripts/lib/gate-behavior.mjs .
+          fi
 
       - name: 서빙 산출물 (.next/standalone/server.js)
         # memo145 — `next build` 성공은 **서빙된다**를 뜻하지 않는다. 잘커라 호스팅은 `next start` 가

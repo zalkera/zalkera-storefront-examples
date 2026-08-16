@@ -17,9 +17,15 @@
  * **점 있는 경로**를 같이 태운다. matcher 를 확장자로 가르면 동적 세그먼트에 점이 든 쓰기 경로가
  * 통째로 관문 밖이 되는데, 그 형상은 등재 검사가 못 본다(프로브 목록이 같은 전제 위에 서기 때문).
  *
- * **음성 통제군**: 프리뷰가 아닌 빌드에서 같은 요청이 **4xx·5xx 면 안 된다.** 코드만 봐서는
- * "코드를 바꿔 단 채 전부 죽이는 서버"가 통과한다. 읽기 한 건(`GET /` 200)도 같이 요구해,
- * 비프리뷰 서버가 통째로 500 인 상태를 초록으로 읽지 않게 한다.
+ * 프리뷰 쪽은 **상태와 코드를 둘 다** 요구한다(`403` + `PREVIEW_READ_ONLY`). 코드만 보면
+ * `200 {"code":"PREVIEW_READ_ONLY"}` 만 내는 사칭 서버가 통과한다.
+ *
+ * **음성 통제군**: 프리뷰가 아닌 빌드에서 **관문이 돈 흔적이 없어야** 한다. 프로브의 4xx·5xx 는
+ * 정상이다 — 그 경로는 존재하지 않으므로 404 가 맞고, `[slug]` 가 받는 페이지 프로브는 콘텐츠가
+ * 없어 500 이 난다. "서버가 통째로 죽었는가"는 읽기 한 건(`GET /` 200)이 따로 진다.
+ *
+ * 프리뷰 여부는 **빌드와 런타임 양쪽**에 같게 준다. 판별자가 받는 이름이 둘이라(`PREVIEW_ENV_NAMES`)
+ * 한쪽만 지우면 비프리뷰 빌드가 실행 시점에 프리뷰로 돌아 통제군이 전부 걸린다.
  *
  * ## 포트는 잡아서 쓴다
  *
@@ -36,6 +42,29 @@ import {join} from "node:path";
 import {createServer} from "node:net";
 
 const root = process.argv[2] ?? ".";
+
+/**
+ * 프리뷰 판별자가 받는 이름 **전부**. `src/lib/preview.ts` 와 같이 움직여야 한다 —
+ * 여기 하나를 빠뜨리면 비프리뷰 빌드가 프리뷰가 되어 거짓 반려가 난다.
+ * 첫 번째가 정본 이름이다(프리뷰 빌드에 그것을 준다).
+ */
+const PREVIEW_ENV_NAMES = ["NEXT_PUBLIC_ZALKERA_PREVIEW", "NEXT_PUBLIC_ONEQUE_PREVIEW"];
+
+/**
+ * 띄운 자식 전부. `process.exit` 은 `try/finally` 의 `finally` 를 **건너뛴다**(실측:
+ * `node -e 'try{process.exit(3)}finally{console.log("x")}'` → 아무것도 안 찍힌다).
+ * 그래서 정리를 `finally` 에만 두면 프로브 실패 한 번에 서버가 고아로 남아 RSS 를 무기한 붙든다.
+ * 어느 경로로 끝나든 죽도록 `exit` 훅에 건다.
+ */
+const children = new Set();
+process.on("exit", () => {
+    for (const c of children) {
+        try {
+            c.kill("SIGKILL");
+        } catch {}
+    }
+});
+
 const PROBES = [
     "/api/__gate_probe_nonexistent__",
     "/api/__gate_probe__/7.0",
@@ -50,8 +79,12 @@ function build(preview) {
         ZALKERA_TENANT: process.env.ZALKERA_TENANT ?? "gate-probe",
         ZALKERA_OFFLINE_BUILD: "1",
     };
-    if (preview) env.NEXT_PUBLIC_ZALKERA_PREVIEW = "1";
-    else delete env.NEXT_PUBLIC_ZALKERA_PREVIEW;
+    // ⚠ **판별자가 받는 이름을 전부** 지운다. `src/lib/preview.ts` 는 구 이름(`NEXT_PUBLIC_ONEQUE_PREVIEW`)
+    //   도 수용한다 — 하나만 지우면 환경에 구 이름이 있을 때 "비프리뷰" 빌드가 실제로는 프리뷰가 되고,
+    //   음성 통제군이 전부 걸려 **정상 팩을 거짓 반려**한다.
+    //   재현: `NEXT_PUBLIC_ONEQUE_PREVIEW=1 node scripts/lib/gate-behavior.mjs .`
+    for (const k of PREVIEW_ENV_NAMES) delete env[k];
+    if (preview) env[PREVIEW_ENV_NAMES[0]] = "1";
     const r = spawnSync("npm", ["run", "build"], {cwd: root, env, encoding: "utf8", maxBuffer: 64 * 1024 * 1024});
     if (r.status !== 0) {
         console.error(`[gate-behavior] ${preview ? "프리뷰" : "비프리뷰"} 빌드 실패 — 판정할 수 없습니다.`);
@@ -72,7 +105,7 @@ function freePort() {
     });
 }
 
-async function serve(fn) {
+async function serve(preview, fn) {
     const sa = join(root, ".next", "standalone");
     if (!existsSync(join(sa, "server.js"))) {
         console.error("[gate-behavior] standalone 산출물이 없습니다 — 판정할 수 없습니다.");
@@ -85,11 +118,17 @@ async function serve(fn) {
         if (existsSync(from)) cpSync(from, to, {recursive: true, force: true});
     }
     const port = await freePort();
+    // ⚠ 런타임 환경도 빌드와 **같은 선언**이어야 한다. 판별자는 서버에서 다시 읽히므로, 여기에
+    //   구 이름이 남아 있으면 비프리뷰 빌드가 실행 시점에 프리뷰로 돌아 음성 통제군이 전부 걸린다.
+    const env = {...process.env, PORT: String(port), HOSTNAME: "127.0.0.1"};
+    for (const k of PREVIEW_ENV_NAMES) delete env[k];
+    if (preview) env[PREVIEW_ENV_NAMES[0]] = "1";
     const srv = spawn(process.execPath, ["server.js"], {
         cwd: sa,
-        env: {...process.env, PORT: String(port), HOSTNAME: "127.0.0.1"},
+        env,
         stdio: ["ignore", "pipe", "pipe"],
     });
+    children.add(srv);
     // 서버가 일찍 죽으면 그 사실과 이유를 말한다 — 안 그러면 타임아웃만 남고 원인이 사라진다.
     let log = "";
     let dead = null;
@@ -121,6 +160,7 @@ async function serve(fn) {
         return await fn(base);
     } finally {
         srv.kill("SIGKILL");
+        children.delete(srv);
     }
 }
 
@@ -155,13 +195,19 @@ async function probe(base) {
 }
 
 build(true);
-const on = await serve(probe);
+const on = await serve(true, probe);
 build(false);
-const off = await serve(probe);
+const off = await serve(false, probe);
 
-const bad = on.out.filter((r) => r.code !== "PREVIEW_READ_ONLY");
-// 음성 통제군은 **코드가 아니라 상태**로 판정한다 — 코드만 보면 503 로 갈아 단 차단이 통과한다.
-const falsePositive = off.out.filter((r) => r.status >= 400);
+// **상태와 코드를 둘 다** 본다. 코드만 보면 `200 {"code":"PREVIEW_READ_ONLY"}` 만 내는 사칭
+// 서버가 통과한다 — 관문은 403 을 내므로 상태까지 요구하는 것이 정확한 판정이다.
+const bad = on.out.filter((r) => r.status !== 403 || r.code !== "PREVIEW_READ_ONLY");
+// 음성 통제군에서 **프로브의 4xx·5xx 는 정상이다** — 그 경로는 존재하지 않으므로 404 가 맞고,
+// `[slug]` 가 받는 페이지 프로브는 콘텐츠가 없어 500 이 난다. 여기서 위반은 **관문이 돈 흔적**
+// 하나뿐이다. 상태 전체를 위반으로 치면 정상 팩이 거짓 반려된다 — 비프리뷰 서버에 물어 보면
+// 404·404·404·500 이 나온다. 재현: `node scripts/lib/gate-behavior.mjs .` (통과 줄의 괄호 안 값)
+// "서버가 통째로 죽었는가"는 아래 `off.home` 이 진다 — 그것이 이 통제군의 몫이다.
+const falsePositive = off.out.filter((r) => r.status === 403 || r.code === "PREVIEW_READ_ONLY");
 
 if (bad.length) {
     console.error("[gate-behavior] **프리뷰에서 쓰기가 안 막힙니다** — 관문이 그 경로에 안 걸립니다:");
