@@ -4,15 +4,17 @@
  *
  * ## 왜 별도 기준 문서를 안 썼나
  *
- * 12판 동안 배송 문서가 반복해서 반려 사유가 됐다. 그 문제를 **또 하나의 문서**로 풀면 그 문서도
+ * 배송 문서가 반복해서 반려 사유가 됐다. 그 문제를 **또 하나의 문서**로 풀면 그 문서도
  * 같은 이유로 낡는다 — 아무도 안 읽고, 읽어도 지켰는지 아무도 안 잰다. 그래서 규칙을 문장이 아니라
  * **기계**로 둔다. 이 파일의 판정이 곧 규칙이고, 규칙을 바꾸려면 이 코드를 고쳐야 한다.
  *
- * ## 12판의 문서발 반려를 유형으로 묶으면
+ * ## 문서발 반려를 유형으로 묶으면
  *
  *  ⒜ **최상급·절대문** — "가장 흔한"·"유일한 정본"·"전부"·"비용이 사실상 0". 명령 한 줄로 반증된다.
  *  ⒝ **낡은 고정 수치** — `17/17`·`27/27`·`18·9·3·6`·`267→910ms`. 대상이 바뀌면 문장이 거짓이 된다.
  *  ⒞ **재현 수단 없는 "(실측)" 라벨** — 권위 있게 들리는데 아무도 다시 안 잰다.
+ *  ⒣ **돌려보지 않고 쓴 집행 주장** — "이건 이제 `gate-probe` 가 잡는다". 가장 자주 반복됐다.
+ *  ⒤ **이력 서술** — 읽는 쪽이 과거 규칙과 현재 규칙을 가르는 데 토큰을 쓴다.
  *  ⒟ **교차표면 모순** — 같은 사실을 문서 넷이 다르게 말한다(X1 이 error 인가 warning 인가).
  *  ⒠ **상류 정정 미전파** — `@zalkera/client` KDoc 은 고쳤는데 팩 문서는 그대로.
  *  ⒡ **자기확증 검증 명령** — 이미 참인 것에 물어 승인만 하는 오라클.
@@ -30,8 +32,14 @@
  * `node scripts/lib/doc-claims.mjs` 가 돌 때마다 현재치를 찍는다.
  * ⒝ 도 같은 이유로 잡힌다 — 수치에 재현 수단이 없으면 낡는 순간 아무도 모른다.
  *
- * 그래서 이 검사기는 **⒞ 하나만** 잰다. 넓히지 마라 — ⒜ 를 넣으면 오탐 43건으로 시작하고,
- * 오탐이 많은 검사기는 꺼진다.
+ * 이 검사기는 **세 규칙**을 잰다. 셋 다 낱말이 아니라 **형태**를 보므로 기계가 판정할 수 있다.
+ *
+ *   ⓐ **측정 주장**("실측")에 재현 명령이 붙었는가.
+ *   ⓑ **집행 주장**("무엇이 잡힌다")에 명령**과 예상 결과**가 붙었는가 — 아래 규칙 ⓑ.
+ *   ⓒ **이력 서술**이 배송물에 들어왔는가 — 아래 규칙 ⓒ.
+ *
+ * ⒜(최상급·절대문)는 넣지 않았다. 금지어 grep 으로 재 보니 표본이 전부 정상 한국어였고,
+ * 오탐이 많은 검사기는 꺼진다. ⒟⒠⒡⒢ 와 함께 **사람 몫**이다.
  *
  * ## 규칙
  *
@@ -84,7 +92,7 @@ const BASELINE = {
     ".prettierignore": 8,
     "AGENTS.md": 1,
     "scripts/gen-preset-assets.mjs": 1,
-    "scripts/lib/doc-claims.mjs": 4,
+    "scripts/lib/doc-claims.mjs": 8,
     "scripts/lib/visitor-ip-parity.mjs": 6,
     "scripts/lib/wiring-parity.mjs": 2,
     "scripts/pack-preset.mjs": 13,
@@ -105,6 +113,85 @@ const BASELINE = {
     "src/lib/safeUrl.test.ts": 1,
     "src/lib/safeUrl.ts": 6,
     "src/lib/session.ts": 1,
+};
+
+/**
+ * ## 규칙 ⓑ — **집행 주장은 명령과 예상 결과를 같이 적는다**
+ *
+ * "이 형상은 `gate-probe` 가 잡는다"·"`{}` 로 비워도 여기서 걸린다"·"`verify-zip` 이 그것을 부른다"
+ * 처럼 **무엇이 잡히는가**를 말하는 문장이 열여섯 판에 걸쳐 반복해서 거짓이었다. 전부 같은 방식으로
+ * 생겼다 — 수리를 하고, 그 옆에 "이건 이제 잡힌다"를 **돌려보지 않고** 적었다.
+ *
+ * 그래서 이 규칙은 근처에 명령이 있는 것으로 만족하지 않고 **예상 결과**(`rc=`·`→`·`# pass`·`❌`)를
+ * 같이 요구한다. 결과는 돌려보지 않으면 쓸 수 없다 — 그것이 이 규칙의 전부다.
+ *
+ * ⚠ 명령만 있고 결과가 없어 통과하던 문장이 실제로 거짓이었다(`ci.yml`·`verify-zip` 이 부른다 —
+ *   `--pack` 에서만 불렀다). 그래서 둘 다 요구한다.
+ *
+ * 고치는 법: 주장을 지우거나, 옆에 이렇게 적어라.
+ *     재현: `npm run build && node scripts/lib/gate-probe.mjs; echo rc=$?` → rc=1
+ */
+const ENFORCE_CLAIM = /잡[는힌]다|잡[습힙]니다|막[는힌]다|막[습힙]니다|반려한다|반려합니다|덮인다|덮입니다|걸린다|걸립니다|부른다|부릅니다|본다\b|봅니다/;
+/** 그 주장의 주어가 기계이거나 이 파일 자신인 것. 사람·업무 서술은 여기 안 걸린다. */
+const ENFORCE_AGENT = /gate-probe|gate-behavior|verify-zip|doc-claims|wiring-parity|validate-storefront|ci\.yml|middleware|previewGuard|관문|검사기|러너|여기서|이 검사|라우트/;
+/** **예상 결과** — 돌려보지 않으면 못 쓴다. */
+const EXPECTED = /rc\s*=|rc\s*[0-9]|→|# pass|# fail|exit\s*[0-9]|❌|✅/;
+
+/**
+ * ## 규칙 ⓒ — **배송물에 이력을 쓰지 않는다**
+ *
+ * "종전 판본은 ~라고 적었다"·"세 판 연속"·"3.0.28 에서"·"내 실수"·"심의 실측". 읽는 쪽은 현재
+ * 기준을 뽑아내려고 과거 규칙과 현재 규칙을 구분하는 데 시간을 쓴다. 이 배송물의 1차 소비자는
+ * 코딩 에이전트이고, 온라인 레인에서 그 토큰은 **고객 청구서**다.
+ *
+ * 이력이 갈 곳: 커밋 메시지 · `dist-presets/_superseded/README-*.md` · 심의 보고서.
+ * 규칙이 그 형태인 **이유(제약)** 는 남긴다 — 그건 현재 사실이다.
+ */
+const HISTORY = /종전 ?판|이전 ?판|옛 ?판|[0-9]+판째|판 연속|직전 ?판|내 실수|심의 실측|심의가 잡|20[0-9]{2}-[01][0-9]-[0-3][0-9]|3\.0\.[0-9]+/;
+
+/** 규칙 ⓑ 의 파일별 부채 상한(래칫). 줄일 수는 있어도 늘릴 수 없다. */
+const ENFORCE_BASELINE = {
+    ".github/workflows/ci.yml": 1,
+    "scripts/lib/doc-claims.mjs": 3,
+    ".github/workflows/deps-payload.yml": 1,
+    "AGENTS.md": 4,
+    "CUSTOMIZE.md": 2,
+    "scripts/lib/gate-behavior.mjs": 5,
+    "scripts/lib/gate-probe.mjs": 2,
+    "scripts/lib/visitor-ip-parity.test.mjs": 1,
+    "scripts/pack-preset.mjs": 5,
+    "scripts/verify-zip.mjs": 7,
+    "src/app/api/booking/availability/route.ts": 2,
+    "src/app/api/cart/items/[variantId]/route.ts": 1,
+    "src/app/api/consents/route.ts": 1,
+    "src/app/products/[slug]/BookingPanel.tsx": 1,
+    "src/lib/crossOrigin.test.ts": 1,
+    "src/lib/preview.ts": 1,
+    "src/lib/previewGuard.test.ts": 2,
+    "src/lib/previewGuard.ts": 4,
+    "src/middleware.ts": 5,
+};
+
+/** 규칙 ⓒ 의 파일별 부채 상한(래칫). 줄일 수는 있어도 늘릴 수 없다. */
+const HISTORY_BASELINE = {
+    ".github/workflows/ci.yml": 3,
+    "scripts/lib/doc-claims.mjs": 2,
+    ".github/workflows/deps-payload.yml": 2,
+    ".prettierignore": 5,
+    "AGENTS.md": 3,
+    "CUSTOMIZE.md": 3,
+    "README.md": 2,
+    "scripts/lib/visitor-ip-parity.mjs": 6,
+    "scripts/lib/wiring-parity.mjs": 1,
+    "scripts/pack-preset.mjs": 15,
+    "scripts/snapshot-preview.mjs": 2,
+    "scripts/validate-storefront.mjs": 1,
+    "scripts/verify-zip.mjs": 14,
+    "src/components/ProductRail.tsx": 1,
+    "src/lib/env.ts": 1,
+    "src/lib/preview.ts": 2,
+    "src/lib/safeUrl.test.ts": 1,
+    "src/lib/safeUrl.ts": 4,
 };
 
 /** 근처 몇 줄까지 명령을 찾아 줄 것인가. 넓히면 무관한 명령이 알리바이가 된다. */
@@ -134,7 +221,10 @@ function main() {
         process.exit(2);
     }
     const bad = [];
+    const enforceBad = [];
+    const historyBad = [];
     let claims = 0;
+    let enforce = 0;
     for (const f of files) {
         let lines;
         try {
@@ -144,12 +234,25 @@ function main() {
             process.exit(2);
         }
         for (const [i, line] of lines.entries()) {
-            if (!CLAIM.test(line)) continue;
-            claims++;
             const near = lines.slice(Math.max(0, i - NEAR), i + NEAR + 1);
-            if (near.some((l) => CMD.test(l))) continue;
-            bad.push({file: f, line: i + 1, text: line.trim().slice(0, 96)});
+            if (CLAIM.test(line)) {
+                claims++;
+                if (!near.some((l) => CMD.test(l))) bad.push({file: f, line: i + 1, text: line.trim().slice(0, 96)});
+            }
+            // ⓑ 집행 주장 — 명령**과** 예상 결과를 둘 다 요구한다.
+            if (ENFORCE_CLAIM.test(line) && ENFORCE_AGENT.test(line)) {
+                enforce++;
+                if (!(near.some((l) => CMD.test(l)) && near.some((l) => EXPECTED.test(l)))) {
+                    enforceBad.push({file: f, line: i + 1, text: line.trim().slice(0, 96)});
+                }
+            }
+            // ⓒ 이력 서술.
+            if (HISTORY.test(line)) historyBad.push({file: f, line: i + 1, text: line.trim().slice(0, 96)});
         }
+    }
+    if (enforce === 0) {
+        console.error("[doc-claims] 집행 주장을 하나도 못 찾았습니다 — 판별자가 깨졌습니다(통과가 아닙니다).");
+        process.exit(2);
     }
     if (claims === 0) {
         console.error("[doc-claims] 측정 주장을 하나도 못 찾았습니다 — 판별자가 깨졌습니다(통과가 아닙니다).");
@@ -166,6 +269,34 @@ function main() {
     const total = bad.length;
     const budget = Object.values(BASELINE).reduce((a, b) => a + b, 0);
 
+    // ── 규칙 ⓑ·ⓒ 도 같은 래칫이다. 파일별 상한을 얼려 두고 **늘어나는 것만** 막는다.
+    const ratchet = (items, baseline, title, howto) => {
+        const byFile = {};
+        for (const b of items) byFile[b.file] = (byFile[b.file] ?? 0) + 1;
+        const grew = Object.entries(byFile).filter(([f, n]) => n > (baseline[f] ?? 0));
+        if (!grew.length) return {ok: true, total: items.length, budget: Object.values(baseline).reduce((a, b) => a + b, 0)};
+        console.error(`[doc-claims] **${title}**\n`);
+        for (const [f, n] of grew) {
+            console.error(`  ${f}  ${baseline[f] ?? 0} → ${n}`);
+            for (const b of items.filter((x) => x.file === f)) console.error(`    :${b.line}  ${b.text}`);
+        }
+        console.error(`\n  ${howto}`);
+        return {ok: false};
+    };
+    const rb = ratchet(
+        enforceBad,
+        ENFORCE_BASELINE,
+        "집행 주장이 늘었습니다 — 무엇이 잡히는지 말하려면 **명령과 예상 결과**를 같이 적으십시오.",
+        "예: 재현: `npm run build && node scripts/lib/gate-probe.mjs; echo rc=$?` → rc=1\n  결과를 쓸 수 없다면 그 주장을 아직 안 돌려본 것입니다. 돌려보거나 주장을 지우십시오.",
+    );
+    const rc2 = ratchet(
+        historyBad,
+        HISTORY_BASELINE,
+        "배송물에 이력 서술이 늘었습니다 — 지금의 규약만 적으십시오.",
+        "이력이 갈 곳: 커밋 메시지 · dist-presets/_superseded/README-*.md · 심의 보고서.\n  규칙이 그 형태인 **이유(제약)** 는 남기십시오 — 그건 현재 사실입니다.",
+    );
+    if (!rb.ok || !rc2.ok) process.exit(1);
+
     if (grown.length) {
         console.error(`[doc-claims] **재현 명령 없는 측정 주장이 늘었습니다.** 새 주장에는 명령을 다십시오.\n`);
         for (const [f, n] of grown) {
@@ -177,7 +308,7 @@ function main() {
         process.exit(1);
     }
     console.log(
-        `측정 주장 검사 통과 — 주장 ${claims}건 중 재현 명령 없는 것 ${total}건(상한 ${budget}) · 파일 ${files.length}개` +
+        `문서 규약 검사 통과 — 측정주장 ${claims}건 중 명령없음 ${total}건(상한 ${budget}) · 집행주장 ${enforce}건 중 결과없음 ${rb.total}건(상한 ${rb.budget}) · 이력 ${rc2.total}건(상한 ${rc2.budget}) · 파일 ${files.length}개` +
             (paid.length ? `\n  갚은 자리: ${paid.map(([f, n]) => `${f} ${n}→${byFile[f] ?? 0}`).join(" · ")}` : ""),
     );
 }
