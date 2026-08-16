@@ -68,12 +68,24 @@
 | 섹션(히어로·특징·후기·FAQ…)의 생김새 | `src/components/sections/*.tsx` | 보통 |
 | 버튼·카드·아이콘 모양 | `src/components/ui/*.tsx` | 보통 |
 | 상품·장바구니·결제 화면 | `src/app/products` · `cart` · `checkout` | 어려움 |
-| 새 페이지 추가 | `content/pages/<이름>.json` **또는** `src/app/<경로>/page.tsx` | 쉬움 / 보통 |
+| 새 페이지 추가 | `content/pages/<이름>.json` **+ `content/index.ts` 두 줄** **또는** `src/app/<경로>/page.tsx` | 쉬움 / 보통 |
 
 ### 페이지를 늘리는 길은 둘이고, 둘 다 정상입니다
 
-**⑴ 콘텐츠 파일** — `content/pages/회사연혁.json` 을 넣으면 `/회사연혁` 이 생깁니다. 섹션 어휘로 적으니
-우리 컴포넌트가 그려 주고, 나중에 콘솔 편집을 붙이기도 쉽습니다. 빠른 길입니다.
+**⑴ 콘텐츠 파일** — `content/pages/회사연혁.json` 을 넣고 `content/index.ts` 에 **두 줄**을 더하면
+`/회사연혁` 이 생깁니다. 섹션 어휘로 적으니 우리 컴포넌트가 그려 주고, 나중에 콘솔 편집을 붙이기도 쉽습니다.
+
+```ts
+// content/index.ts
+import history from "./pages/회사연혁.json";   // ← 한 줄
+
+export const pages: Record<string, unknown> = {
+    회사연혁: history,                        // ← 한 줄
+};
+```
+
+**json 만 넣으면 페이지는 안 생깁니다.** 정적 import 가 없으면 빌드 산출물에 콘텐츠가 안 실리고,
+`npm run validate` 가 `[N3]` 으로 막습니다(위 표 참조). 파일 이름은 한글이어도 됩니다.
 
 **⑵ 손으로 짠 라우트** — `src/app/회사연혁/page.tsx` 를 직접 만듭니다. 섹션 어휘를 안 써도 되고,
 마크업을 마음대로 짜면 됩니다. **막는 규칙이 없습니다** — 라우트를 몇 개 만들든, 어떤 모양이든 자유입니다.
@@ -89,9 +101,12 @@
 즉 **SEO 를 포기하고 원하는 대로 짜는 것도 선택지입니다.** 대가는 검색·AI 에 덜 노출되는 것이고,
 그건 당신 몫입니다. 나중에 마음이 바뀌면 파일 몇 개 추가로 얹을 수 있습니다(마크업·CSS 를 안 건드립니다).
 
-### 다만 셋은 우리가 서빙할 때 막습니다
+### 우리가 서빙할 때 보는 셋 — 둘은 막고, 하나는 경고만 냅니다
 
-우리 인프라에서, 우리가 넣어 준 시크릿 키를 들고 도는 사이트라면 아래 셋은 반려 사유입니다.
+우리 인프라에서, 우리가 넣어 준 시크릿 키를 들고 도는 사이트라면 아래 셋을 봅니다. **검사기가 rc 1 로 막는 것은
+아래 둘(시크릿 노출 · 서버 렌더 강제)이고, 교차사이트 위조 가드는 어느 모드에서도 경고입니다** — 사람이 봐야 합니다.
+재현: 가드 없는 `POST` 라우트를 하나 만들고 `node scripts/validate-storefront.mjs ./src --gate; echo rc=$?`
+→ `⚠️  [X1] …` 한 줄과 `✅ 통과 … (경고 1)` · `rc=0`
 
 | 무엇 | 왜 |
 |---|---|
@@ -194,11 +209,12 @@ node scripts/verify-zip.mjs 내가고친것.zip
 아래 **스타일 축(S)** 이 경고가 아니라 오류로 막힙니다(선언한 계약을 지키는지 보는 것입니다).
 
 ⚠ **나머지 축은 `npm run validate` 에서 경고입니다 — 통과가 안전을 뜻하지 않습니다.**
-검사기가 첫 줄에 무엇이 격상되는지 직접 찍습니다:
+검사기가 무엇을 격상하는지 스스로 찍습니다:
 
 ```bash
-npm run validate | head -1
+npm run validate | grep '규약 모드'
 # 스타일 규약 모드: declared (tailwind-tokens 계약 — S2/S4 error 격상)
+# 콘텐츠 규약 모드: declared (content=source 계약 — N 규칙 error)
 ```
 
 **`npm run validate` 가 rc 1 로 막는 것**
@@ -211,6 +227,8 @@ npm run validate | head -1
 | **S4** | `bg-[#e91e63]` 같은 색 하드코딩 | 콘솔에서 색을 바꿔도 그 자리만 안 바뀝니다 |
 | **S6** | 남의 디자인시스템 토큰 이름(`bg-card`·`text-muted-foreground` 등) | 우리에겐 정의가 없어 **색이 조용히 빠집니다** |
 | **S8** | `layout.tsx` 의 테마 주입 배선 제거 | 콘솔의 색 변경이 **성공 표시만 내고 화면은 그대로**가 됩니다 |
+| **N1~N5** | `content/pages/*.json` 과 `content/index.ts` 의 배선이 어긋나거나, JSON 이 깨졌거나, 가리킨 이미지가 없음 | 페이지가 **조용히 안 생기거나** 개시 후 깨진 이미지가 나옵니다 |
+| **D1·D2** | `AGENTS.md`·`llms.txt` 가 **없는 파일**을 가리킴 | codegen 이 이 문서를 가장 먼저 읽습니다 — 죽은 좌표는 AI 를 헤매게 합니다 |
 
 **경고로만 나오는 것 — 보이면 직접 고쳐야 합니다**
 
@@ -223,8 +241,9 @@ npm run validate | head -1
 | **S5** | `globals.css` 외의 `.css` 파일 추가 | 색의 출처가 둘로 갈립니다 |
 | **X1~X3** | 변이 라우트에 교차사이트 위조 가드 없음 | 공격자 페이지가 **당신 사이트 방문자**의 브라우저로 요청을 보냅니다 |
 
-E·C·X 축은 우리가 서빙할 때(`--gate`) 오류로 올라갑니다 — S5 는 그때도 경고입니다.
-재현: `node scripts/validate-storefront.mjs ./src --gate; echo rc=$?`
+**E·C 축**은 우리가 서빙할 때(`--gate`) 오류로 올라갑니다. **X 와 S5 는 어느 모드에서도 경고입니다** —
+관문도 그것들은 안 막으니, `⚠️ [X1]` 이 보이면 통과했더라도 사람이 고쳐야 합니다.
+재현: `node scripts/validate-storefront.mjs ./src --gate; echo rc=$?` → `⚠️ [X1] …` 이 있어도 `rc=0`
 
 ⚠ **S1 은 `.css` 파일 안은 안 봅니다.** `globals.css` 에 `var(--oneq-*)` 를 남겨도 안 잡힙니다.
 
