@@ -104,7 +104,8 @@ test("통제군 — 면제 목록이 배송 라우트의 마커와 일치한다"
     //   그것이 이 시험이 막는 것이다. 반대(목록에 있는데 라우트가 없음)는 아무 권한도 안 준다.
     //   안 쓰는 능력을 지운 사이트는 늘 그 상태가 되므로, 그것까지 반려하면 **정상 커스터마이즈가
     //   빨개진다**.
-    const unauthorized = marked.filter((route) => ![...PREVIEW_WRITE_ALLOW].includes(route));
+    const allowed: readonly string[] = PREVIEW_WRITE_ALLOW;
+    const unauthorized = marked.filter((route) => !allowed.includes(route));
     assert.deepEqual(unauthorized, [], `검수 안 받은 프리뷰 쓰기 면제 마커: ${unauthorized.join(" ")}`);
 });
 
