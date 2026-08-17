@@ -74,6 +74,48 @@ if (!existsSync(pagesDir)) {
     console.log("콘텐츠 페이지 라우트 — content/pages 가 없습니다. 잴 것이 없습니다(매니페스트도 비어 있습니다).");
     process.exit(0);
 }
+// ── ⓑ **sitemap 제외 목록이 진짜 라우트와 맞는가** — 빌드가 아는 것으로 대조한다.
+//
+//    `src/lib/reservedSegments.ts` 는 소스를 보고 «이 이름이 `[slug]` 를 가린다» 를 **추측**한다
+//    (`page.tsx`/`route.ts` 가 있나). 추측이 틀리면 두 방향으로 샌다 — 가려지는데 빠뜨리면 죽은 URL 을
+//    크롤러에 광고하고, 안 가려지는 것을 넣으면 멀쩡한 페이지가 sitemap 에서 사라진다.
+//
+//    빌드는 추측하지 않는다. `app-path-routes-manifest.json` 이 **동적 라우트까지 포함해** 실제로
+//    존재하는 라우트를 적는다(`/cart` 는 프리렌더가 없어 `prerender-manifest` 에는 안 나온다).
+//    여기서 그 둘을 맞춰 본다.
+//
+//    재현: `src/lib/reservedSegments.ts` 에서 `"blog"` 를 빼고 `npm run build && node
+//    scripts/lib/content-routes.mjs; echo rc=$?` → `rc=1` · `가려지는데 목록에 없습니다: blog`
+{
+    const appPaths = join(root, ".next", "app-path-routes-manifest.json");
+    const listSrc = join(root, "src", "lib", "reservedSegments.ts");
+    if (existsSync(appPaths) && existsSync(listSrc)) {
+        let manifest;
+        try {
+            manifest = JSON.parse(readFileSync(appPaths, "utf8"));
+        } catch (e) {
+            console.error(`❌ sitemap 제외 목록 — 라우트 산출물을 못 읽었습니다 [${e.code ?? "PARSE"}](통과가 아닙니다).`);
+            process.exit(2);
+        }
+        // 최상위 한 세그먼트짜리 실제 라우트. `_` 로 시작하는 내부 라우트와 파일형(`robots.txt`)은 뺀다.
+        const real = new Set(
+            Object.values(manifest)
+                .map((url) => /^\/([^/]+)$/.exec(String(url))?.[1])
+                .filter((name) => name && !name.startsWith("_") && !name.startsWith("[") && !name.includes(".")),
+        );
+        const declared = new Set(
+            [...readFileSync(listSrc, "utf8").matchAll(/^\s*"([^"]+)",/gm)].map((m) => m[1]),
+        );
+        const missing = [...real].filter((name) => !declared.has(name)).sort();
+        if (missing.length) {
+            console.error(`❌ sitemap 제외 목록 — 가려지는데 목록에 없습니다: ${missing.join(" ")}`);
+            console.error("   그 이름의 콘텐츠 페이지는 다른 화면이 뜨는데 sitemap 이 그 URL 을 광고합니다.");
+            console.error("   `src/lib/reservedSegments.ts` 에 더하십시오.");
+            process.exit(1);
+        }
+    }
+}
+
 // ── ⓐ **소스 배선** — 빌드 없이 잡는다. 키가 곧 URL 이고 값이 그 페이지여야 한다.
 //
 //    빌드 산출물로는 원리상 못 보는 형태가 하나 있다: 키는 맞는데 **값이 남의 페이지**인 배선

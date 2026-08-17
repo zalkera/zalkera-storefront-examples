@@ -16,6 +16,66 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const RUNNER = join(HERE, "..", "verify-zip.mjs");
 const src = readFileSync(RUNNER, "utf8");
 
+/**
+ * 그 자리가 **주석이나 문자열 안**인가. 앞에서부터 훑어서 판정한다.
+ *
+ * ⚠ 줄 안에서 `//` 를 찾는 방식은 양쪽으로 틀린다: 같은 줄 앞에 `"http://x"` 가 있으면 진짜
+ *   `import()` 를 주석으로 보아 **놓치고**, 한 줄짜리 블록 주석은 못 알아보아 **오검**한다.
+ *   문자열·주석 상태를 앞에서부터 세면 둘이 같이 닫힌다.
+ */
+function findStringEnd(src, open) {
+    const q = src[open];
+    let i = open + 1;
+    while (i < src.length) {
+        if (src[i] === "\\") {
+            i += 2;
+            continue;
+        }
+        if (src[i] === q) return i;
+        i += 1;
+    }
+    return src.length;
+}
+
+function inComment(src, at) {
+    let quote = null;
+    let i = 0;
+    while (i < at) {
+        const c = src[i];
+        const next = src[i + 1];
+        if (quote) {
+            if (c === "\\") {
+                i += 2;
+                continue;
+            }
+            if (c === quote) quote = null;
+            i += 1;
+            continue;
+        }
+        if (c === '"' || c === "'" || c === "`") {
+            // 문자열이 `at` 을 감싸면 그 자리는 코드가 아니다 — 예시를 적어 둔 문자열이 의존으로 잡힌다.
+            const close = findStringEnd(src, i);
+            if (close > at) return true;
+            i = close + 1;
+            continue;
+        }
+        if (c === "/" && next === "/") {
+            const nl = src.indexOf("\n", i);
+            if (nl === -1 || nl >= at) return true;
+            i = nl + 1;
+            continue;
+        }
+        if (c === "/" && next === "*") {
+            const end = src.indexOf("*/", i + 2);
+            if (end === -1 || end + 2 > at) return true;
+            i = end + 2;
+            continue;
+        }
+        i += 1;
+    }
+    return false;
+}
+
 /** 사본을 건넬 때 같이 가야 하는 파일. 러너 옆(`scripts/`) 기준 상대 경로. */
 export const VENDOR_SET = [
     "verify-zip.mjs",
@@ -69,10 +129,7 @@ test("소스가 부르는 형제를 목록이 전부 덮는다 — 빠지면 사
         //      대신 **그 줄에서 `//` 앞에 있는지**만 본다 — 주석 안의 `await import("./x")` 예시가
         //      의존으로 잡히면 그 오검이 곧 면제가 된다.
         for (const m of body.matchAll(/\bimport\s*\(\s*["']\.\/([^"']+)["']\s*\)/g)) {
-            const lineStart = body.lastIndexOf("\n", m.index ?? 0) + 1;
-            const before = body.slice(lineStart, m.index ?? 0);
-            if (before.includes("//") || /^\s*\*/.test(before)) continue;
-            needed.add(rebase(m[1]));
+            if (!inComment(body, m.index ?? 0)) needed.add(rebase(m[1]));
         }
         // ⑵ `join(HERE, …)` 로 만들어 spawn 하는 경로
         for (const m of body.matchAll(/join\(HERE,\s*"([^"]+)"(?:,\s*"([^"]+)")?\)/g)) {
