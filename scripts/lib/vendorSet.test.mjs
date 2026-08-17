@@ -46,8 +46,14 @@ test("소스가 부르는 형제를 목록이 전부 덮는다 — 빠지면 사
         const body = readFileSync(at, "utf8");
         const dir = entry.includes("/") ? entry.slice(0, entry.lastIndexOf("/")) : "";
         const rebase = (rel) => (dir ? `${dir}/${rel}` : rel);
-        // ⑴ 상대 import — 그 파일이 있는 폴더 기준이다
-        for (const m of body.matchAll(/from\s+"\.\/([^"]+)"/g)) needed.add(rebase(m[1]));
+        // ⑴ 상대 import — 그 파일이 있는 폴더 기준이다.
+        //    ⚠ **줄 첫머리의 `import`/`export` 문만 본다.** 아무 데서나 `from "./x"` 를 찾으면
+        //      주석이나 문자열 안의 예시가 의존으로 잡힌다(실제로 한 번 그렇게 오검이 났다:
+        //      `// import <이름> from "./pages/<slug>.json";` 라는 설명 한 줄).
+        //      오검이 나면 다음 판에 붙는 것은 수정이 아니라 면제다.
+        for (const m of body.matchAll(/^\s*(?:import|export)\b[^\n]*?\bfrom\s+"\.\/([^"]+)"/gm)) {
+            needed.add(rebase(m[1]));
+        }
         // ⑵ `join(HERE, …)` 로 만들어 spawn 하는 경로
         for (const m of body.matchAll(/join\(HERE,\s*"([^"]+)"(?:,\s*"([^"]+)")?\)/g)) {
             needed.add(rebase([m[1], m[2]].filter(Boolean).join("/")));
