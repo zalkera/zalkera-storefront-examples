@@ -1,5 +1,6 @@
 import {asString} from "@zalkera/client";
 import {safeLinkUrl} from "@/lib/safeUrl";
+import {ownPage} from "./ownPage";
 import {nav, pages} from "../../content";
 
 /**
@@ -67,7 +68,8 @@ function normalizeSeo(value: unknown): PageContentFile["seo"] {
  * "아 제목을 안 적었구나"를 알아채는 쪽이 낫다(빈 문자열은 화면에서 안 보인다).
  */
 export function loadPageContent(slug: string): PageContentFile | null {
-    const raw = pages[slug];
+    // 자기 키만 본다 — 이유는 [ownPage].
+    const raw = ownPage(pages, slug);
     if (!isRecord(raw)) return null;
     return {
         title: asString(raw.title)?.trim() || slug,

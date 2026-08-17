@@ -76,6 +76,16 @@ export const WIRING_FILES = [
     "src/lib/safeUrl.test.ts", // 오픈 리다이렉트 — 잠금이 0건이던 자리라 세 번째 결함이 배송됐다
     "src/lib/safeUrlDrift.test.ts", // 팩 로컬 소독기와 @zalkera/client 사본의 안전성 판정이 갈리는지
     "src/lib/previewGuard.test.ts",
+    // ⚠ 콘텐츠 조회 3종. `content.ts` 가 `pages[slug]` 로 바로 읽으면 `__proto__` 가
+    //   `Object.prototype` 을 돌려주고 그것이 객체라 가드를 통과한다 — `/__proto__` 가 404 대신
+    //   빈 페이지로 선다. 루트만 고치고 프리셋을 안 고치면 **고객에게는 한 명도 안 나간다**
+    //   (zip 은 `presets/<code>/src` 를 싣는다). 하한표가 요구하는 시험이 빠지면 팩이 자기 검수에
+    //   걸려 아예 안 구워진다.
+    "src/lib/content.ts",
+    "src/lib/ownPage.ts",
+    "src/lib/content.test.ts",
+    "src/lib/routeParam.ts",
+    "src/lib/routeParam.test.ts",
 ];
 
 /** 이 아래는 **전송층**이다(디자인 0). 같은 경로가 둘 이상의 팩에 있으면 바이트 동일해야 한다. */
