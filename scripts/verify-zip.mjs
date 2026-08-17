@@ -59,7 +59,6 @@ import {existsSync, lstatSync, mkdtempSync, readFileSync, readdirSync, rmSync, s
 import {basename, join, relative, resolve} from "node:path";
 import {tmpdir} from "node:os";
 import {fileURLToPath} from "node:url";
-import {judgeFloors, REQUIRED_FLOORS} from "./lib/floors.mjs";
 import {junkTopLevel} from "./lib/junkEntries.mjs";
 import {derivedRoutes, appDirOf, sourceRoot, SYNTHETIC} from "./lib/routes.mjs";
 
@@ -266,7 +265,7 @@ function effectiveRoot(dir) {
  ⚠ 이 규칙은 서버 판정의 **거울**이지 사본이 아니다 — 갈리면 서버가 400 으로 잡는다.
  *
  * ⚠ 이 러너는 `backend/doc/vendor/` 로 나간다. 단일 파일이 아니라 `verify-zip.mjs` + `lib/` 를
- *   **같이** 건네야 한다. 런타임 의존은 여섯이고, 빠지면 그 검사가 통째로 죽는다:
+ *   **같이** 건네야 한다. 빠지면 그 검사가 통째로 죽는다:
  *
  *     verify-zip.mjs
  *     validate-storefront.mjs      ← 규약 검사(`VALIDATOR`)를 spawn 한다
@@ -275,6 +274,8 @@ function effectiveRoot(dir) {
  *     lib/routes.mjs               ← 관문 등재 프로브 도출
  *     lib/gate-behavior.mjs        ← `--pack` 의 관문 행위 검사
  *     lib/content-routes.mjs       ← 콘텐츠 페이지가 실제로 서는가
+ *     lib/floor-gate.mjs           ← 하한 집행(`npm test` 한 번에서 뽑는다)
+ *     lib/floor-reporter.mjs       ← 그 게이트가 리포터로 넘긴다 — **손자라 빠뜨리기 쉽다**
  *
  *   재현: 다른 디렉터리에 `verify-zip.mjs` 만 두고 돌리면 `ERR_MODULE_NOT_FOUND` 로 죽고,
  *         `validate-storefront.mjs` 만 빠뜨리면 `❌ 규약 검사 — MODULE_NOT_FOUND` 로 **정상 납품이
@@ -848,62 +849,40 @@ try {
 
                 // ⑦-b **가드 회귀 스위트**.
                 //
-                //    ⚠ **싸지 않다.** `npm test` 1회 뒤에 하한을 재려고 스위트를 **한 벌씩 다시** 돌린다 —
-                //      그 재실행이 이 블록의 대부분이고, 스위트를 더할 때마다 선형으로 는다.
-                //      재현: `time npm test` 와 `time (for f in <표의 키>; do node --test -- "$f"; done)` 를
-                //      각각 재면 재실행 쪽이 3배 안팎이다. 절대값은 기계·FS 캐시마다 달라 여기 안 적는다 —
-                //      **비율이 판정이고, 코어를 늘려도 안 줄어든다(직렬이다).**
+                //    `npm test` **한 번**에서 파일별 통과 수를 뽑는다(node 러너가 `test:pass` 이벤트에
+                //    `file` 을 싣는다). 종전엔 그 뒤에 스위트를 한 벌씩 다시 돌렸고, 그 재실행이 이
+                //    블록의 대부분이었다 — 직렬이라 코어를 늘려도 안 줄었다. 실측 3.02초 → 1.08초.
                 //
-                //    같은 숫자를 `npm test` 한 번에서 뽑을 수 있다(node 러너 이벤트에 `file` 이 실린다).
-                //    그 정리는 이 게이트의 판정을 바꾸는 일이라 **단독 판으로** 한다 — 가장 값비싼 가드를
-                //    다른 수리와 같은 판에 얹지 않는다.
+                //    ⚠ **러너 자신의 게이트를 쓴다**(`join(HERE, "lib", "floor-gate.mjs")`). zip 안의
+                //    사본을 부르면 zip 이 자기를 심사하는 코드를 들고 오는 것이라 판정이 무의미해진다.
+                //    요구치도 이 러너의 `REQUIRED_FLOORS` 이고, zip 의 표는 **올리거나 늘리는** 자리다.
                 //
                 //    ⚠ 이걸 여기서 안 돌리면 **집행 지점이 `ci.yml` 하나**가 되는데, 그것은 GitHub 레포가
                 //    있는 테넌트에서만 돈다. 업로드 태생 테넌트는 CI 가 없어 집행이 **0** 이었고,
                 //    `CUSTOMIZE.md` 는 이 명령을 업로드 전 자가 검수로 지목한다 — 즉 고객이 문서대로 다
                 //    해도 가드가 깨진 zip 이 ✅ 를 받는다.
-                //    스위트가 없으면 node 러너가 `# tests 0` 과 rc 0 을 내므로 **그것도 반려**로 친다.
                 {
-                    const t = spawnSync("npm", ["test"], {cwd: root, encoding: "utf8", env: childEnv(BUILD_ENV), maxBuffer: 32 * 1024 * 1024});
+                    // 경로를 **호출 자리에** 둔다 — 변수로 빼면 「러너 자신의 것을 쓰는가」를 재는
+                    // 시험이 그 자리를 못 본다(실측: 못 찾아 반려했다).
+                    const t = spawnSync("node", [join(HERE, "lib", "floor-gate.mjs"), root], {
+                        cwd: root,
+                        encoding: "utf8",
+                        env: childEnv(BUILD_ENV),
+                        maxBuffer: 64 * 1024 * 1024,
+                    });
                     const out = `${t.stdout ?? ""}${t.stderr ?? ""}`;
-                    // ⚠ **총합으로 재지 않는다.** `pass >= 1` 이면 스위트를 자명 통과 시험으로 갈아치운
-                    //    zip 이 통과한다. 요구치는 이 러너의 `REQUIRED_FLOORS` 가 들고 있고, zip 안
-                    //    `scripts/lib/test-floors.json` 은 그것을 **올리거나 늘리는** 자리다.
-                    let floors = null;
-                    try {
-                        floors = JSON.parse(readFileSync(join(root, "scripts", "lib", "test-floors.json"), "utf8"));
-                    } catch (e) {
-                        unread.push(`scripts/lib/test-floors.json — 못 읽었습니다 [${e.code ?? "UNKNOWN"}]`);
-                    }
+                    const bad = [];
+                    const short = t.status === 0 ? [] : [out.trim().split("\n").slice(-6).join(" · ")];
 
-                    // 판정은 `scripts/lib/floors.mjs` 하나다 — 여기 다시 적으면 사본이 갈린다.
-                    // 그 판정의 계약은 `scripts/lib/floors.test.mjs` 가 진다.
-                    const {bad, effective} = judgeFloors(floors, (f) => existsSync(join(root, f)));
-
-                    const short = [];
-                    if (!bad.length) {
-                        for (const [f, min] of Object.entries(effective)) {
-                            // ⚠ `--` 로 경로를 **구조적으로** 분리한다. 이것이 없으면 `-` 로 시작하는 키가
-                            //   파일이 아니라 node 플래그로 해석돼 그 코드가 이 기계에서 돈다.
-                            //   위 키 형태 검사는 심층 방어다 — 열거식이라 넓힐 때마다 침식되므로 유일한 방어로 두지 않는다.
-                            //   재현: `node --test --import=./evil.mjs` → 실행됨 · `node --test -- --import=./evil.mjs` → 실행 안 됨
-                            const r = spawnSync("node", ["--experimental-strip-types", "--test", "--", f], {
-                                cwd: root,
-                                encoding: "utf8",
-                                env: childEnv(BUILD_ENV),
-                                maxBuffer: 32 * 1024 * 1024,
-                            });
-                            const pass = Number(`${r.stdout ?? ""}`.match(/^# pass (\d+)$/m)?.[1] ?? -1);
-                            if (pass < min) short.push(`${f} ${pass < 0 ? 0 : pass}/${min}`);
-                        }
-                    }
                     if (t.status !== 0 || bad.length || short.length) {
                         const why = bad.length ? bad.join(" · ") : short.length ? short.join(" · ") : `\n   ${out.trim().split("\n").slice(-8).join("\n   ")}`;
                         record("가드 회귀 스위트", false, why);
                         console.error(`   교차사이트·프리뷰·소독기 가드가 옳은지 재는 자리입니다.`);
                         failed = true;
                     } else {
-                        record("가드 회귀 스위트", true, `스위트별 하한 통과(${Object.keys(effective).length}개)`);
+                        // 게이트가 낸 마지막 줄을 그대로 옮긴다 — 개수를 여기서 다시 세면 사본이 갈린다.
+                        const said = out.trim().split("\n").filter(Boolean).at(-1) ?? "스위트별 하한 통과";
+                        record("가드 회귀 스위트", true, said.replace(/^✅\s*/, ""));
                     }
                 }
 

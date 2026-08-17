@@ -25,6 +25,8 @@ export const VENDOR_SET = [
     "lib/routes.mjs",
     "lib/gate-behavior.mjs",
     "lib/content-routes.mjs",
+    "lib/floor-gate.mjs",
+    "lib/floor-reporter.mjs",
 ];
 
 test("목록의 파일이 전부 실재한다", () => {
@@ -35,11 +37,21 @@ test("목록의 파일이 전부 실재한다", () => {
 
 test("소스가 부르는 형제를 목록이 전부 덮는다 — 빠지면 사본이 죽는다", () => {
     const needed = new Set();
-    // ⑴ 상대 import
-    for (const m of src.matchAll(/from\s+"\.\/([^"]+)"/g)) needed.add(m[1]);
-    // ⑵ `join(HERE, …)` 로 만들어 spawn 하는 경로
-    for (const m of src.matchAll(/join\(HERE,\s*"([^"]+)"(?:,\s*"([^"]+)")?\)/g)) {
-        needed.add([m[1], m[2]].filter(Boolean).join("/"));
+    // ⚠ **한 겹만 보면 뚫린다.** 러너가 부르는 파일이 또 남을 부른다 — `lib/floor-gate.mjs` 가
+    //   `lib/floor-reporter.mjs` 를 리포터로 넘기는 식이다. 러너 소스만 훑으면 그 손자가 안 잡히고,
+    //   사본은 «있는데 안 도는» 상태가 된다. 그래서 목록의 파일을 **전부** 훑는다.
+    for (const entry of VENDOR_SET) {
+        const at = join(HERE, "..", entry);
+        if (!existsSync(at)) continue; // 존재는 위 시험이 잡는다
+        const body = readFileSync(at, "utf8");
+        const dir = entry.includes("/") ? entry.slice(0, entry.lastIndexOf("/")) : "";
+        const rebase = (rel) => (dir ? `${dir}/${rel}` : rel);
+        // ⑴ 상대 import — 그 파일이 있는 폴더 기준이다
+        for (const m of body.matchAll(/from\s+"\.\/([^"]+)"/g)) needed.add(rebase(m[1]));
+        // ⑵ `join(HERE, …)` 로 만들어 spawn 하는 경로
+        for (const m of body.matchAll(/join\(HERE,\s*"([^"]+)"(?:,\s*"([^"]+)")?\)/g)) {
+            needed.add(rebase([m[1], m[2]].filter(Boolean).join("/")));
+        }
     }
     assert.ok(needed.size >= 4, `형제 참조를 ${needed.size}개만 찾았다 — 추출이 깨졌다`);
     const missing = [...needed].filter((f) => !VENDOR_SET.includes(f));

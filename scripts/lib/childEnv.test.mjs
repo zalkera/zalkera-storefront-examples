@@ -128,8 +128,21 @@ test("판정 자식은 **전부** 정규화한 환경으로 띄운다", () => {
     );
 });
 
-test("신뢰 밖 경로는 `--` 뒤로 넘긴다", () => {
-    const floorRun = judgingSpawns().find((s) => /--experimental-strip-types/.test(s.call) && /"--test"/.test(s.call));
-    assert.ok(floorRun, "하한 스위트를 돌리는 spawn 을 못 찾았다 — 추출이 깨졌다");
-    assert.match(floorRun.call, /"--test",\s*"--",/, `키가 \`--\` 뒤가 아니다:\n${floorRun.call}`);
+test("하한표의 키를 argv 로 넘기지 않는다", () => {
+    // ⚠ 종전엔 하한표의 키를 `node --test <키>` 의 argv 로 넘겼다. `-` 로 시작하는 키가 파일이 아니라
+    //   **플래그**로 해석돼 이 러너를 돌리는 기계에서 임의 코드가 돌 수 있었고, `--` 분리와 키 형태
+    //   정규식이 심층방어로 서 있었다. 지금은 `npm test` **한 번**에서 파일별 통과 수를 뽑으므로
+    //   키가 argv 에 **아예 안 들어간다** — 방어가 아니라 공격면 자체가 없다.
+    //
+    //   이 시험이 무는 것: 누군가 재실행 루프를 되살리면 키가 다시 argv 로 간다.
+    const suspicious = judgingSpawns().filter((s) => /test-floors|floors\[|Object\.entries\(floors/.test(s.call));
+    assert.deepEqual(
+        suspicious.map((s) => s.line),
+        [],
+        `하한표 키를 argv 로 넘기는 자리: ${suspicious.map((s) => `${s.line}행`).join(" · ")}`,
+    );
+    // 하한 집행은 게이트 하나에 위임한다 — 그 자리가 사라지면 집행이 통째로 없어진다.
+    const gate = judgingSpawns().find((s) => /floor-gate\.mjs/.test(s.call));
+    assert.ok(gate, "하한 게이트를 부르는 spawn 이 없다 — 집행 지점이 사라졌다");
+    assert.match(gate.call, /join\(HERE,/, `러너 자신의 게이트가 아니라 zip 의 사본을 부른다:\n${gate.call}`);
 });
