@@ -58,8 +58,17 @@ const appDir = join(root, ".next", "server", "app");
 /** 콘텐츠 페이지를 낳아야 하는 소스 라우트. 이것 말고 다른 것이 낳았으면 가려진 것이다. */
 const CONTENT_ROUTE = "/[slug]";
 
+// ⚠ **"없으니 통과"가 아니다.** `content/pages/` 가 통째로 없으면 잴 콘텐츠가 없는 것이 맞지만,
+//   그 상태를 침묵으로 넘기면 **폴더 하나를 지우는 것이 이 게이트를 끄는 가장 쉬운 길**이 된다.
+//   매니페스트가 비어 있는지까지 함께 보고, 어긋나면 말한다.
 if (!existsSync(pagesDir)) {
-    console.log("콘텐츠 페이지 라우트 — content/pages 가 없습니다. 잴 것이 없습니다.");
+    const manifestSrc = join(root, "content", "index.ts");
+    if (existsSync(manifestSrc) && /^\s*import\s+[\p{ID_Start}$_][\p{ID_Continue}$]*\s+from\s+"\.\/pages\//mu.test(readFileSync(manifestSrc, "utf8"))) {
+        console.error("❌ 콘텐츠 페이지 라우트 — content/pages 가 없는데 매니페스트가 그 안을 가져옵니다.");
+        console.error("   폴더가 지워졌거나 zip 에 안 실렸습니다(통과가 아닙니다).");
+        process.exit(1);
+    }
+    console.log("콘텐츠 페이지 라우트 — content/pages 가 없습니다. 잴 것이 없습니다(매니페스트도 비어 있습니다).");
     process.exit(0);
 }
 // ── ⓐ **소스 배선** — 빌드 없이 잡는다. 키가 곧 URL 이고 값이 그 페이지여야 한다.
