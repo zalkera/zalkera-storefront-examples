@@ -12,7 +12,7 @@ export const REQUIRED_FLOORS = {
     "src/lib/routeParam.test.ts": 5,
     "src/lib/content.test.ts": 3,
     "src/lib/reservedSegments.test.ts": 4,
-    "src/lib/previewGuard.test.ts": 6,
+    "src/lib/previewGuard.test.ts": 7,
     "src/lib/safeUrl.test.ts": 6,
     "src/lib/safeUrlDrift.test.ts": 4,
     "scripts/lib/floors.test.mjs": 18,

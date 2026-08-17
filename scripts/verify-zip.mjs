@@ -720,8 +720,8 @@ try {
         //       재현: 라우트에서 `assertSameOrigin` 을 지우고
         //             `node scripts/validate-storefront.mjs ./src --gate; echo rc=$?` → `⚠️ [X1]` · rc=0
         //
-        //    소스 루트는 고정이 아니다: Next.js 는 `src/app` 과 루트 `app` 을 **둘 다** 허용하고,
-        //    실제로 후자인 납품물이 있었다. `src` 를 못 찾으면 루트를 넘긴다 —
+        //    소스 루트는 고정이 아니다: Next.js 는 `src/app` 과 루트 `app` 을 **둘 다** 허용한다.
+        //    `src` 를 못 찾으면 루트를 넘긴다 —
         //    validator 는 node_modules·.next 를 스스로 건너뛴다(실측).
         //    설치보다 **앞**에 둔다: 규약 위반은 몇 분짜리 npm ci 를 돌리기 전에 알려주는 게 맞다.
         // 소스 루트 선정은 `lib/routes.mjs` 가 든다 — 심링크 봉쇄가 그 판정에 붙어 있다.

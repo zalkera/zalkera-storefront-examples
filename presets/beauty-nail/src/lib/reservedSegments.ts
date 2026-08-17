@@ -7,8 +7,12 @@
  *    보다 우선하므로, slug 가 `cart` 인 페이지를 만들어도 `/cart` 는 장바구니가 뜬다. 그 URL 을
  *    sitemap 에 실으면 크롤러에게 **페이지가 아닌 것을 페이지라고** 알리는 셈이다.
  *
- * ⑵ **크롤러에게 막아 둔 곳이다** — `robots.ts` 가 `disallow` 로 적은 경로. sitemap 은 "색인하라"
- *    이고 robots 는 "하지 마라" 라, 둘 다 적으면 우리가 스스로 모순된 말을 한다.
+ * ⑵ **크롤러에게 막아 둔 곳이다** — `robots.ts` 의 `disallow` 가 **그 경로 자체**를 적은 것.
+ *    sitemap 은 "색인하라" 이고 robots 는 "하지 마라" 라, 둘 다 적으면 스스로 모순된 말을 한다.
+ *
+ *    ⚠ 끝에 `/` 가 붙은 항목(`/api/`)은 **하위만** 막는다 — `/api` 자체는 안 막히므로 근거가 아니다.
+ *
+ * ⚠ 홈(`home`)은 이 목록이 아니라 `sitemap.ts` 가 따로 거른다 — `/` 로 이미 실려 있어서다.
  *
  * ⚠ **디렉터리가 있다고 가려지는 것이 아니다.** `src/app/c/` 안에 `[slug]/` 만 있으면 `/c` 자체는
  *   `[slug]` 가 만든다 — 그런 이름을 여기 넣으면 **멀쩡히 서는 페이지가 sitemap 에서 조용히 빠진다.**
@@ -30,8 +34,7 @@ export const RESERVED_SEGMENTS: ReadonlySet<string> = new Set([
     "mypage",
     "policies",
     "products",
-    // ⑵ robots 가 막는 곳
-    "api",
+    // ⑵ robots 가 그 경로 자체를 막는 곳
     "auth",
     "orders",
 ]);

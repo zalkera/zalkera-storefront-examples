@@ -16,6 +16,8 @@ const ENTRY = ["page.tsx", "page.ts", "page.jsx", "page.js", "route.ts", "route.
  *
  * ⚠ **라우트 그룹 안쪽도 본다.** `src/app/(marketing)/about/page.tsx` 는 `/about` 을 서빙한다 —
  *   괄호 폴더는 URL 에 안 나타나기 때문이다. 최상위만 훑으면 그 그림자화를 통째로 놓친다.
+ *   **다만 세 겹까지만 내려간다** — 그보다 깊게 중첩된 그룹은 이 시험이 못 본다. 실제 팩에는
+ *   그룹이 0개라 지금 열려 있지는 않지만, 「본다」가 무조건이 아니라는 뜻이다.
  * ⚠ **심링크 폴더도 본다.** `isDirectory()` 는 심링크에 `false` 다.
  */
 function shadowing(dir: string = APP, depth = 0): string[] {
@@ -34,12 +36,22 @@ function shadowing(dir: string = APP, depth = 0): string[] {
     return [...new Set(found)];
 }
 
-/** `robots.ts` 가 크롤러에게 막은 최상위 이름. */
+/**
+ * `robots.ts` 가 **그 경로 자체**를 막은 최상위 이름.
+ *
+ * ⚠ **끝에 `/` 가 붙은 항목은 세지 않는다.** `Disallow: /api/` 는 `/api/…` 하위만 막고 `/api` 는
+ *   안 막는다. 그것을 「막혔다」로 읽으면 **멀쩡히 서고 색인해도 되는 페이지가 sitemap 에서 빠진다** —
+ *   `c` 를 디렉터리 존재만 보고 넣었던 것과 같은 형태의 오판이다.
+ */
 function disallowed(): string[] {
     const src = readFileSync(join(APP, "robots.ts"), "utf8");
     const list = /disallow:\s*\[([^\]]*)\]/.exec(src)?.[1];
     ok(list !== undefined, "robots.ts 에서 disallow 목록을 못 읽었다 — 이 시험이 반쪽만 본다");
-    return [...list.matchAll(/["'`]\/([^"'`/]+)\/?["'`]/g)].map((m) => m[1]);
+    return [...list.matchAll(/["'`](\/[^"'`]*)["'`]/g)]
+        .map((m) => m[1])
+        .filter((path) => !path.endsWith("/"))
+        .map((path) => path.slice(1))
+        .filter((name) => name !== "" && !name.includes("/"));
 }
 
 test("도출할 근거가 실제로 있다 — 없으면 이 시험이 아무것도 안 본다", () => {

@@ -89,7 +89,9 @@ test("통제군 — 면제 목록이 배송 라우트의 마커와 일치한다"
             e.isDirectory() ? walk(join(d, e.name)) : e.name.startsWith("route.") ? [join(d, e.name)] : [],
         );
     const files = walk(appDir);
-    assert.ok(files.length >= 10, `src/app 아래 route 파일을 ${files.length}개만 찾았다 — 걷기가 깨졌다`);
+    // 걷기가 깨졌으면 아무것도 못 찾는다. **절대 개수로 재지 않는다** — 고객이 안 쓰는 능력을
+    // 지우면 라우트가 줄고, 그때 「걷기가 깨졌다」는 틀린 사유로 반려한다.
+    assert.ok(files.length > 0, "src/app 아래 route 파일을 하나도 못 찾았다 — 걷기가 깨졌다");
     const marked = files
         .filter((f) => /^\/\/ zalkera-allow-preview-write:[ \t]*\S/m.test(readFileSync(f, "utf8")))
         .map((f) =>
@@ -98,11 +100,32 @@ test("통제군 — 면제 목록이 배송 라우트의 마커와 일치한다"
                 .replace(/\/\([^)]+\)/g, ""),
         )
         .sort();
-    assert.deepEqual(
-        marked,
-        [...PREVIEW_WRITE_ALLOW].sort(),
-        "면제 목록과 라우트 마커가 어긋난다 — 둘 중 하나가 낡았다",
-    );
+    // ⚠ **한 방향만 위험하다.** 검수받지 않은 마커가 트리에 있으면 그 라우트가 프리뷰에서 쓴다 —
+    //   그것이 이 시험이 막는 것이다. 반대(목록에 있는데 라우트가 없음)는 아무 권한도 안 준다.
+    //   안 쓰는 능력을 지운 사이트는 늘 그 상태가 되므로, 그것까지 반려하면 **정상 커스터마이즈가
+    //   빨개진다**.
+    const unauthorized = marked.filter((route) => ![...PREVIEW_WRITE_ALLOW].includes(route));
+    assert.deepEqual(unauthorized, [], `검수 안 받은 프리뷰 쓰기 면제 마커: ${unauthorized.join(" ")}`);
+});
+
+test("면제 목록에 유령이 없다 — 온전한 트리에서만", () => {
+    // 목록에만 있고 트리에 없는 항목은 권한을 안 주지만, **우리 정본에서는** 낡았다는 뜻이다.
+    // 고객이 능력을 지운 트리에서는 정상이므로 그쪽에서는 건너뛴다.
+    const appDir = join(SRC, "app");
+    if (!existsSync(join(appDir, "api", "auth", "social"))) return; // 능력을 덜어 낸 트리
+    const walk = (d: string): string[] =>
+        readdirSync(d, {withFileTypes: true}).flatMap((e) =>
+            e.isDirectory() ? walk(join(d, e.name)) : e.name.startsWith("route.") ? [join(d, e.name)] : [],
+        );
+    const marked = walk(appDir)
+        .filter((f) => /^\/\/ zalkera-allow-preview-write:[ \t]*\S/m.test(readFileSync(f, "utf8")))
+        .map((f) =>
+            dirname(f)
+                .slice(appDir.length)
+                .replace(/\/\([^)]+\)/g, ""),
+        );
+    const ghosts = [...PREVIEW_WRITE_ALLOW].filter((route) => !marked.includes(route));
+    assert.deepEqual(ghosts, [], `면제 목록에만 있는 라우트: ${ghosts.join(" ")}`);
 });
 
 test("메서드 집합이 본문을 만들 수 있는 것들이다", () => {
