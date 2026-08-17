@@ -11,7 +11,7 @@ export const REQUIRED_FLOORS = {
     "src/lib/oauthState.test.ts": 11,
     "src/lib/routeParam.test.ts": 5,
     "src/lib/content.test.ts": 3,
-    "src/lib/reservedSegments.test.ts": 3,
+    "src/lib/reservedSegments.test.ts": 4,
     "src/lib/previewGuard.test.ts": 6,
     "src/lib/safeUrl.test.ts": 6,
     "src/lib/safeUrlDrift.test.ts": 4,
@@ -41,6 +41,19 @@ export const FLOOR_KEY_REGEX = /^(src|scripts)\/[A-Za-z0-9_\-/]+\.test\.(tsx?|mj
 export function judgeFloors(floors, exists) {
     const bad = [];
     const effective = {...REQUIRED_FLOORS};
+
+    // ⚠ **`null`·`0`·`false`·`""` 도 «표가 없음»이다.** falsy 를 `?? {}` 로 흘려보내면 아래
+    //   «항목이 모자라면 반려» 트립와이어가 통째로 꺼진다 — 표를 `null` 로 덮는 것이 그 가드를 끄는
+    //   가장 싼 방법이 된다. 실질 하한은 [REQUIRED_FLOORS] 가 계속 들고 있어 집행은 서지만,
+    //   «표가 판정을 통과했다» 는 거짓이 된다.
+    //   재현: `printf 'null' > scripts/lib/test-floors.json && node scripts/lib/floor-gate.mjs .` → rc=1
+    if (floors === null || typeof floors !== "object" || Array.isArray(floors)) {
+        const what = floors === null ? "null" : Array.isArray(floors) ? "배열" : typeof floors;
+        return {
+            bad: [`하한표가 객체가 아닙니다(${what}) — 요구 ${Object.keys(REQUIRED_FLOORS).length}개를 잴 수 없습니다`],
+            effective: {},
+        };
+    }
 
     for (const [f, min] of Object.entries(floors ?? {})) {
         if (f === "_") continue;
