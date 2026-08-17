@@ -63,7 +63,10 @@ const CONTENT_ROUTE = "/[slug]";
 //   매니페스트가 비어 있는지까지 함께 보고, 어긋나면 말한다.
 if (!existsSync(pagesDir)) {
     const manifestSrc = join(root, "content", "index.ts");
-    if (existsSync(manifestSrc) && /^\s*import\s+[\p{ID_Start}$_][\p{ID_Continue}$]*\s+from\s+"\.\/pages\//mu.test(readFileSync(manifestSrc, "utf8"))) {
+    // ⚠ **따옴표 한 종류만 보면 안 된다.** 작은따옴표로 쓴 매니페스트에서 이 판정이 통과로 떨어지고,
+    //   그러면 «매니페스트도 비어 있습니다» 라는 **재지 않은 문면**을 찍는다.
+    const importsPages = /^\s*import\s+[\p{ID_Start}$_][\p{ID_Continue}$]*\s+from\s+["']\.\/pages\//mu;
+    if (existsSync(manifestSrc) && importsPages.test(readFileSync(manifestSrc, "utf8"))) {
         console.error("❌ 콘텐츠 페이지 라우트 — content/pages 가 없는데 매니페스트가 그 안을 가져옵니다.");
         console.error("   폴더가 지워졌거나 zip 에 안 실렸습니다(통과가 아닙니다).");
         process.exit(1);
@@ -92,7 +95,7 @@ if (!existsSync(pagesDir)) {
     // ⚠ **식별자는 ASCII 가 아니다.** slug `회사연혁` 은 그대로 유효한 JS 식별자라 매니페스트가
     //   그것을 이름으로 쓴다(`identifierOf` 는 하이픈만 바꾼다). `\w` 로 훑으면 한국어 사이트의
     //   페이지가 **통째로 이 검사 밖**에 놓인다.
-    for (const m of src.matchAll(/^\s*import\s+([\p{ID_Start}$_][\p{ID_Continue}$]*)\s+from\s+"\.\/pages\/(.+?)\.json";/gmu)) {
+    for (const m of src.matchAll(/^\s*import\s+([\p{ID_Start}$_][\p{ID_Continue}$]*)\s+from\s+["']\.\/pages\/(.+?)\.json["'];/gmu)) {
         importedSlug.set(m[1], m[2]);
     }
     const mapBody = /export const pages[^=]*=\s*\{([\s\S]*?)\n\};/.exec(src)?.[1];
@@ -171,6 +174,16 @@ if (routes === null || typeof routes !== "object") {
 const slugs = readdirSync(pagesDir)
     .filter((f) => f.endsWith(".json"))
     .map((f) => f.slice(0, -".json".length));
+
+// ⚠ **비어 있는 것도 "잴 것이 없음"이 아니다.** 매니페스트가 `./pages/…` 를 가져오는데 폴더가
+//   비었으면 그 zip 은 빌드조차 못 선다. 0개를 세고 «전부 섭니다» 라고 말하면, 검사기가 재지 않은
+//   것을 통과로 찍는 것이다.
+//   재현: `content/pages/*.json` 을 지우고 `node scripts/lib/content-routes.mjs .` → rc=1
+if (slugs.length === 0 && /^\s*import\s+[\p{ID_Start}$_][\p{ID_Continue}$]*\s+from\s+["']\.\/pages\//mu.test(readFileSync(join(root, "content", "index.ts"), "utf8"))) {
+    console.error("❌ 콘텐츠 페이지 라우트 — content/pages 가 비었는데 매니페스트가 그 안을 가져옵니다.");
+    console.error("   페이지가 안 실렸거나 지워졌습니다(통과가 아닙니다).");
+    process.exit(1);
+}
 
 const bad = [];
 for (const slug of slugs) {

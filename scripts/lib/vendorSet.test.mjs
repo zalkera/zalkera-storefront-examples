@@ -65,7 +65,13 @@ test("소스가 부르는 형제를 목록이 전부 덮는다 — 빠지면 사
         }
         // ⑴-b **동적 `import("./x")`** — 조건부 적재도 사본이 없으면 그 자리에서 죽는다.
         //    문 형태가 아니라 호출이라 위 정규식이 못 본다.
+        //    ⚠ 위 ⑴ 은 줄머리 앵커로 주석 속 예시를 피하는데, 이쪽은 호출이라 앵커를 못 건다.
+        //      대신 **그 줄에서 `//` 앞에 있는지**만 본다 — 주석 안의 `await import("./x")` 예시가
+        //      의존으로 잡히면 그 오검이 곧 면제가 된다.
         for (const m of body.matchAll(/\bimport\s*\(\s*["']\.\/([^"']+)["']\s*\)/g)) {
+            const lineStart = body.lastIndexOf("\n", m.index ?? 0) + 1;
+            const before = body.slice(lineStart, m.index ?? 0);
+            if (before.includes("//") || /^\s*\*/.test(before)) continue;
             needed.add(rebase(m[1]));
         }
         // ⑵ `join(HERE, …)` 로 만들어 spawn 하는 경로
