@@ -19,14 +19,17 @@
  * 사용: `node scripts/lib/floor-gate.mjs [트리]`
  */
 import {spawnSync} from "node:child_process";
-import {existsSync, readFileSync, rmSync} from "node:fs";
+import {existsSync, mkdtempSync, readFileSync, realpathSync, rmSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {dirname, join, relative, resolve} from "node:path";
 import {fileURLToPath} from "node:url";
 import {judgeFloors, REQUIRED_FLOORS} from "./floors.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const root = resolve(process.argv[2] ?? ".");
+// ⚠ **실경로로 맞춘다.** node 러너는 시험 파일을 realpath 로 보고한다. 뿌리에 심링크가 끼어 있으면
+//   (`TMPDIR` 이 심링크인 박스·macOS 의 `/tmp`) `relative(root, file)` 이 전부 어긋나 **12개 스위트가
+//   통째로 «통과 0건»으로 오반려**된다 — 멀쩡한 팩을 «고객 가드가 미달»이라는 틀린 사유로 막는다.
+const root = realpathSync(resolve(process.argv[2] ?? "."));
 const REPORTER = join(HERE, "floor-reporter.mjs");
 
 /** zip 이 든 표. 못 읽으면 `null` — 요구치는 그래도 산다. */
@@ -57,7 +60,11 @@ for (const k of ["NODE_TEST_CONTEXT", "NODE_OPTIONS"]) delete env[k];
 
 // ⚠ **리포터를 둘 건다.** 사람이 읽는 출력(`spec`)을 stdout 으로 그대로 흘리고, 통과 수는 파일로
 //   받는다. 하나만 걸면 CI 로그에 시험 결과가 안 남아, 빨개졌을 때 **무엇이 깨졌는지** 알 수 없다.
-const tally = join(tmpdir(), `zalkera-floors-${process.pid}.tsv`);
+// ⚠ **우리가 만든 디렉터리 안에** 둔다. `tmpdir()` 바로 아래 예측 가능한 이름을 쓰면 그 자리를
+//   미리 심링크로 잡아 둘 수 있고, 리포터는 심링크를 따라가 대상 파일을 자른다.
+//   같은 uid 공격자에게 새 권한을 주지는 않지만, 논의 자체를 없애는 편이 싸다.
+const tallyDir = mkdtempSync(join(tmpdir(), "zalkera-floors-"));
+const tally = join(tallyDir, "counts.tsv");
 const r = spawnSync(
     "node",
     [
@@ -73,7 +80,7 @@ const r = spawnSync(
     {cwd: root, encoding: "utf8", env, maxBuffer: 64 * 1024 * 1024, stdio: ["ignore", "inherit", "inherit"]},
 );
 if (r.status !== 0) {
-    rmSync(tally, {force: true});
+    rmSync(tallyDir, {recursive: true, force: true});
     console.error("❌ 가드 회귀 스위트 — 시험이 실패했습니다(하한을 재기 전입니다).");
     process.exit(1);
 }
@@ -85,7 +92,7 @@ try {
     console.error(`❌ 가드 회귀 스위트 — 통과 수 집계를 못 읽었습니다 [${e.code ?? "UNKNOWN"}](통과가 아닙니다).`);
     process.exit(2);
 } finally {
-    rmSync(tally, {force: true});
+    rmSync(tallyDir, {recursive: true, force: true});
 }
 
 /** 리포터 출력(TSV) → 트리 상대경로별 통과 수. */

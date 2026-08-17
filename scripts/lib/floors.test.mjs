@@ -6,12 +6,13 @@
  *
  * 사용: `node --test scripts/lib/floors.test.mjs`
  */
-import {test} from "node:test";
+import {describe, test} from "node:test";
 import assert from "node:assert/strict";
 import {spawnSync} from "node:child_process";
 import {mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync} from "node:fs";
 import {join} from "node:path";
 import {tmpdir} from "node:os";
+import {fileURLToPath} from "node:url";
 import {judgeFloors, REQUIRED_FLOORS, FLOOR_KEY_REGEX} from "./floors.mjs";
 
 /** 요구 스위트가 전부 있는 트리. */
@@ -171,4 +172,79 @@ test("정상 키 형태는 통과한다 — 과잉 차단이 아님을 보인다
     for (const k of ["src/a.test.ts", "src/lib/a/b/c.test.tsx", "src/lib/safeUrlDrift.test.ts"]) {
         assert.equal(FLOOR_KEY_REGEX.test(k), true, `${k} 가 거부됐다`);
     }
+});
+
+/**
+ * **하한 집계가 «실행된 시험»만 세는가.**
+ *
+ * ⚠ node 러너는 **skip·todo 된 시험에도 `test:pass` 를 보낸다.** 그것을 세면 `test(` 를
+ * `test.skip(` 으로 바꾸는 한 글자 편집만으로 가드 스위트를 통째로 재우고도 하한을 통과한다 —
+ * 시험 본문은 그대로 남아 있어 코드 리뷰에서도 눈에 안 띈다. 하한이 세는 대상이 「실행된 단언」이
+ * 아니라 「등록된 이름」이 되는 자리다.
+ *
+ * 종전 오라클(`# pass N`)은 skip 을 안 셌으므로, 이 성질은 **잃으면 안 되는 것**이다.
+ */
+describe("하한 집계는 실행된 시험만 센다", () => {
+    const REPORTER = fileURLToPath(new URL("./floor-reporter.mjs", import.meta.url));
+
+    /** 픽스처를 만들어 ⑴ 종전 오라클과 ⑵ 이 리포터로 각각 잰다. */
+    function measure(body) {
+        const dir = mkdtempSync(join(tmpdir(), "zalkera-floor-fx-"));
+        const file = join(dir, "fixture.test.mjs");
+        // ⚠ **환경을 정규화한다.** 이 시험 자신이 node 러너 안에서 도므로 `NODE_TEST_CONTEXT` 가
+        //   상속되고, 그러면 자식이 다른 모드로 돌아 요약도 리포터 출력도 안 나온다(둘 다 0 이 된다).
+        const env = {...process.env};
+        for (const k of ["NODE_TEST_CONTEXT", "NODE_OPTIONS"]) delete env[k];
+        try {
+            writeFileSync(file, body, "utf8");
+            const old = spawnSync(process.execPath, ["--test", "--", file], {encoding: "utf8", env});
+            const legacy = Number(`${old.stdout ?? ""}`.match(/^# pass (\d+)$/m)?.[1] ?? -1);
+            const now = spawnSync(process.execPath, ["--test", `--test-reporter=${REPORTER}`, file], {
+                encoding: "utf8",
+                env,
+            });
+            const line = `${now.stdout ?? ""}`.split("\n").find((l) => l.includes("\t"));
+            return {legacy, counted: line ? Number(line.split("\t")[1]) : 0};
+        } finally {
+            rmSync(dir, {recursive: true, force: true});
+        }
+    }
+
+    test("skip 한 시험은 안 센다 — 종전 오라클과 같은 값", () => {
+        const {legacy, counted} = measure(
+            'import {test} from "node:test";\n' +
+                'test("도는 것", () => {});\n' +
+                'test("재운 것", {skip: true}, () => {});\n' +
+                'test("이유 있는 skip", (t) => { t.skip("나중에"); });\n',
+        );
+        assert.equal(counted, 1, `skip 을 셌다(종전 오라클은 ${legacy})`);
+        assert.equal(counted, legacy, "종전 오라클과 값이 갈렸다");
+    });
+
+    test("todo 한 시험도 안 센다", () => {
+        const {legacy, counted} = measure(
+            'import {test} from "node:test";\n' +
+                'test("도는 것", () => {});\n' +
+                'test("할 일", {todo: true}, () => {});\n',
+        );
+        assert.equal(counted, 1);
+        assert.equal(counted, legacy);
+    });
+
+    test("중첩 describe 안의 시험은 센다 — 정상 리팩터가 CI 를 세우면 안 된다", () => {
+        const {legacy, counted} = measure(
+            'import {describe, test} from "node:test";\n' +
+                'test("최상위", () => {});\n' +
+                'describe("묶음", () => { test("a", () => {}); test("b", () => {}); });\n',
+        );
+        assert.equal(counted, 3, "묶음 자신을 세거나 중첩을 빠뜨렸다");
+        assert.equal(counted, legacy);
+    });
+
+    test("시험이 없는 파일은 0 — 종전 오라클보다 엄하다", () => {
+        // 종전 `# pass` 는 파일 자신을 1건으로 셌다. 하한 1 짜리 스위트는 빈 파일로 갈아치워도 통과했다.
+        const {legacy, counted} = measure('import {test} from "node:test";\n');
+        assert.equal(counted, 0);
+        assert.equal(legacy, 1, "종전 오라클이 빈 파일을 0 으로 세기 시작했다면 이 시험의 전제가 바뀐 것이다");
+    });
 });
