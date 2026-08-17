@@ -62,6 +62,69 @@ if (!existsSync(pagesDir)) {
     console.log("콘텐츠 페이지 라우트 — content/pages 가 없습니다. 잴 것이 없습니다.");
     process.exit(0);
 }
+// ── ⓐ **소스 배선** — 빌드 없이 잡는다. 키가 곧 URL 이고 값이 그 페이지여야 한다.
+//
+//    빌드 산출물로는 원리상 못 보는 형태가 하나 있다: 키는 맞는데 **값이 남의 페이지**인 배선
+//    (`about: history, "회사연혁": about`). `srcRoute` 는 `/[slug]`, `status` 는 200 이라 아래 축이
+//    전부 통과한다. 배송 문서가 사람·AI 에게 "import 한 줄 + 맵 한 줄"을 손으로 더하라고 가르치므로
+//    값 맞바꿈은 현실적인 오타다.
+//
+//    재현: `content/index.ts` 에서 두 페이지의 값을 맞바꾸고
+//    `node scripts/lib/content-routes.mjs; echo rc=$?` → `rc=1` · `키와 값이 어긋납니다`
+{
+    const manifestSource = join(root, "content", "index.ts");
+    if (!existsSync(manifestSource)) {
+        console.error("❌ 콘텐츠 페이지 라우트 — content/index.ts 가 없습니다(통과가 아닙니다).");
+        process.exit(2);
+    }
+    const src = readFileSync(manifestSource, "utf8");
+    // `import <이름> from "./pages/<slug>.json";`
+    const importedSlug = new Map();
+    // ⚠ **식별자는 ASCII 가 아니다.** slug `회사연혁` 은 그대로 유효한 JS 식별자라 매니페스트가
+    //   그것을 이름으로 쓴다(`identifierOf` 는 하이픈만 바꾼다). `\w` 로 훑으면 한국어 사이트의
+    //   페이지가 **통째로 이 검사 밖**에 놓인다.
+    for (const m of src.matchAll(/^\s*import\s+([\p{ID_Start}$_][\p{ID_Continue}$]*)\s+from\s+"\.\/pages\/(.+?)\.json";/gmu)) {
+        importedSlug.set(m[1], m[2]);
+    }
+    const mapBody = /export const pages[^=]*=\s*\{([\s\S]*?)\n\};/.exec(src)?.[1];
+    if (mapBody === undefined) {
+        console.error("❌ 콘텐츠 페이지 라우트 — content/index.ts 에서 pages 맵을 못 읽었습니다(통과가 아닙니다).");
+        process.exit(2);
+    }
+    const wrong = [];
+    for (const line of mapBody.split("\n")) {
+        const body = line.replace(/\/\/.*$/, "").trim().replace(/,$/, "");
+        if (body === "") continue;
+        const pair = /^(?:"(.+?)"|'(.+?)'|([\p{ID_Start}$_][\p{ID_Continue}$]*))\s*:\s*([\p{ID_Start}$_][\p{ID_Continue}$]*)$/u.exec(body);
+        if (pair) {
+            const key = pair[1] ?? pair[2] ?? pair[3];
+            const from = importedSlug.get(pair[4]);
+            if (from === undefined) {
+                wrong.push(`${key} — 값 «${pair[4]}» 이 content/pages/ 에서 온 것이 아닙니다`);
+            } else if (from !== key) {
+                wrong.push(`${key} — 키와 값이 어긋납니다(값은 content/pages/${from}.json 입니다)`);
+            }
+            continue;
+        }
+        const shorthand = /^([\p{ID_Start}$_][\p{ID_Continue}$]*)$/u.exec(body);
+        if (shorthand) {
+            const ident = shorthand[1];
+            const from = importedSlug.get(ident);
+            // ⚠ 축약은 키를 **식별자**로 만든다. slug `our-story` 는 식별자가 `our_story` 라
+            //   `/our-story` 가 404 가 된다 — 파일은 멀쩡히 있고 다른 검사기도 초록이다.
+            if (from !== undefined && from !== ident) {
+                wrong.push(`${ident} — 축약 표기라 키가 slug 가 아닙니다(«${from}» 을 키로 적으십시오)`);
+            }
+        }
+    }
+    if (wrong.length) {
+        console.error(`❌ 콘텐츠 페이지 배선 — ${wrong.length}건이 어긋납니다:`);
+        for (const w of wrong) console.error(`   · ${w}`);
+        console.error("\n   맵의 **키가 곧 URL** 이고 값은 그 slug 의 json 이어야 합니다.");
+        process.exit(1);
+    }
+}
+
 if (!existsSync(manifestPath)) {
     console.error("❌ 콘텐츠 페이지 라우트 — .next/prerender-manifest.json 이 없습니다(통과가 아닙니다).");
     console.error("   `npm run build` 뒤에 돌리십시오.");
