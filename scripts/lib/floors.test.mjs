@@ -197,11 +197,15 @@ describe("하한 집계는 실행된 시험만 센다", () => {
         for (const k of ["NODE_TEST_CONTEXT", "NODE_OPTIONS"]) delete env[k];
         try {
             writeFileSync(file, body, "utf8");
-            const old = spawnSync(process.execPath, ["--test", "--", file], {encoding: "utf8", env});
+            const old = spawnSync(process.execPath, ["--test", "--", file], {encoding: "utf8", env, cwd: dir});
             const legacy = Number(`${old.stdout ?? ""}`.match(/^# pass (\d+)$/m)?.[1] ?? -1);
-            const now = spawnSync(process.execPath, ["--test", `--test-reporter=${REPORTER}`, file], {
+            // ⚠ **글롭으로 부른다 — 게이트의 실제 호출 형상이다.** 파일을 절대경로로 직접 넘기면
+            //   node 가 `name` 도 절대경로로 실어, 「빈 파일은 자기 이름으로 통과 1건을 낸다」를
+            //   거르는 판정이 **시험에서만** 우연히 걸린다. 그러면 실제로는 안 걸리는 필터가 초록이 된다.
+            const now = spawnSync(process.execPath, ["--test", `--test-reporter=${REPORTER}`, "*.test.mjs"], {
                 encoding: "utf8",
                 env,
+                cwd: dir,
             });
             const line = `${now.stdout ?? ""}`.split("\n").find((l) => l.includes("\t"));
             return {legacy, counted: line ? Number(line.split("\t")[1]) : 0};

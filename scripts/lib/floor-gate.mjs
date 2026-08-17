@@ -1,16 +1,25 @@
 #!/usr/bin/env node
 /**
- * **가드 회귀 스위트의 하한을 `npm test` 한 번으로 집행한다.**
+ * **가드 회귀 스위트의 하한을 시험 한 판으로 집행한다.**
  *
  * ■ 왜 이 형태인가
- *   종전엔 `npm test` 뒤에 스위트를 **한 벌씩 다시** 돌려 통과 수를 셌다. 그 재실행이 Test 스텝의
- *   73%였고 그중 절반 이상이 단언 0건짜리 프로세스 기동이었다(빈 `.ts` 자식 104ms · `.mjs` 77ms).
- *   직렬이라 러너를 키워도 안 줄어든다. `test:pass` 이벤트의 `file` 로 같은 값을 한 번에 얻는다.
+ *   스위트를 한 벌씩 다시 돌려 세면 그 재실행이 Test 스텝의 대부분을 먹고, 그중 상당수가 단언
+ *   0건짜리 프로세스 기동이다. 직렬이라 러너를 키워도 안 줄어든다. `test:pass` 이벤트가 `file` 을
+ *   실으므로 같은 값을 한 판에서 얻는다.
+ *
+ *   재현(이 기계 3.02초 → 1.08초):
+ *     node scripts/lib/floor-gate.mjs
+ *     npm test && for f in $(node -p 'Object.keys(require("./scripts/lib/test-floors.json")).filter(k=>k!=="_").join(" ")'); do node --experimental-strip-types --test -- "$f"; done
  *
  * ■ 부수 효과 — **공격면이 하나 사라진다**
  *   종전 루프는 하한표의 키를 `node` 의 argv 로 넘겼다. `-` 로 시작하는 키가 플래그로 해석되는
  *   것을 막으려고 `--` 분리와 키 형태 정규식이 심층방어로 서 있었다. 여기서는 키가 argv 에
  *   **아예 안 들어간다** — 표에서 읽어 파일 존재만 묻는다.
+ *
+ * ■ **`npm test` 를 부르지 않는다**
+ *   `node --test` 를 직접 부른다. 그래서 검사 대상이 정한 `test` 스크립트 문자열이 안 돈다 —
+ *   임의 명령 싱크가 하나 줄었다. 다만 두 글롭 밖의 시험은 이제 안 돌고, `package.json` 의
+ *   `test` 가 깨져 있어도 여기서는 모른다.
  *
  * ■ 판정은 여기 없다
  *   `judgeFloors`(lib/floors.mjs)가 든다. `ci.yml` 과 `verify-zip --pack` 이 같은 것을 쓴다 —

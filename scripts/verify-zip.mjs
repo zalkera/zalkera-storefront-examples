@@ -276,7 +276,7 @@ function effectiveRoot(dir) {
  *     lib/routes.mjs               ← 관문 등재 프로브 도출
  *     lib/gate-behavior.mjs        ← `--pack` 의 관문 행위 검사
  *     lib/content-routes.mjs       ← 콘텐츠 페이지가 실제로 서는가
- *     lib/floor-gate.mjs           ← 하한 집행(`npm test` 한 번에서 뽑는다)
+ *     lib/floor-gate.mjs           ← 하한 집행(시험 한 판에서 뽑는다)
  *     lib/floor-reporter.mjs       ← 그 게이트가 리포터로 넘긴다 — **손자라 빠뜨리기 쉽다**
  *
  *   재현: 다른 디렉터리에 `verify-zip.mjs` 만 두고 돌리면 `ERR_MODULE_NOT_FOUND` 로 죽고,
@@ -851,7 +851,7 @@ try {
 
                 // ⑦-b **가드 회귀 스위트**.
                 //
-                //    `npm test` **한 번**에서 파일별 통과 수를 뽑는다(node 러너가 `test:pass` 이벤트에
+                //    시험 **한 판**에서 파일별 통과 수를 뽑는다(node 러너가 `test:pass` 이벤트에
                 //    `file` 을 싣는다). 종전엔 그 뒤에 스위트를 한 벌씩 다시 돌렸고, 그 재실행이 이
                 //    블록의 대부분이었다 — 직렬이라 코어를 늘려도 안 줄었다. 실측 3.02초 → 1.08초.
                 //

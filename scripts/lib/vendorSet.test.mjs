@@ -47,11 +47,17 @@ test("소스가 부르는 형제를 목록이 전부 덮는다 — 빠지면 사
         const dir = entry.includes("/") ? entry.slice(0, entry.lastIndexOf("/")) : "";
         const rebase = (rel) => (dir ? `${dir}/${rel}` : rel);
         // ⑴ 상대 import — 그 파일이 있는 폴더 기준이다.
-        //    ⚠ **줄 첫머리의 `import`/`export` 문만 본다.** 아무 데서나 `from "./x"` 를 찾으면
-        //      주석이나 문자열 안의 예시가 의존으로 잡힌다(실제로 한 번 그렇게 오검이 났다:
-        //      `// import <이름> from "./pages/<slug>.json";` 라는 설명 한 줄).
-        //      오검이 나면 다음 판에 붙는 것은 수정이 아니라 면제다.
-        for (const m of body.matchAll(/^\s*(?:import|export)\b[^\n]*?\bfrom\s+"\.\/([^"]+)"/gm)) {
+        //    ⚠ **`import`/`export` 문에서 시작하는 것만 본다.** 아무 데서나 `from "./x"` 를 찾으면
+        //      주석이나 문자열 안의 예시가 의존으로 잡힌다 — `// import <이름> from "./pages/x.json";`
+        //      같은 설명 한 줄에 오검이 난다. 오검이 나면 다음 판에 붙는 것은 수정이 아니라 면제다.
+        //
+        //    ⚠ **여러 줄에 걸친 import 도 잡는다.** `[^\n]*?` 로 좁히면 아래 형태를 놓친다:
+        //        import {
+        //            무엇,
+        //        } from "./형제.mjs";
+        //      줄 단위로 좁히는 것이 오검을 막는 방법처럼 보이지만, 그러면 은닉이 생긴다.
+        //      대신 `;` 를 만나기 전까지만 훑어 문장 경계를 지킨다.
+        for (const m of body.matchAll(/(?:^|\n)\s*(?:import|export)\b[^;]*?\bfrom\s+"\.\/([^"]+)"/g)) {
             needed.add(rebase(m[1]));
         }
         // ⑵ `join(HERE, …)` 로 만들어 spawn 하는 경로

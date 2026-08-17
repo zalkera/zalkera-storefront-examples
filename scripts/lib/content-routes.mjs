@@ -92,8 +92,16 @@ if (!existsSync(pagesDir)) {
         process.exit(2);
     }
     const wrong = [];
-    for (const line of mapBody.split("\n")) {
-        const body = line.replace(/\/\/.*$/, "").trim().replace(/,$/, "");
+    // ⚠ **줄 단위로 자르지 않는다.** 매니페스트는 사람이 손으로 고치는 파일이라 항목이 두 줄에
+    //   걸칠 수 있다(`"about":` 다음 줄에 `history,`). 줄 단위 파서는 그런 항목을 **조용히
+    //   건너뛰어** 오배선을 못 본다 — 못 읽은 줄을 말하지도 않으니 아무도 모른다.
+    //   쉼표로 끊고 줄바꿈을 공백으로 접어 항목 단위로 본다.
+    const flat = mapBody
+        .split("\n")
+        .map((line) => line.replace(/\/\/.*$/, ""))
+        .join(" ");
+    for (const raw of flat.split(",")) {
+        const body = raw.replace(/\s+/g, " ").trim();
         if (body === "") continue;
         const pair = /^(?:"(.+?)"|'(.+?)'|([\p{ID_Start}$_][\p{ID_Continue}$]*))\s*:\s*([\p{ID_Start}$_][\p{ID_Continue}$]*)$/u.exec(body);
         if (pair) {
@@ -107,7 +115,13 @@ if (!existsSync(pagesDir)) {
             continue;
         }
         const shorthand = /^([\p{ID_Start}$_][\p{ID_Continue}$]*)$/u.exec(body);
-        if (shorthand) {
+        if (!shorthand) {
+            // ⚠ **못 읽은 항목을 조용히 넘기지 않는다.** 넘기면 「검사했다」와 「검사할 수 없었다」가
+            //   같은 초록이 된다.
+            wrong.push(`«${body.slice(0, 60)}» — 이 항목을 못 읽었습니다(키: 값 형태로 적으십시오)`);
+            continue;
+        }
+        {
             const ident = shorthand[1];
             const from = importedSlug.get(ident);
             // ⚠ 축약은 키를 **식별자**로 만든다. slug `our-story` 는 식별자가 `our_story` 라

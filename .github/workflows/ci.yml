@@ -89,7 +89,7 @@ jobs:
             #   skip 은 통과 0이라 하한이 거짓 적색을 낸다. 게이트의 글롭은 그 시험도 물어서 돌린다 —
             #   하한만 안 걸 뿐이다.
             #
-            # 하한 집행은 `scripts/lib/floor-gate.mjs` 하나가 한다 — `npm test` **한 번**에서
+            # 하한 집행은 `scripts/lib/floor-gate.mjs` 하나가 한다 — 시험을 **한 판**만 돌려서
             # 파일별 통과 수를 뽑는다. 종전엔 그 뒤에 스위트를 한 벌씩 다시 돌렸고, 그 재실행이
             # 이 스텝의 대부분이었다. 실측 3.02초 → 1.08초. 재현:
             #   node scripts/lib/floor-gate.mjs

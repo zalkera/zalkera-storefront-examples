@@ -1,8 +1,8 @@
 /**
- * **`npm test` 한 번에서 스위트별 통과 수를 뽑는 리포터.**
+ * **시험 한 판에서 스위트별 통과 수를 뽑는 리포터.**
  *
  * ■ 왜 있나
- *   하한 판정은 종전에 `npm test` 를 돌린 **뒤 스위트를 한 벌씩 다시** 돌려서 얻었다. 그 재실행이
+ *   하한 판정은 종전에 시험을 돌린 **뒤 스위트를 한 벌씩 다시** 돌려서 얻었다. 그 재실행이
  *   Test 스텝의 73%였고, 그중 절반 이상이 **단언 0건짜리 프로세스 기동**이었다(빈 `.ts` 자식 104ms ·
  *   빈 `.mjs` 자식 77ms). 직렬이라 코어를 늘려도 안 줄어든다 — 12코어 1,870ms 대 4코어 1,888ms.
  *
@@ -22,10 +22,12 @@
  *
  * ■ **이 리포터는 판정하지 않는다**
  *   파일별 통과 수를 `TSV` 로 stdout 에 낼 뿐이고, 하한과 대조하는 것은 `judgeFloors` 다.
- *   판정을 여기 두면 `npm test` 를 부르는 모든 자리가 하한을 알아야 한다.
+ *   판정을 여기 두면 시험을 돌리는 모든 자리가 하한을 알아야 한다.
  *
  * 사용: `node --experimental-strip-types --test --test-reporter=./scripts/lib/floor-reporter.mjs …`
  */
+import {resolve} from "node:path";
+
 export default async function* floorReporter(source) {
     const pass = new Map();
     for await (const event of source) {
@@ -35,10 +37,14 @@ export default async function* floorReporter(source) {
         // ⚠ **`skip`·`todo` 는 뺀다.** `skip` 은 `true` 또는 이유 문자열로 온다 — `!skip` 이 아니라
         //   `undefined` 인지로 거른다.
         if (skip !== undefined || todo !== undefined) continue;
-        // ⚠ **시험이 하나도 없는 파일은 자기 이름으로 «통과» 한 건을 낸다.** 종전 `# pass N` 도
+        // ⚠ **시험이 하나도 없는 파일은 자기 «이름»으로 통과 한 건을 낸다.** 종전 `# pass N` 도
         //   똑같이 1 을 냈다 — 즉 하한 1 짜리 스위트는 **빈 파일로 갈아치워도** 통과한다.
-        //   여기서 더 엄하게 간다. 시험이 있는 파일에는 이 이벤트가 안 오므로 값이 안 바뀐다.
-        if (name === file) continue;
+        //   여기서 더 엄하게 간다.
+        //
+        //   ⚠ **`name === file` 로는 못 거른다.** 글롭으로 부르면 node 가 `name` 을 **상대경로**로,
+        //   `file` 을 절대경로로 싣는다(파일을 절대경로로 직접 넘길 때만 둘이 같다). 문자열 비교로
+        //   두면 실제 호출 형상에서 한 번도 안 걸린다. 경로로 맞춰서 묻는다.
+        if (name && resolve(name) === file) continue;
         pass.set(file, (pass.get(file) ?? 0) + 1);
     }
     for (const [file, n] of [...pass].sort()) yield `${file}\t${n}\n`;
