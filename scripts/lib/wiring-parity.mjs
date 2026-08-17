@@ -84,6 +84,8 @@ export const WIRING_FILES = [
     "src/lib/content.ts",
     "src/lib/ownPage.ts",
     "src/lib/content.test.ts",
+    "src/lib/reservedSegments.ts",
+    "src/lib/reservedSegments.test.ts",
     "src/lib/routeParam.ts",
     "src/lib/routeParam.test.ts",
 ];
@@ -199,6 +201,15 @@ function driftMessage(rel, seen) {
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
     const problems = checkWiringParity();
     const trees = sourceTrees(ROOT).map((t) => t.name);
+    // ⚠ **정본 레포에서는 «잴 대상이 없음»이 통과가 아니다.** `checkWiringParity` 는 소스가 한 벌이면
+    //   조용히 통과한다 — 고객 zip 은 실제로 한 벌이라 그 관대함이 맞다. 그런데 정본에서는
+    //   `presets/` 를 지우는 것만으로 이 검사가 초록이 된다. 팩 도구가 있으면 정본이다(그 파일은
+    //   zip 에 안 실린다). 재현: `mv presets /tmp/x && node scripts/lib/wiring-parity.mjs; echo rc=$?`
+    if (existsSync(join(ROOT, "scripts", "pack-preset.mjs")) && trees.length < 2) {
+        console.error(`배선 동일성 — 대조할 소스가 ${trees.length}벌뿐입니다(통과가 아닙니다).`);
+        console.error("  정본 레포에는 루트 `src/` 와 `presets/*/src` 가 함께 있어야 합니다.");
+        process.exit(2);
+    }
     if (problems.length === 0) {
         console.log(`배선 동일성 통과 — 소스 ${trees.length}벌(${trees.join(" · ")})`);
         console.log(`  파일 ${WIRING_FILES.length}개 + 디렉터리 ${WIRING_DIRS.join(" · ")}`);

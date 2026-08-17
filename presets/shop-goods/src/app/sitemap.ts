@@ -1,6 +1,7 @@
 import type {MetadataRoute} from "next";
 import {pageSlugs} from "@/lib/content";
 import {zalkera} from "@/lib/zalkera";
+import {RESERVED_SEGMENTS} from "@/lib/reservedSegments";
 import {siteUrl} from "@/lib/site";
 
 /**
@@ -21,29 +22,6 @@ export const revalidate = 3600;
 /** 페이지네이션 안전 상한 — 카탈로그가 폭증해도 크롤 1회가 무한 루프가 되지 않게 한다. */
 const MAX_PAGES = 50;
 const PAGE_SIZE = 100;
-
-/**
- * 고정 라우트 세그먼트 — 이 이름과 같은 slug 의 CMS 페이지는 **sitemap 에 넣지 않는다**.
- *
- * Next 는 정적 세그먼트를 `[slug]` 보다 우선하므로, 예컨대 slug 가 `cart` 인 페이지를 만들어도
- * `/cart` 는 장바구니가 뜬다. 그 URL 을 sitemap 에 실으면 크롤러에게 **페이지가 아닌 것을 페이지라고**
- * 알리는 셈이라, 색인은 되는데 내용이 다르다. 그림자화된 slug 는 조용히 뺀다.
- */
-const RESERVED_SEGMENTS = new Set([
-    "api",
-    "auth",
-    "blog",
-    "cart",
-    "checkout",
-    "contact",
-    "login",
-    "media",
-    "mypage",
-    "orders",
-    "payment",
-    "policies",
-    "products",
-]);
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     const base = siteUrl();
