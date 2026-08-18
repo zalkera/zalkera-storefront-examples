@@ -44,6 +44,7 @@ export async function GET(_req: Request, {params}: {params: Promise<{id: string}
             //    불리므로(카탈로그 페이지는 상한 24), 백엔드가 느려지면 한 뷰가 핸들러 24개를
             //    한꺼번에 붙든다. 서명 발급은 수백 ms 짜리라 짧게 잡는다.
             signal: AbortSignal.timeout(5000),
+        });
     } catch {
         return new NextResponse(null, {status: 502});
     }

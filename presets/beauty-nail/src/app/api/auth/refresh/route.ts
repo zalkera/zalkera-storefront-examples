@@ -43,13 +43,13 @@ export async function GET(req: Request) {
         // 갱신 완료 — 원래 가려던 곳으로. r=1 은 "이미 갱신했다"는 표시(위 루프 가드).
         const to = new URL(next, url.origin);
         to.searchParams.set("r", "1");
-        const response = NextResponse.redirect(to);
+        const response = NextResponse.redirect(to, {headers: NO_STORE});
         setAuthHint(response, true);
         return response;
     } catch {
         // refresh 도 죽었다(30일 경과·세션 폐기·로그아웃) — 이제야 진짜 로그인이 필요하다.
         await clearCustomerTokens();
-        const response = NextResponse.redirect(new URL("/login", url.origin));
+        const response = NextResponse.redirect(new URL("/login", url.origin), {headers: NO_STORE});
         setAuthHint(response, false);
         return response;
     }

@@ -89,6 +89,7 @@ import {createRequire} from "node:module";
 import {deflateRawSync} from "node:zlib";
 import {crc32} from "./preset-canvas.mjs";
 import {checkWiringParity} from "./lib/wiring-parity.mjs";
+import {readThemeEnums as readThemeEnumsFrom} from "./lib/themeEnums.mjs";
 import {checkVisitorIp} from "./lib/visitor-ip-parity.mjs";
 import {contentManifest} from "./lib/contentManifest.mjs";
 
@@ -152,6 +153,10 @@ const SOURCE_EXCLUDES = [
     // 배송물에서 이것을 import 하는 코드는 0건이고(실측), 크롤러 정본은 `@zalkera/client` 에 있다.
     "scripts/lib/site-crawl.mjs",
     "scripts/lib/wiring-parity.mjs",
+    // 팩 도구(`pack-preset.mjs`)가 시드값을 테마 계약과 대조할 때만 쓰는 판독기와 그 시험.
+    // 그 도구가 정본 전용이라 둘 다 같다 — 고객 트리에서 부를 표면이 없다.
+    "scripts/lib/themeEnums.mjs",
+    "scripts/lib/themeEnums.test.mjs",
     // 배송 문서의 측정 주장을 재는 **정본 전용** 검사기다. BASELINE 이 이 레포 파일 경로에 매여 있고
     // `ci.yml` 도 판별자 뒤에서만 부른다 — 고객 트리에 실으면 부를 일 없는 9.8KB 가 전 테넌트에 복제된다.
     "scripts/lib/doc-claims.mjs",
@@ -394,29 +399,10 @@ function iconKeys(code) {
  */
 const HOME_SLUG = "home";
 
-/**
- * 테마 enum 의 **정본에서 읽는다.** `src/lib/theme.ts` 의 `FONTS`·`RADII`·`DENSITIES` 선언이
- * 계약이고, 그 파일 주석이 "백엔드 enum 과 반드시 일치해야 한다(계약)"고 못박는다.
- *
- * ⚠ 여기에 값을 **베껴 적지 않는다.** 베끼면 정본이 바뀔 때 이 사본이 낡고, 검사기가 낡은 표로
- *   초록을 찍는다 — 이 레포가 이미 여러 번 겪은 형상이다. 선언을 못 읽으면 **통과가 아니라 중단**이다.
- */
+/** 테마 enum 계약은 `src/lib/theme.ts` 에서 읽는다 — 판독기와 그 시험은 `scripts/lib/themeEnums.mjs`. */
 function readThemeEnums() {
     const file = join(ROOT, "src/lib/theme.ts");
-    const src = readFileSync(file, "utf8");
-    const out = {};
-    for (const [field, decl] of [
-        ["font", "FONTS"],
-        ["radius", "RADII"],
-        ["density", "DENSITIES"],
-    ]) {
-        const m = new RegExp(`const\\s+${decl}\\b[^=]*=\\s*\\{([^}]*)\\}`, "s").exec(src);
-        if (!m) throw new Error(`테마 계약을 읽지 못했습니다 — ${file} 에서 ${decl} 선언을 못 찾았습니다`);
-        const keys = [...m[1].matchAll(/(\w+)\s*:/g)].map((x) => x[1]);
-        if (keys.length === 0) throw new Error(`테마 계약이 비었습니다 — ${decl}`);
-        out[field] = keys;
-    }
-    return out;
+    return readThemeEnumsFrom(readFileSync(file, "utf8"), file);
 }
 
 /**
