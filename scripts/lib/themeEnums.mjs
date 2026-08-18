@@ -44,10 +44,17 @@ export function readEnumKeys(source, decl, where = "theme.ts") {
     }
     if (init === null) throw new Error(`테마 계약을 읽지 못했습니다 — ${where} 에서 ${decl} 선언을 못 찾았습니다`);
 
-    // `as const`·괄호로 감싼 형태를 벗긴다. 그래도 객체가 아니면 열거할 수 없다.
+    // 값을 바꾸지 않는 껍질을 벗긴다 — `as const`·`satisfies`·괄호·타입 단언. 그래도 객체가 아니면
+    // 열거할 수 없다. ⚠ 껍질 하나를 빠뜨리면 그 관용구를 쓴 **정상 선언이 거짓 반려**된다
+    // (`as const satisfies Record<…>` 는 객체 리터럴인데 "객체가 아니다"로 죽는다). fail-closed 라
+    // 배송 결함은 아니지만 정상 리팩터링을 막는다.
     let node = init;
-    while (ts.isAsExpression(node) || ts.isParenthesizedExpression(node) || ts.isTypeAssertionExpression?.(node)) {
-        node = node.expression;
+    for (;;) {
+        if (ts.isAsExpression(node) || ts.isParenthesizedExpression(node)) node = node.expression;
+        else if (ts.isSatisfiesExpression?.(node)) node = node.expression;
+        else if (ts.isTypeAssertionExpression?.(node)) node = node.expression;
+        else if (ts.isNonNullExpression?.(node)) node = node.expression;
+        else break;
     }
     if (!ts.isObjectLiteralExpression(node)) {
         throw new Error(`${decl} 이 객체 리터럴이 아닙니다 — 값을 열거할 수 없습니다(${where})`);

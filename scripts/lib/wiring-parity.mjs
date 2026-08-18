@@ -88,6 +88,9 @@ export const WIRING_FILES = [
     "src/lib/reservedSegments.test.ts",
     "src/lib/routeParam.ts",
     "src/lib/routeParam.test.ts",
+    // 미디어 302 의 캐시 상한 판정. 한 벌만 넓어지면 그 팩만 만료된 서명을 재사용해 이미지가 깨진다.
+    "src/lib/mediaCache.ts",
+    "src/lib/mediaCache.test.ts",
 ];
 
 /** 이 아래는 **전송층**이다(디자인 0). 같은 경로가 둘 이상의 팩에 있으면 바이트 동일해야 한다. */

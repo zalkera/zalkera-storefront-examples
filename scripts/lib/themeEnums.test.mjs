@@ -84,3 +84,20 @@ test("양성 통제군 — 정상 선언은 하나도 안 던진다", () => {
     const ok = ["const F = {a: 1};", 'const F = {"a-b": 1};', "const F = {a: 1, b: 2, c: 3};", "const F = {a} ;"];
     for (const src of ok) assert.ok(readEnumKeys(src, "F").length > 0, src);
 });
+
+test("값을 바꾸지 않는 껍질을 전부 벗긴다 — 정상 관용구를 거짓 반려하지 않는다", () => {
+    // 껍질 하나를 빠뜨리면 그 관용구로 리팩터링하는 순간 팩이 안 구워진다.
+    for (const src of [
+        "const F = {a: 1} as const;",
+        "const F = {a: 1} satisfies Record<string, number>;",
+        "const F = {a: 1} as const satisfies Record<string, number>;",
+        "const F = ({a: 1});",
+        "const F = (({a: 1} as const));",
+    ]) {
+        assert.deepEqual(readEnumKeys(src, "F"), ["a"], src);
+    }
+});
+
+test("껍질을 벗겨도 객체가 아니면 던진다 — 벗기기가 통과로 새지 않는다", () => {
+    assert.throws(() => readEnumKeys("const F = build() as const;", "F"), /객체 리터럴이 아닙니다/);
+});
