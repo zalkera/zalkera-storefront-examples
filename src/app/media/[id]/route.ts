@@ -29,7 +29,10 @@ export async function GET(_req: Request, {params}: {params: Promise<{id: string}
     const {id: rawParam} = await params;
     const id = routeParam(rawParam);
     // id 를 그대로 URL 에 이어붙이므로 숫자만 통과시킨다(경로 주입 차단).
-    if (!/^\d+$/.test(id)) return new NextResponse(null, {status: 404});
+    // ⚠ **실패에도 캐시 지시를 단다.** 404 는 RFC 9111 의 휴리스틱 캐시 **대상**이라, 지시가 없으면
+    //    공유 캐시가 제 마음대로 저장한다 — 아직 발행 안 된 미디어의 깨진 이미지가 무효화 수단 없이
+    //    굳는다. 반대로 상한 없이 매번 뚫리면 죽은 id 하나가 뷰마다 백엔드를 친다.
+    if (!/^\d+$/.test(id)) return new NextResponse(null, {status: 404, headers: NOT_FOUND_CACHE});
 
     const base = apiBase();
     const tenant = tenantCode();
@@ -49,12 +52,17 @@ export async function GET(_req: Request, {params}: {params: Promise<{id: string}
             signal: AbortSignal.timeout(5000),
         });
     } catch {
-        return new NextResponse(null, {status: 502});
+        // 상류 장애는 곧 풀린다 — 캐시하지 않는다.
+        return new NextResponse(null, {status: 502, headers: {"Cache-Control": "no-store"}});
     }
 
     const location = res.headers.get("location");
     // 백엔드가 302+Location 을 안 주면(없는 id·타 테넌트 id → 404) 그대로 없는 것으로 취급한다.
-    if (!location) return new NextResponse(null, {status: res.status === 404 ? 404 : 502});
+    if (!location) {
+        return res.status === 404
+            ? new NextResponse(null, {status: 404, headers: NOT_FOUND_CACHE})
+            : new NextResponse(null, {status: 502, headers: {"Cache-Control": "no-store"}});
+    }
 
     // 이 302 의 Location 은 만료되는 서명 URL 이다. 서명보다 오래 캐시하면 방문자에게 죽은
     // 링크가 나간다. 상한은 [cacheControlFrom] 이 **상류가 보낸 지시에서** 뽑는다.
@@ -63,3 +71,10 @@ export async function GET(_req: Request, {params}: {params: Promise<{id: string}
         headers: {"Cache-Control": cacheControlFrom(res.headers.get("cache-control"))},
     });
 }
+
+/**
+ * 없는 미디어의 캐시 지시. 404 는 휴리스틱 캐시 **대상**이라 지시를 안 달면 공유 캐시가 제 마음대로
+ * 정한다. 짧게 달아 ⑴ 죽은 id 가 뷰마다 백엔드를 치지 않게 하고 ⑵ 나중에 발행된 미디어가 오래
+ * 안 보이지 않게 한다. 성공 경로의 상한과 같은 근거의 짧은 쪽이다.
+ */
+const NOT_FOUND_CACHE = {"Cache-Control": "private, max-age=30"} as const;

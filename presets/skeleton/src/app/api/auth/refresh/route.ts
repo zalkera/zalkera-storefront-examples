@@ -29,7 +29,9 @@ import {safeNextPath} from "@/lib/oauth";
  * 자기 세션 회전에 국한되기 때문"이다. 다른 상태를 바꾸는 GET 은 같은 근거를 물려받지 못한다.
  */
 export async function GET(req: Request) {
-    // 세션 경로 — 캐시 금지. 리다이렉트도 캐시 대상이라 명시한다(모든 GET 라우트가 명시한다).
+    // 세션 경로 — 캐시 금지. 리다이렉트도 캐시 대상이라 **이 라우트의 세 반환 모두** 명시한다.
+    // (다른 GET 라우트의 정상 경로도 명시하지만, 401·400 같은 오류 반환까지 전부는 아니다 —
+    //  그것들은 휴리스틱 캐시 대상이 아니라 실피해가 없다. 캐시 대상인 404 는 따로 붙였다.)
     const NO_STORE = {"Cache-Control": "no-store"} as const;
     const url = new URL(req.url);
     const next = safeNext(url.searchParams.get("next"));
