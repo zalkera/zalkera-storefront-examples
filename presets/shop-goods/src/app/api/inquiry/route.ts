@@ -13,7 +13,12 @@ import {visitorIp} from "@zalkera/client";
  * `visitorIp(req.headers)` 로 뽑아 넘긴다 — IP 민감 호출(inquiry·lead·조회수)은 전부 이 관용구를 복제하라.
  *
  * ⚠️ **첫 홉을 직접 쓰지 마라**(`x-forwarded-for` 의 첫 엔트리는 방문자가 위조할 수 있다). `visitorIp` 는
- * 신뢰 프록시 홉 수를 기준으로 뒤에서부터 채택한다 — 그것이 위조를 흡수하는 유일한 지점이다.
+ * 신뢰 프록시 홉 수를 기준으로 뒤에서부터 채택한다.
+ *
+ * ⚠️ **그 흡수는 홉 수가 배포와 맞을 때만 성립한다.** 홉 수는 `ZALKERA_TRUSTED_PROXY_HOPS` 로 정하고
+ * 기본값은 1(맨 뒤 항목)이다. 프록시가 없으면 XFF 전체가 방문자가 쓴 문자열이라 **맨 뒤도 위조값**이고,
+ * 반대로 프록시가 2단인데 1로 두면 프록시 IP 를 방문자로 읽어 전 방문자가 같은 칸을 쓴다.
+ * 배포마다 세어서 넣어야 하고, 모르면 `0`(주장하지 않음)이 안전하다 — `.env.example` 참조.
  */
 export async function POST(req: Request) {
     const blocked = assertSameOrigin(req);

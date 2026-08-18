@@ -10,7 +10,10 @@ import {setAuthHint} from "@/lib/authHint";
  * 주문 취소 — 로그인 고객(토큰) 또는 게스트(바디 phone). **미결제(PENDING_PAYMENT)만** 서버가
  * 허용한다(그 외는 NOT_CANCELABLE 409). 결제된 주문은 환불 경로라 여기서 못 무른다.
  *
- * phone 은 **바디로만** 받는다(URL 쿼리 금지 — 로그·리퍼러 유출 면). 마이페이지(OrderList)는 바디
+ * phone 은 **브라우저→여기 홉에서** 바디로만 받는다(URL 쿼리 금지 — 브라우저 히스토리·리퍼러
+ * 유출 면). ⚠ **그 뒤 홉까지 덮지 않는다** — `@zalkera/client` 는 게스트 조회 계열에서 phone 을
+ * **쿼리스트링**으로 백엔드에 보낸다(`accessInit` 의 `query: {phone}`). 즉 백엔드 접근 로그에는
+ * 남는다. 여기 규율은 «공개 면(브라우저)에 안 싣는다» 까지이고, 내부 홉은 그 라이브러리가 정한다. 마이페이지(OrderList)는 바디
  * 없이 POST 하므로 readJsonBody 가 null 이어도 400 을 내지 않는다(phone 없으면 undefined → 토큰 경로).
  */
 export async function POST(req: Request, {params}: {params: Promise<{orderNo: string}>}) {

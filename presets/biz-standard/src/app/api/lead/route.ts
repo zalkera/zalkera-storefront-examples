@@ -16,6 +16,9 @@ import {visitorIp} from "@zalkera/client";
  * 그대로 쓰면 레이트리밋이 무력해진다(헤더만 바꾸면 매번 다른 사람이 된다). `visitorIp` 는 신뢰 프록시
  * 홉 수를 기준으로 **뒤에서부터** 채택한다.
  *
+ * ⚠️ **그 홉 수가 배포와 맞아야 한다.** `ZALKERA_TRUSTED_PROXY_HOPS`(기본 1)가 안 맞으면 위조가 그대로
+ * 통과하거나(프록시 없음) 전 방문자가 한 칸을 공유한다(프록시 2단 이상) — `.env.example` 참조.
+ *
  * 성공은 201 을 관통시킨다(inquiry 는 200 으로 뭉갠다) — 리드 생성은 새 리소스라 201 이 맞다.
  */
 export async function POST(req: Request) {
