@@ -1164,6 +1164,14 @@ validateSource([
 // **배선 동일성**(오너 확정 2026-08-01) — 팩이 소스를 따로 갖는 대신, *틀리면 사고가 나는* 파일만
 // 바이트로 잠근다. 얼굴이 갈리는 것은 의도이므로 재지 않는다. 판정은 `scripts/lib/wiring-parity.mjs`
 // 한 곳에만 있다(`node scripts/lib/wiring-parity.mjs` 이 같은 함수를 부른다 — 검사기 사본이 갈리는 병의 재발 방지).
+// 배송 문서·주석의 주장을 굽기 전에 잰다. CI 도 같은 검사기를 부르지만, **여기가 봉인 시점**이라
+// 여기서 걸리는 편이 카탈로그에 올라간 뒤 아는 것보다 낫다. 정본 전용 검사기라 zip 에는 안 실린다.
+try {
+    execFileSync("node", [join(ROOT, "scripts/lib/doc-claims.mjs")], {cwd: ROOT, stdio: "inherit"});
+} catch {
+    fail("DOC_CLAIMS", "배송 문서·주석의 주장 검사에 걸렸습니다 — 위 출력을 보십시오");
+}
+
 problems.push(...checkWiringParity(ROOT));
 
 // **방문자 IP 선언** — 배선 동일성이 못 보는 자리다(그쪽은 바이트 잠금이라 **얼굴**을 못 넣는다).

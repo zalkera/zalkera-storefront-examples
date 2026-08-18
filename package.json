@@ -15,7 +15,7 @@
         "build": "next build",
         "start": "next start",
         "typecheck": "tsc --noEmit",
-        "verify": "npm run validate && npm run typecheck && npm test && node scripts/lib/wiring-parity.mjs",
+        "verify": "npm run validate && npm run typecheck && npm test",
         "validate": "node scripts/validate-storefront.mjs",
         "check:aeo": "node scripts/check-aeo-surfaces.mjs",
         "test": "node --experimental-strip-types --test \"src/**/*.test.ts\" \"scripts/**/*.test.mjs\"",

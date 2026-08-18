@@ -416,6 +416,8 @@ function hintTmpSpace(text) {
     console.error(`     디스크 경로를 주고 다시 돌리십시오:  TMPDIR=/큰/디스크/경로 node scripts/verify-zip.mjs <zip>`);
 }
 let failed = false;
+/** X 축 지적. 푸터가 «없는 항목»을 가리키지 않도록 여기서 들고 있는다. */
+let xFindings = [];
 
 try {
     console.log(`\n납품 검수 — ${zipPath}\n${"─".repeat(60)}`);
@@ -789,6 +791,7 @@ try {
         //   경고가 아무 문에서도 안 걸리면 그냥 방치다. 현재 4팩은 X 축 지적 **0건**이라(실측) 이
         //   기준을 올려도 오탐이 없다.
         const xWarnings = warnings.filter((w) => /\[X\d/.test(w));
+        xFindings = xWarnings;
         if (packMode && xWarnings.length) {
             record(
                 "교차사이트 위조 가드(팩 기준)",
@@ -1058,11 +1061,15 @@ if (unread.length) {
 console.log("─".repeat(60));
 if (failed) {
     console.error("\n반려 — 위 ❌ 항목을 고쳐 재납품 요청하십시오.");
-console.error(
-    packMode
-        ? "  · ⚠️ [X1~X3] 교차사이트 위조 가드 — `--pack` 에서는 반려 사유입니다(위 ❌ 항목 참조)."
-        : "  · ⚠️ [X1~X3] 교차사이트 위조 가드 경고가 있으면 그것도 같이 보십시오 — 이 모드에서는 안 막습니다.",
-);
+    // X 지적이 하나도 없는데 "위 ❌ 항목 참조"를 찍으면 없는 것을 가리킨다 — 반려 사유가
+    // 문법 오류 하나뿐일 때 실제로 그랬다. 이 줄은 X 지적이 실제로 있을 때만 낸다.
+    if (xFindings.length > 0) {
+        console.error(
+            packMode
+                ? "  · ⚠️ [X1~X3] 교차사이트 위조 가드 — `--pack` 에서는 반려 사유입니다(위 ❌ 항목 참조)."
+                : "  · ⚠️ [X1~X3] 교차사이트 위조 가드 경고가 있습니다 — 이 모드에서는 안 막습니다.",
+        );
+    }
     console.error("사람이 추가로 볼 것: 에셋 출처 실제 대조 · 링크 소독(safeUrl) 여부 · 개시 후 화면·색 반영.");
     process.exit(1);
 }
