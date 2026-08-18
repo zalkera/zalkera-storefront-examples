@@ -38,7 +38,11 @@ export async function GET(_req: Request, {params}: {params: Promise<{id: string}
             // 302 를 따라가면 바이트가 이 런타임을 통과한다 — Location 만 필요하다.
             redirect: "manual",
             cache: "no-store",
-        });
+            // ⚠ **상한을 건다.** Node 의 `fetch` 는 기본 타임아웃이 없다 — 백엔드가 연결만 받고
+            //    응답을 안 주면 이 핸들러가 무기한 매단다. 이 라우트는 **페이지뷰마다 이미지 수만큼**
+            //    불리므로(카탈로그 페이지는 상한 24), 백엔드가 느려지면 한 뷰가 핸들러 24개를
+            //    한꺼번에 붙든다. 서명 발급은 수백 ms 짜리라 짧게 잡는다.
+            signal: AbortSignal.timeout(5000),
     } catch {
         return new NextResponse(null, {status: 502});
     }

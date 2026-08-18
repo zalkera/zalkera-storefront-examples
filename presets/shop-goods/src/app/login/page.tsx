@@ -1,5 +1,4 @@
-import Link from "next/link";
-import {getAccessToken} from "@/lib/session";
+import {LoggedInHint} from "./LoggedInHint";
 import {LoginPanel} from "./LoginPanel";
 
 /**
@@ -7,18 +6,13 @@ import {LoginPanel} from "./LoginPanel";
  * 이미 로그인돼 있으면(쿠키에 토큰) 안내만 — 자동 리다이렉트하지 않는다(토큰 만료 시 /mypage 와의 루프 방지).
  * 개발 환경에서는 실 OAuth 없이 도는 테스트 로그인을 함께 노출한다.
  */
-export default async function LoginPage() {
-    const loggedIn = Boolean(await getAccessToken());
+export default function LoginPage() {
     const showTest = process.env.NODE_ENV !== "production";
 
     return (
         <main className="py-8">
             <h1>로그인</h1>
-            {loggedIn && (
-                <p className="text-muted">
-                    이미 로그인되어 있습니다. <Link href="/mypage">마이페이지 →</Link>
-                </p>
-            )}
+            <LoggedInHint />
             <LoginPanel showTest={showTest} />
         </main>
     );
