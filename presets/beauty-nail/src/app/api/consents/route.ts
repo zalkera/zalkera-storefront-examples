@@ -13,7 +13,8 @@ export async function GET() {
     if (!accessToken) return NextResponse.json({message: "로그인이 필요합니다."}, {status: 401});
     try {
         const consents = await zalkera.getConsents(accessToken);
-        return NextResponse.json({consents});
+        // 개인 동의 상태 — 캐시 금지(형제 라우트와 같은 규율).
+        return NextResponse.json({consents}, {headers: {"Cache-Control": "no-store"}});
     } catch (error) {
         return errorResponse(error);
     }

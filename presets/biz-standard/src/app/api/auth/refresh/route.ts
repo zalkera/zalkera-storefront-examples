@@ -29,11 +29,13 @@ import {safeNextPath} from "@/lib/oauth";
  * 자기 세션 회전에 국한되기 때문"이다. 다른 상태를 바꾸는 GET 은 같은 근거를 물려받지 못한다.
  */
 export async function GET(req: Request) {
+    // 세션 경로 — 캐시 금지. 리다이렉트도 캐시 대상이라 명시한다(모든 GET 라우트가 명시한다).
+    const NO_STORE = {"Cache-Control": "no-store"} as const;
     const url = new URL(req.url);
     const next = safeNext(url.searchParams.get("next"));
     const refreshToken = await getRefreshToken();
 
-    if (!refreshToken) return NextResponse.redirect(new URL("/login", url.origin));
+    if (!refreshToken) return NextResponse.redirect(new URL("/login", url.origin), {headers: NO_STORE});
 
     try {
         const tokens = await zalkera.refreshSession(refreshToken);

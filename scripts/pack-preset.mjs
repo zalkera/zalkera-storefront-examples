@@ -395,6 +395,31 @@ function iconKeys(code) {
 const HOME_SLUG = "home";
 
 /**
+ * 테마 enum 의 **정본에서 읽는다.** `src/lib/theme.ts` 의 `FONTS`·`RADII`·`DENSITIES` 선언이
+ * 계약이고, 그 파일 주석이 "백엔드 enum 과 반드시 일치해야 한다(계약)"고 못박는다.
+ *
+ * ⚠ 여기에 값을 **베껴 적지 않는다.** 베끼면 정본이 바뀔 때 이 사본이 낡고, 검사기가 낡은 표로
+ *   초록을 찍는다 — 이 레포가 이미 여러 번 겪은 형상이다. 선언을 못 읽으면 **통과가 아니라 중단**이다.
+ */
+function readThemeEnums() {
+    const file = join(ROOT, "src/lib/theme.ts");
+    const src = readFileSync(file, "utf8");
+    const out = {};
+    for (const [field, decl] of [
+        ["font", "FONTS"],
+        ["radius", "RADII"],
+        ["density", "DENSITIES"],
+    ]) {
+        const m = new RegExp(`const\\s+${decl}\\b[^=]*=\\s*\\{([^}]*)\\}`, "s").exec(src);
+        if (!m) throw new Error(`테마 계약을 읽지 못했습니다 — ${file} 에서 ${decl} 선언을 못 찾았습니다`);
+        const keys = [...m[1].matchAll(/(\w+)\s*:/g)].map((x) => x[1]);
+        if (keys.length === 0) throw new Error(`테마 계약이 비었습니다 — ${decl}`);
+        out[field] = keys;
+    }
+    return out;
+}
+
+/**
  * 시드 v3 검증(memo142) — 남은 최상위 키는 **`themeColors` 하나**다.
  *
  * `pages`·`menus` 는 팩 v2 에서 탈락했고(그 자리를 `content/` 가 받는다 — 아래 [validateContent]),
@@ -442,6 +467,27 @@ function validateSeed(code, seedBytes, assetNames) {
     if (unknownTop.length && !unknownTop.every((k) => ["pages", "menus", "products", "categories"].includes(k))) {
         const rest = unknownTop.filter((k) => !["pages", "menus", "products", "categories"].includes(k));
         fail("SEED_STRICT", `${code}: 최상위 미지 키 — ${rest.join(", ")}. 남은 키는 themeColors 뿐입니다`);
+    }
+
+    // ⚠ **키만 보고 값을 안 봤다.** 위 `SEED_STRICT` 는 `themeColors` 라는 **낱말이 있는가**만 재고,
+    //   그 안의 값이 계약 안인지는 팩·`verify-zip` 어디서도 안 쟀다. 그래서 `density: "comfortable"`
+    //   (계약은 `compact|cozy`) 를 실은 팩 2벌이 4벌 전부 ✅ 로 나갔다(심의 실증). 파서는 **조용히
+    //   버린다** — 시드가 선언한 밀도가 화면에 0회 반영되고, 아무 데서도 안 보인다.
+    //
+    //   ⚠ **표를 여기에 다시 쓰지 않는다.** 규칙을 딴 데서 재구현하면 정본이 바뀔 때 이쪽이 낡는다
+    //   (이 레포가 반복해 겪은 형상이다). `src/lib/theme.ts` 의 선언을 **읽어서** 판정한다.
+    const themeEnums = readThemeEnums();
+    for (const [field, allowed] of Object.entries(themeEnums)) {
+        const value = seed.themeColors?.[field];
+        if (value === undefined) continue; // 안 준 것은 기본값을 쓴다 — 위반이 아니다
+        if (!allowed.includes(value)) {
+            fail(
+                "SEED_ENUM",
+                `${code}: seed.json 의 themeColors.${field} = ${JSON.stringify(value)} 가 계약 밖입니다 ` +
+                    `(${allowed.join("|")}). 파서가 조용히 버리므로 그 선언은 화면에 반영되지 않습니다 ` +
+                    `— 정본은 src/lib/theme.ts 입니다`,
+            );
+        }
     }
 
     // `.zalkera/assets/` 는 **전송 이미지 풀**이다. 팩 v3 에서 그 유일한 소비자(상품 커버)가 사라져
