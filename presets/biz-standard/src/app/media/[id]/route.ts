@@ -16,8 +16,9 @@ import {routeParam} from "@/lib/routeParam";
  *
  * **이미지 바이트를 스트리밍하지 않는다** — 그러면 모든 이미지 트래픽이 Next 런타임을 통과해
  * 밀도 비용이 붙는다. 바이트는 스토리지→브라우저 직행하고, 우리는 이미지뷰당 서명 요청
- * 1회만 낸다. `no-store` 인 이유도 백엔드 `/raw` 와 같다 — 302 대상이 곧 만료되므로 이 응답을
- * 캐시하면 죽은 링크를 재사용하게 된다(이미지 바이트는 스토리지 응답 헤더로 브라우저가 캐시한다).
+ * 1회만 낸다. 이 302 는 **presign 만료보다 짧게** 캐시한다(`private, max-age=120` · 만료 300초) —
+ * 그보다 오래 캐시하면 죽은 링크를 재사용하게 되고, 아예 캐시하지 않으면 같은 방문자의 재방문도
+ * 백엔드를 다시 친다(이미지 바이트 자체는 스토리지 응답 헤더로 브라우저가 캐시한다).
  *
  * 트래픽이 커지면 종착지는 CDN + 공개 읽기 버킷이고(백엔드 `/raw` 주석의 기존 정본), 그때 이 라우트는
  * URL 생성 지점 1곳 교체로 은퇴한다.
@@ -51,5 +52,21 @@ export async function GET(_req: Request, {params}: {params: Promise<{id: string}
     // 백엔드가 302+Location 을 안 주면(없는 id·타 테넌트 id → 404) 그대로 없는 것으로 취급한다.
     if (!location) return new NextResponse(null, {status: res.status === 404 ? 404 : 502});
 
-    return NextResponse.redirect(location, {status: 302, headers: {"Cache-Control": "no-store"}});
+    // ⚠ **presign 만료보다 짧게 캐시한다**(오너 승인 2026-08-18).
+    //    종전에는 `no-store` 였다 — 근거는 "302 대상이 곧 만료되므로 캐시하면 죽은 링크를
+    //    재사용한다"이고 백엔드 `PublicMediaController.raw` 도 같은 문장을 자기 응답에 달았다.
+    //    그 근거는 **만료보다 오래** 캐시할 때만 참이다. 실측: `StorageProperties.presignExpirySeconds`
+    //    = 300초(상용 override 없음). 120초면 재사용 시점에도 서명이 최소 180초 남는다.
+    //
+    //    왜 고쳤나 — 이 라우트는 **페이지뷰마다 이미지 수만큼** 불린다(카탈로그 상한 24). `no-store`
+    //    라 같은 방문자가 같은 페이지를 다시 봐도 백엔드 호출이 하나도 안 줄었다(심의 실측
+    //    12/12/12). RDS 커넥션 천장이 30 인 단일 박스에서 이것이 페이지뷰당 유일한 백엔드 소비처다.
+    //
+    //    `public` 이 아니라 `private` 인 이유: CDN 설정은 이 레포 밖이라 공유 캐시 동작을 검증할 수
+    //    없다. 브라우저 재사용만으로 위 재방문 비용은 사라지고, 공유 캐시는 그 설정을 확인한 뒤
+    //    별도로 판단할 자리다.
+    return NextResponse.redirect(location, {
+        status: 302,
+        headers: {"Cache-Control": "private, max-age=120"},
+    });
 }
