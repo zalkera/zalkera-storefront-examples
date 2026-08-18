@@ -117,8 +117,10 @@ npm run dev                    # http://localhost:3000
 | `/products` (상품 목록) | **ISR** (`revalidate=300`) | 카탈로그 허브. **`searchParams` 를 안 받는 것이 의도** — 정렬·필터를 쿼리로 받으면 동적 렌더로 강등된다 |
 | `/products/[slug]` (상품 상세) | **ISR** (`revalidate=300`) | 카탈로그 = 공개 읽기. 재고·가격은 결제 시점에 백엔드가 재검증하므로 stale 안전 |
 | `/blog`·`/blog/[slug]` (글) | **ISR** (`revalidate=300`) | 발행글 = 세션 무관 공개 읽기 |
+| `/c/[slug]` (카테고리) | **ISR** | 카탈로그 = 공개 읽기. `/products` 와 같은 근거 |
 | `/contact`·`/policies` | **ISR/static** | 폼 셸·정책 표시면. 제출만 아일랜드→BFF |
-| `/cart`·`/mypage`·`/login`·`/orders/[orderNo]` | **동적(ƒ)** | 쿠키(세션 토큰·게스트 카트키)를 읽음 → 요청별 렌더 필수 |
+| `/cart`·`/mypage`·`/orders/[orderNo]` | **동적(ƒ)** | 쿠키(세션 토큰·게스트 카트키)를 **서버에서** 읽음 → 요청별 렌더 필수 |
+| `/login` | **정적(○, `revalidate=3600`)** | 로그인 여부는 **클라이언트에서** 판정한다(`LoggedInHint` + `useAuthHint`). ⚠ 여기에 `cookies()` 를 넣으면 페이지가 통째로 `ƒ` 로 강등된다 — 안내 한 줄 때문에 매 요청 서버를 타게 된다 |
 | `/checkout`·`/payment/widget`·`/payment/complete` | **정적(○)** | 정적 셸 + 클라이언트 폼. 값은 브라우저에서 채운다 |
 | `/auth/callback/[provider]` | **동적(ƒ)** | 동적 세그먼트 |
 | `/api/**` (BFF) | **동적(ƒ)** | route handler |

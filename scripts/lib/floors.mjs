@@ -15,6 +15,7 @@ export const REQUIRED_FLOORS = {
     "src/lib/previewGuard.test.ts": 7,
     "src/lib/safeUrl.test.ts": 6,
     "src/lib/safeUrlDrift.test.ts": 4,
+    "src/lib/mediaCache.test.ts": 11,
     "scripts/lib/floors.test.mjs": 18,
     "scripts/lib/gateProbe.test.mjs": 14,
     "scripts/lib/junkEntries.test.mjs": 8,

@@ -20,7 +20,7 @@ test("정본을 읽는다 — 세 선언 전부", () => {
     }
 });
 
-test("따옴표·하이픈 키를 놓치지 않는다 — 앞 판이 noto-serif-kr 을 통째로 잃었다", () => {
+test("따옴표·하이픈 키를 놓치지 않는다", () => {
     const src = readFileSync(join(ROOT, "src/lib/theme.ts"), "utf8");
     assert.ok(
         readThemeEnums(src).font.includes("noto-serif-kr"),
@@ -29,7 +29,7 @@ test("따옴표·하이픈 키를 놓치지 않는다 — 앞 판이 noto-serif-
 });
 
 test("값 안의 템플릿 보간에서 잘리지 않는다", () => {
-    // `${...}` 의 닫는 중괄호가 선언의 끝처럼 보인다. 앞 판의 `[^}]*` 가 정확히 여기서 죽었다.
+    // `${...}` 의 닫는 중괄호가 선언의 끝처럼 보인다 — 중괄호 범위를 문자로 잡으면 여기서 잘린다.
     const keys = readEnumKeys('const F = {a: `x ${Y} z`, b: "2", c: "3"};', "F");
     assert.deepEqual(keys, ["a", "b", "c"]);
 });
@@ -86,7 +86,7 @@ test("양성 통제군 — 정상 선언은 하나도 안 던진다", () => {
 });
 
 test("값을 바꾸지 않는 껍질을 전부 벗긴다 — 정상 관용구를 거짓 반려하지 않는다", () => {
-    // 껍질 하나를 빠뜨리면 그 관용구로 리팩터링하는 순간 팩이 안 구워진다.
+    // 껍질 하나를 빠뜨리면 그 관용구를 쓴 정상 선언이 «객체가 아니다» 로 반려된다.
     for (const src of [
         "const F = {a: 1} as const;",
         "const F = {a: 1} satisfies Record<string, number>;",
