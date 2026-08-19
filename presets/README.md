@@ -267,8 +267,9 @@ git commit …                                  # 미커밋 변경이 있으면 
 node scripts/pack-preset.mjs --version 2.8.0  # 게이트 통과 시 dist-presets/*.zip + sha256 출력
 ```
 
-`--version` 을 빼면 `1.0.0` 으로 찍힙니다 — **적재용으로 팩할 때는 반드시 주십시오.** 특정 테마만 팩하려면
-`node scripts/pack-preset.mjs shop-goods` 처럼 code 를 붙입니다. zip 은 결정론적입니다(고정 타임스탬프·
+`--version` 은 **필수입니다** — 빼면 팩이 멈춥니다(기본값을 두지 않습니다. 잊고 낮은 번호로 구우면
+그것은 덮어쓰기가 아니라 **새 객체**이고, promote 하면 신규 테넌트가 그 판을 받습니다). 특정 테마만
+팩하려면 `node scripts/pack-preset.mjs --version <x.y.z> shop-goods` 처럼 code 를 붙입니다. zip 은 결정론적입니다(고정 타임스탬프·
 경로 정렬) — 같은 입력·같은 버전이면 같은 sha 가 나옵니다. **버전이 다르면 sha 도 다릅니다**(위 "팩 신원").
 
 게이트가 하나라도 걸리면 **zip 을 하나도 쓰지 않습니다**(부분 산출물 금지). 계약을 못 읽으면 건너뛰지 않고

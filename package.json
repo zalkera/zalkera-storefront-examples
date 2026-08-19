@@ -24,7 +24,7 @@
     },
     "dependencies": {
         "@tosspayments/tosspayments-sdk": "^2.7.1",
-        "@zalkera/client": "^0.23.4",
+        "@zalkera/client": "^0.24.0",
         "class-variance-authority": "^0.7.1",
         "clsx": "^2.1.1",
         "lucide-react": "^0.545.0",

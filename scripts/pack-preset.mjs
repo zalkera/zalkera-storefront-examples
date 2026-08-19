@@ -63,9 +63,10 @@
  *
  * 사용:
  *   node scripts/pack-preset.mjs --version <x.y.z>  # 전체 테마 (--version 은 필수다)
- *   node scripts/pack-preset.mjs shop-goods         # 특정 테마만
- *   node scripts/pack-preset.mjs --version 1.1.0
- *   node scripts/pack-preset.mjs --no-verify        # 산출물 검수 생략(권장하지 않음)
+ *   node scripts/pack-preset.mjs --version <x.y.z> shop-goods    # 특정 테마만
+ *   node scripts/pack-preset.mjs --version <x.y.z> --no-verify   # 산출물 검수 생략(권장하지 않음)
+ *
+ * `--version` 은 **모든 호출에 필요하다.** 없으면 rc=1 로 멈춘다 — 위 예시에서 그것을 빼면 죽는다.
  *
  * ── 팩 신원 (memo150 §8.1) — **버전은 파일이 말한다** ──────────────────────────
  * zip 마다 `.zalkera/pack.json`(`{rev, code, version}`)을 싣는다. 종전에는 팩 버전이 사는 곳이

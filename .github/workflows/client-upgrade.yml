@@ -57,6 +57,13 @@ jobs:
         run: |
           git config user.name "zalkera-bot"
           git config user.email "bot@zalkera.com"
+          # ⚠ **`llms.txt` 도 싣는다.** 위 스텝이 설치본으로 그것을 갱신하므로, 여기서 안 실으면
+          #   러너가 사라질 때 그 갱신이 버려진다. 그러면 락파일이 가리키는 버전과 트리의 명세가
+          #   갈리고, README 의 「`npm ci` 뒤 `node_modules/@zalkera/client/llms.txt` 와 대조하면
+          #   동일합니다」가 거짓이 된다 — 배송 문서 셋이 AI 에게 `llms.txt` 를 명세로 주라고
+          #   지시하므로, 갈린 명세가 그대로 계약 노릇을 한다.
+          #   정본 레포에는 `llms.txt` 가 없으므로 있을 때만 더한다.
           git add package-lock.json
+          [ -f llms.txt ] && git add llms.txt || true
           git commit -m "chore: regenerate lockfile for @zalkera/client upgrade" || echo "no lockfile change"
           git push origin HEAD:"${{ github.ref_name }}"

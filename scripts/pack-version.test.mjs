@@ -9,7 +9,7 @@
  */
 import {ok, strictEqual} from "node:assert/strict";
 import {spawnSync} from "node:child_process";
-import {existsSync} from "node:fs";
+import {readdirSync} from "node:fs";
 import {fileURLToPath} from "node:url";
 import {dirname, join, resolve} from "node:path";
 import {test} from "node:test";
@@ -19,20 +19,41 @@ const SCRIPT = join(REPO, "scripts", "pack-preset.mjs");
 
 /** 스크립트를 그대로 돌린다 — 검사 대상은 **배송되는 진입점**이지 내부 함수가 아니다. */
 function run(...args) {
+    const before = listing();
     const r = spawnSync(process.execPath, [SCRIPT, ...args], {cwd: REPO, encoding: "utf8"});
-    return {code: r.status, err: `${r.stderr}${r.stdout}`};
+    return {code: r.status, err: `${r.stderr}${r.stdout}`, before, after: listing()};
 }
 
-/** 어느 경로로 죽든 산출물은 없어야 한다. */
-function noZips() {
-    ok(!existsSync(join(REPO, "dist-presets")), "게이트가 걸렸는데 dist-presets 가 생겼다");
+/** 게이트가 걸렸으면 **새로 생긴 것이 없어야** 한다. 이미 있던 것은 이 판정과 무관하다. */
+function noNewZips(result) {
+    strictEqual(result.after, result.before, "게이트가 걸렸는데 dist-presets 가 바뀌었다");
+}
+
+/**
+ * 어느 경로로 죽든 **새 산출물이 없어야** 한다.
+ *
+ * ⚠ **존재가 아니라 목록의 변화를 잰다.** 종전에는 `existsSync(dist-presets)` 를 봤는데, 그 폴더는
+ *   한 번 팩하면 남으므로 **팩을 구운 트리에서는 영구히 거짓**이었다 — `ci.yml` 이 돌리는
+ *   `floor-gate.mjs` 가 그 실패로 죽고, 그러면 스위트별 통과 수 하한이 **아예 안 걸린다.**
+ *   CI 는 새 체크아웃이라 초록이어서 이 적색은 사람 손에서만 났고, 진짜 하한 미달과 화면상
+ *   구분되지 않았다(가장 자연스러운 「고침」이 심의 대상 zip 을 지우는 것이었다).
+ *
+ *   그리고 이름 붙인 회귀를 정작 못 잡았다 — **이미 있는 폴더에 낮은 번호 zip 이 새로 얹히는**
+ *   경우. 커밋이 막겠다고 적은 형상이 바로 그것이다. 목록을 비교하면 둘 다 잡힌다.
+ */
+function listing() {
+    try {
+        return readdirSync(join(REPO, "dist-presets")).sort().join("\n");
+    } catch {
+        return "";
+    }
 }
 
 test("--version 이 없으면 멈춘다 — 기본값을 쓰지 않는다", () => {
-    const {code, err} = run();
-    strictEqual(code, 1, "인자 없이 부르면 무언가를 구웠다");
-    ok(/--version 이 없습니다/.test(err), err.slice(0, 200));
-    noZips();
+    const result = run();
+    strictEqual(result.code, 1, "인자 없이 부르면 무언가를 구웠다");
+    ok(/--version 이 없습니다/.test(result.err), result.err.slice(0, 200));
+    noNewZips(result);
 });
 
 test("--version 뒤에 값이 없으면 멈춘다", () => {
@@ -50,11 +71,11 @@ test("--version 뒤가 다른 플래그면 값으로 삼지 않는다", () => {
 
 test("형식이 아니면 멈춘다", () => {
     for (const bad of ["1.2.3-rc1", "1.2.3+b1", "1.2.3.4", "v1.2.3", " 1.2.3 ", "", "1.2", "abc"]) {
-        const {code, err} = run("--version", bad);
-        strictEqual(code, 1, `"${bad}" 이 통과했다`);
-        ok(/semver core/.test(err), `"${bad}": ${err.slice(0, 160)}`);
+        const result = run("--version", bad);
+        strictEqual(result.code, 1, `"${bad}" 이 통과했다`);
+        ok(/semver core/.test(result.err), `"${bad}": ${result.err.slice(0, 160)}`);
+        noNewZips(result);
     }
-    noZips();
 });
 
 test("앞자리 0 은 안 받는다 — 사람 눈에 같은 번호가 다른 객체가 된다", () => {
