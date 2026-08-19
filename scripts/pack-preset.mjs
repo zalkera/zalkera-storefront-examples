@@ -140,6 +140,9 @@ const SOURCE_EXCLUDES = [
     "src/",
     "dist-presets/",
     "scripts/pack-preset.mjs",
+    // 그 도구의 버전 관문 시험 — 도구가 없는 트리에서 돌면 「모듈 없음」으로 죽는다.
+    // 고객 트리의 가드 회귀 스위트가 그 실패를 자기 결함으로 읽는다.
+    "scripts/pack-version.test.mjs",
     "scripts/gen-preset-assets.mjs",
     "scripts/preset-canvas.mjs",
     // ⚠ **카탈로그 미리보기를 굽는 사내 도구다**(promote 절차·스모크 테넌트·`dist-preview` S3 프리픽스).
