@@ -1231,6 +1231,40 @@ for (const code of targets) {
 
 console.log(`프리셋 팩 — version=${version}, 대상 ${targets.join(", ")}`);
 const head = sourceProvenance();
+
+/**
+ * **한 버전은 한 판본에서만 나온다.**
+ *
+ * 실제로 갈렸다: 한 프리셋만 다른 커밋에서 다시 구워졌는데 **`.zalkera/pack.json` 의 버전은 넷 다
+ * 같았고**, `verify-zip` 도 통과시켰다. 그대로 승격하면 테넌트마다 다른 소스를 받는다. 사람 눈에만
+ * 걸렸다 — 팩에는 자기가 어느 트리에서 나왔는지 적는 칸이 없기 때문이다.
+ *
+ * 매니페스트에는 못 넣는다: 백엔드 `PackManifestReader` 가 strict 파싱이라 키를 하나 더 넣는 순간
+ * 그 zip 을 통째로 거부한다(계약 확장은 rev 상향으로만). 그래서 **zip 밖 원장**에 적는다.
+ * `dist-presets/` 는 gitignore 라 이것도 로컬 기록이지만, 갈림을 굽는 자리에서 막기에는 충분하다.
+ *
+ * ⚠ 더러운 트리에서 구우면 커밋 sha 로 판본을 특정할 수 없다 — 그때는 `dirty` 를 기록하고,
+ *   같은 버전에 이어 붙이는 것을 막는다.
+ */
+const LEDGER = join(OUT_DIR, ".provenance.json");
+const dirty = execFileSync("git", ["status", "--porcelain"], {cwd: ROOT}).toString("utf8").trim().length > 0;
+const priorLedger = (() => {
+    try {
+        return JSON.parse(readFileSync(LEDGER, "utf8"));
+    } catch {
+        return {};
+    }
+})();
+const prior = priorLedger[version];
+if (prior && (prior.head !== head || prior.dirty || dirty)) {
+    console.error(`--version ${version} 은 이미 다른 트리에서 구워졌습니다 — 한 버전은 한 판본에서만 나옵니다.`);
+    console.error(`  이미 있는 것: HEAD ${prior.head}${prior.dirty ? "(더러운 트리)" : ""} · ${prior.codes.join(", ")}`);
+    console.error(`  지금:         HEAD ${head}${dirty ? "(더러운 트리)" : ""} · ${targets.join(", ")}`);
+    console.error("");
+    console.error("  섞인 채로 승격하면 테넌트마다 다른 소스를 받습니다. dist-presets/ 를 비우고");
+    console.error("  네 벌을 **한 번에** 다시 구우십시오.");
+    process.exit(1);
+}
 const source = sourceEntries();
 console.log(`  공용 프로젝트 배선 ${source.length}개 파일(git 추적 − src/·팩 도구·시드 원본) · HEAD ${head}`);
 
@@ -1335,6 +1369,10 @@ for (const p of packed) {
             `    -F "expectedSha256=${p.sha}"`,
     );
 }
+writeFileSync(
+    LEDGER,
+    `${JSON.stringify({...priorLedger, [version]: {head, dirty, codes: targets}}, null, 2)}\n`,
+);
 console.log("\n공개(노출 전환) — 적재와 분리돼 있어 올린 것이 곧바로 개시 대상이 되지는 않습니다:");
 for (const p of packed) {
     console.log(`  curl -X POST "$API/api/system/themes/${p.code}/artifacts/${p.version}/promote" -H "Authorization: Bearer $TOKEN"`);
