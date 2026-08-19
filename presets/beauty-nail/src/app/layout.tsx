@@ -12,9 +12,15 @@ import {SiteFooter} from "@/components/SiteFooter";
 /**
  * 자체 revalidate 가 없는 정적 라우트(checkout·payment/* 등)에 갱신 주기를 준다.
  *
- * 빌드가 백엔드에 못 닿으면 폴백 제목이 산출물에 박히는데, revalidate 가 없으면
- * `revalidateTag("site-config")` 가 올 때까지 **영구 고정**된다 — 테넌트가 설정을 한 번도 안 건드리면
- * 안 낫는다. 자체 revalidate 를 가진 라우트(홈 600 · [slug] 300)는 더 낮은 값이 이기므로 무영향이고,
+ * 빌드가 백엔드에 못 닿으면 폴백 제목이 산출물에 박히는데, revalidate 가 없으면 **영구 고정**된다.
+ *
+ * ⚠ **`revalidateTag` 는 이 자리를 안 푼다.** 빌드가 프리렌더한 엔트리에는 소프트 태그가 안 실린다 —
+ *   빌드가 낸 `.next/server/app/*.meta` 의 `x-next-cache-tags` 에는 `_N_T_/…` 경로 태그만 있고
+ *   `site-config`·`products` 같은 소프트 태그가 없다. 직접 보려면 빌드 후 그 파일을 열면 된다:
+ *   `cat .next/server/app/products.meta`.
+ *
+ *   그래서 이 값이 **유일한 회복 경로**다 — 첫 시간기반 재생성이 지나면 그때부터 태그도 듣는다.
+ *   즉시 반영이 필요하면 `revalidatePath` 를 써야 하고, `/api/revalidate` 가 이미 `paths` 를 받는다. 자체 revalidate 를 가진 라우트(홈 600 · [slug] 300)는 더 낮은 값이 이기므로 무영향이고,
  * `cookies()` 를 쓰는 동적 라우트(cart·mypage·orders·login)에는 애초에 적용되지 않는다.
  */
 export const revalidate = 3600;
@@ -61,8 +67,11 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function RootLayout({children}: {children: ReactNode}) {
-    // generateMetadata 와 **같은 인자로** 부른다 → request memoization 이 1회로 합친다(태그가 갈리면
-    // 조용히 2회가 된다). 태그만 실은 fetch 는 동적 opt-in 이 아니므로 정적성을 깨지 않는다(§6).
+    // generateMetadata 와 **같은 인자로** 부른다 → request memoization 이 1회로 합친다.
+    // ⚠ **태그가 갈리는 것만으로는 2회가 되지 않는다** — Next 의 fetch dedupe 키는 method·headers·
+    //    mode·redirect·credentials·referrer·integrity 뿐이고 `next.tags` 는 안 들어간다.
+    //    갈리는 것은 **URL·헤더**다.
+    // 태그만 실은 fetch 는 동적 opt-in 이 아니므로 정적성을 깨지 않는다(§6).
     const config = await zalkera.getSiteConfig({tags: ["site-config"]}).catch(() => null);
     // themeColors → CSS 변수. inline style 은 어떤 스타일시트보다 우선하므로 @theme 기본값을 덮는다.
     const {cssVars} = parseThemeColors(config?.themeColors);

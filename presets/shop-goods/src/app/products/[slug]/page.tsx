@@ -30,7 +30,7 @@ export const revalidate = 300;
  *   위에 설계를 얹지 마라.
  *
  * generateMetadata 와 페이지가 **같은 인자로** 부르므로 Next request memoization 이 1회로 합친다 —
- * 인자가 갈리면 조용히 2회가 된다.
+ * 인자가 갈리면 2회가 될 수 있다 — 다만 **태그가 갈리는 것만으로는 안 그렇다**(Next 의 fetch dedupe 키에 `next.tags` 가 없다).
  */
 function loadProduct(slug: string) {
     return zalkera.getProduct(slug, {tags: ["site-config", "products", `product:${slug}`]});

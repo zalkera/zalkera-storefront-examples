@@ -40,8 +40,12 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function Home() {
-    // ISR 캐시 태그 — 백엔드가 설정/상품 변경 시 revalidateTag 로 이 페이지만 콕 집어 무효화한다.
-    // site-config: 사이트 설정·테마·레이아웃(전 페이지 영향) · products: 카탈로그 변경.
+    // ISR 캐시 태그 — site-config: 사이트 설정·테마·레이아웃(전 페이지 영향) · products: 카탈로그 변경.
+    //
+    // ⚠ **`/` 는 빌드 프리렌더라 `revalidateTag` 로 안 풀린다.** 그 엔트리에는 소프트 태그가 안
+    //   실린다(`cat .next/server/app/page.meta` 로 확인된다). 개시 직후 콘솔에서 설정을 고쳐도 아래 `revalidate` 주기가
+    //   지나야 반영된다 — 자가치유이고 상한은 1주기다. 태그는 런타임에 생성된 ISR 엔트리
+    //   (`/products/[slug]`·`/c/[slug]`·`/blog/[slug]`)에서 듣는다.
     const config = await zalkera.getSiteConfig({tags: ["site-config"]}).catch(() => null);
     // 사이트의 얼굴은 이 레포가 정본으로 갖는다(어휘 계약 rev 4 `contentFile`) — 백엔드 왕복이 없다.
     // 콘텐츠가 없는 것은 **정상**이다: 커머스 테넌트는 홈 파일 없이 아래 골격을 그린다.

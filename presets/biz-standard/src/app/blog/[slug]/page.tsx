@@ -18,7 +18,8 @@ export const revalidate = 300;
 
 /**
  * generateMetadata 와 페이지가 **같은 인자로** 부르므로 Next request memoization 이 1회로 합친다 —
- * 인자가 갈리면 조용히 2회가 된다(상품 상세와 같은 관례).
+ * 인자가 갈리면 2회가 된다(상품 상세와 같은 관례). ⚠ 여기서 「인자」는 **URL·헤더**다 — 태그만
+ * 갈리는 것은 dedupe 키에 안 들어가 호출 수를 늘리지 않는다(Next 의 fetch dedupe 키는 method·headers·mode·redirect·credentials·referrer·integrity 뿐이고 `next.tags` 는 없다).
  */
 function loadPost(slug: string) {
     return zalkera.getPost(slug);
