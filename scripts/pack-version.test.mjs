@@ -21,25 +21,27 @@ const SCRIPT = join(REPO, "scripts", "pack-preset.mjs");
 function run(...args) {
     const before = listing();
     const r = spawnSync(process.execPath, [SCRIPT, ...args], {cwd: REPO, encoding: "utf8"});
-    return {code: r.status, err: `${r.stderr}${r.stdout}`, before, after: listing()};
-}
-
-/** 게이트가 걸렸으면 **새로 생긴 것이 없어야** 한다. 이미 있던 것은 이 판정과 무관하다. */
-function noNewZips(result) {
-    strictEqual(result.after, result.before, "게이트가 걸렸는데 dist-presets 가 바뀌었다");
+    const after = listing();
+    // ⚠ **여기서 잰다.** 호출부마다 손으로 부르면 자리가 빠진다 — 실제로 여덟 시험 중 둘에만
+    //   걸려 있었고, 나머지 여섯 경로는 산출물이 남아도 초록이었다.
+    if (r.status !== 0) strictEqual(after, before, "버전 관문이 걸렸는데 dist-presets 가 바뀌었다");
+    return {code: r.status, err: `${r.stderr}${r.stdout}`, before, after};
 }
 
 /**
- * 어느 경로로 죽든 **새 산출물이 없어야** 한다.
+ * `dist-presets` 의 **파일 목록**. `run()` 이 실행 전후로 불러 관문이 산출물을 남겼는지 잰다.
  *
- * ⚠ **존재가 아니라 목록의 변화를 잰다.** 종전에는 `existsSync(dist-presets)` 를 봤는데, 그 폴더는
+ * ⚠ **존재가 아니라 목록의 변화를 본다.** 종전에는 `existsSync(dist-presets)` 를 봤는데, 그 폴더는
  *   한 번 팩하면 남으므로 **팩을 구운 트리에서는 영구히 거짓**이었다 — `ci.yml` 이 돌리는
  *   `floor-gate.mjs` 가 그 실패로 죽고, 그러면 스위트별 통과 수 하한이 **아예 안 걸린다.**
- *   CI 는 새 체크아웃이라 초록이어서 이 적색은 사람 손에서만 났고, 진짜 하한 미달과 화면상
- *   구분되지 않았다(가장 자연스러운 「고침」이 심의 대상 zip 을 지우는 것이었다).
+ *   CI 는 새 체크아웃이라 초록이어서 이 적색은 사람 손에서만 났다.
  *
  *   그리고 이름 붙인 회귀를 정작 못 잡았다 — **이미 있는 폴더에 낮은 번호 zip 이 새로 얹히는**
  *   경우. 커밋이 막겠다고 적은 형상이 바로 그것이다. 목록을 비교하면 둘 다 잡힌다.
+ *
+ * ⚠ **이름만 본다.** 같은 이름을 제자리에서 덮어쓰는 것은 못 잡는다. 그리고 이 판정은 **파일을
+ *   읽기 전에 서는 관문**에만 해당한다 — 팩은 zip 을 쓴 뒤 `verify-zip` 을 돌리므로, 검수 실패로
+ *   rc=1 이 되면서 새 zip 이 남는 경로가 배송 도구에 실재한다.
  */
 function listing() {
     try {
@@ -53,7 +55,6 @@ test("--version 이 없으면 멈춘다 — 기본값을 쓰지 않는다", () =
     const result = run();
     strictEqual(result.code, 1, "인자 없이 부르면 무언가를 구웠다");
     ok(/--version 이 없습니다/.test(result.err), result.err.slice(0, 200));
-    noNewZips(result);
 });
 
 test("--version 뒤에 값이 없으면 멈춘다", () => {
@@ -74,7 +75,6 @@ test("형식이 아니면 멈춘다", () => {
         const result = run("--version", bad);
         strictEqual(result.code, 1, `"${bad}" 이 통과했다`);
         ok(/semver core/.test(result.err), `"${bad}": ${result.err.slice(0, 160)}`);
-        noNewZips(result);
     }
 });
 

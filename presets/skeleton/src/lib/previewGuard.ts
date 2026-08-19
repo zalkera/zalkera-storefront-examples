@@ -14,7 +14,7 @@ export const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
 /**
  * 프리뷰에서도 막지 **않는** 경로. 사유는 각 라우트 파일 머리의
- * `// zalkera-allow-preview-write:` 마커에 한 줄로 있다.
+ * `// zalkera-allow-preview-write: <이유>` 마커에 한 줄로 있다(사유가 없으면 면제가 안 된다).
  *
  * ⚠ 여기 넣는 것은 "운영 데이터를 써도 좋다"는 뜻이다. 넣기 전에 그 라우트가 **누구의** 데이터를
  *   건드리는지 확인하라 — 로그인·로그아웃은 프리뷰어 자기 세션이고, `revalidate` 는 고객 데이터가

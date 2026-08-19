@@ -264,7 +264,7 @@ zip 루트에는 `llms.txt` 도 실립니다 — 설치된 `@zalkera/client` 의
 npm ci                                        # 팩 전 1회 — 계약·llms.txt 를 @zalkera/client 에서 읽는다
 node scripts/gen-preset-assets.mjs            # 에셋·썸네일 (재)생성 — 결정론적
 git commit …                                  # 미커밋 변경이 있으면 팩이 막는다(부득이하면 --allow-dirty)
-node scripts/pack-preset.mjs --version 2.8.0  # 게이트 통과 시 dist-presets/*.zip + sha256 출력
+node scripts/pack-preset.mjs --version <x.y.z>  # 게이트 통과 시 dist-presets/*.zip + sha256 출력
 ```
 
 `--version` 은 **필수입니다** — 빼면 팩이 멈춥니다(기본값을 두지 않습니다. 잊고 낮은 번호로 구우면
@@ -288,8 +288,8 @@ node scripts/pack-preset.mjs --version 2.8.0  # 게이트 통과 시 dist-preset
 팩한 zip 이 **받아도 되는 물건인지**는 별도 러너가 봅니다(외주 zip 에도 같은 것을 씁니다):
 
 ```bash
-node scripts/verify-zip.mjs dist-presets/shop-goods-2.8.0.zip          # 납품 검수(기본)
-node scripts/verify-zip.mjs dist-presets/shop-goods-2.8.0.zip --pack   # 카탈로그 팩 — 팩이 자동으로 붙입니다
+node scripts/verify-zip.mjs dist-presets/shop-goods-<x.y.z>.zip        # 납품 검수(기본)
+node scripts/verify-zip.mjs dist-presets/shop-goods-<x.y.z>.zip --pack # 카탈로그 팩 — 팩이 자동으로 붙입니다
 ```
 
 `--pack` 은 **이 zip 이 본사 카탈로그에 올라간다**는 선언입니다. 그때만 `.zalkera/pack.json` 이 **필수**가
@@ -371,12 +371,12 @@ zip 은 커밋하지 않습니다(`dist-presets/` 는 gitignore). 정본 기록�
 #    **버전 필드가 없습니다** — 버전은 zip 안 .zalkera/pack.json 이 말합니다.
 curl -X POST "$API/api/system/themes/beauty-nail/artifacts" \
   -H "Authorization: Bearer $TOKEN" \
-  -F "file=@dist-presets/beauty-nail-2.8.0.zip" \
+  -F "file=@dist-presets/beauty-nail-<x.y.z>.zip" \
   -F "thumbnail=@presets/beauty-nail/thumbnail.png" \
   -F "expectedSha256=<팩 출력값>"
 
 # ② 공개 — 이 버전을 카드가 가리키게 한다.
-curl -X POST "$API/api/system/themes/beauty-nail/artifacts/2.8.0/promote" \
+curl -X POST "$API/api/system/themes/beauty-nail/artifacts/<x.y.z>/promote" \
   -H "Authorization: Bearer $TOKEN"
 ```
 
