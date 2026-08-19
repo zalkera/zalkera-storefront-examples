@@ -62,7 +62,7 @@
  * 재고, 서빙 요건은 **산출물**에만 나타나기 때문이다.
  *
  * 사용:
- *   node scripts/pack-preset.mjs                    # 전체 테마, version=DEFAULT_VERSION
+ *   node scripts/pack-preset.mjs --version <x.y.z>  # 전체 테마 (--version 은 필수다)
  *   node scripts/pack-preset.mjs shop-goods         # 특정 테마만
  *   node scripts/pack-preset.mjs --version 1.1.0
  *   node scripts/pack-preset.mjs --no-verify        # 산출물 검수 생략(권장하지 않음)
@@ -194,11 +194,16 @@ const SOURCE_EXCLUDES = [
 ];
 
 /**
- * 프리셋 버전. **시드(카피·에셋·구성)나 소스가 바뀌면 올린다** — 키에 버전이 박혀 있어(`{code}/{version}.zip`)
- * 갱신은 새 객체이고, 이미 개시한 사이트의 소스는 고객 것이라 소급 갱신이 없다(memo97 §3.1 버전 시맨틱).
- * 여기 상수로 두는 이유: 고객에게 나가는 package.json 에 우리 배포 메타를 심지 않기 위해서다.
+ * 프리셋 버전은 상수가 아니라 인자다 — `--version x.y.z` 는 **필수**이고 기본값이 없다.
+ *
+ * 기본값을 두지 않는 이유: 발행 이력은 원장이 갖고 이 레포는 모른다. 상수는 실제 발행 번호를 따라갈
+ * 수 없으므로, 기본값이 있으면 플래그를 잊었을 때 상용보다 **낮은** 번호로 zip 이 구워진다. 키가
+ * `{code}/{version}.zip` 이라 그것은 덮어쓰기가 아니라 새 객체이고, promote 하면 신규 테넌트가 그
+ * 판을 받는다. 그래서 모르면 짐작하지 않고 **멈춘다.**
+ *
+ * 버전 시맨틱(memo97 §3.1): 시드(카피·에셋·구성)나 소스가 바뀌면 올린다. 갱신은 새 객체이고, 이미
+ * 개시한 사이트의 소스는 고객 것이라 소급 갱신이 없다.
  */
-const DEFAULT_VERSION = "1.0.0";
 
 /**
  * 팩 신원 매니페스트 계약(memo150 §3.1) — **백엔드 `PackManifestReader` 의 거울**이다.
@@ -211,8 +216,19 @@ const MANIFEST_PATH = ".zalkera/pack.json";
 const MANIFEST_REV = 1;
 /** `theme_code varchar(40)` 합치. */
 const CODE_REGEX = /^[a-z0-9][a-z0-9-]{0,39}$/;
-/** semver **core** 만 — 프리릴리스·빌드 메타는 rev 2 후보다. */
-const VERSION_REGEX = /^[0-9]+\.[0-9]+\.[0-9]+$/;
+/**
+ * 우리가 **내보내는** 번호의 규칙 — semver core 만, 앞자리 0 없이.
+ *
+ * 백엔드 `PackManifestReader.VERSION_REGEX` 는 `^[0-9]+\.[0-9]+\.[0-9]+$` 라 각 자리에 **앞자리 0**
+ * 이 붙어도 받는다. 여기서는 안 받는다: 0 만 다른 두 값은 사람 눈에 같은 번호인데 `{code}/{version}.zip`
+ * 키로는 **다른 객체**라, 어느 쪽이 정본인지 원장을 봐야 아는 상태를 만든다. 내보내는 쪽만 좁히는 것은
+ * 서버가 받는 집합의 부분집합이므로 거울을 깨지 않는다.
+ *
+ * 프리릴리스·빌드 메타는 rev 2 후보다.
+ */
+const VERSION_REGEX = /^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)$/;
+/** `theme_artifact.version` 컬럼 폭 — 백엔드 `PackManifestReader.MAX_VERSION_LENGTH` 거울. */
+const MAX_VERSION_LENGTH = 40;
 
 /**
  * 매니페스트 바이트. **키 순서·들여쓰기·개행이 고정**이라 같은 (code, version) 이면 같은 바이트다 —
@@ -1121,7 +1137,7 @@ function write(inspected, version, source, manual) {
 
 const args = process.argv.slice(2);
 const versionFlag = args.indexOf("--version");
-const version = versionFlag >= 0 ? args[versionFlag + 1] : DEFAULT_VERSION;
+const version = versionFlag >= 0 ? args[versionFlag + 1] : undefined;
 // `--version` 이 없으면 versionFlag 는 -1 이고 versionFlag+1 은 0 이 된다 — 그 자리를 그냥 제외하면
 // 첫 위치인자(팩할 프리셋 코드)가 조용히 사라져 **항상 전체가 팩된다**. 플래그가 있을 때만 그 뒤를 건넌다.
 const codes = args.filter((a, i) => !a.startsWith("--") && !(versionFlag >= 0 && i === versionFlag + 1));
@@ -1136,9 +1152,26 @@ const targets = codes.length
 // `--version 3.0.6-rc1` 같은 값이 그대로 zip 이름이 됐고, 그 오류가 적재 순간에야 드러났다. 이제 그 값은
 // **바이트 안으로 들어가므로** 여기서 틀리면 그 zip 은 어차피 서버가 거부한다 — 몇 분짜리 게이트·빌드를
 // 돌리기 전에 말하는 것이 맞다.
+if (version === undefined) {
+    console.error("--version 이 없습니다 — 팩 버전에는 기본값을 두지 않습니다.");
+    console.error("  잊고 낮은 번호로 구우면 그것은 덮어쓰기가 아니라 **새 객체**입니다. promote 하면");
+    console.error("  신규 테넌트가 그 판을 받고, 키가 {code}/{version}.zip 이라 되돌릴 수 없습니다.");
+    console.error("");
+    console.error("  다음 번호는 **이미 발행된 최신보다 높아야** 합니다. 이력은 원장이 갖고 있습니다:");
+    console.error('    curl -s "$API/api/system/themes/<code>/artifacts" -H "Authorization: Bearer $TOKEN"');
+    console.error("");
+    console.error("  예: node scripts/pack-preset.mjs --version <x.y.z>");
+    process.exit(1);
+}
 if (!VERSION_REGEX.test(version)) {
     console.error(`--version "${version}" 은 semver core(x.y.z)가 아닙니다 — 팩 매니페스트·원장이 받지 않는 형식입니다.`);
     console.error("  프리릴리스 태그(-rc1·+build)는 지금 계약(rev 1)에서 안 받습니다.");
+    console.error("  앞자리 0 이 붙은 값도 안 받습니다 — 0 만 다른 값이 다른 객체가 되어 정본이 갈립니다.");
+    process.exit(1);
+}
+if (version.length > MAX_VERSION_LENGTH) {
+    // 백엔드 컬럼 폭이다. 여기서 안 막으면 팩은 성공하고 **적재가 400** 으로 죽는다.
+    console.error(`--version 이 ${version.length}자입니다 — 상한 ${MAX_VERSION_LENGTH}자(theme_artifact.version).`);
     process.exit(1);
 }
 for (const code of targets) {
