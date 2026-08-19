@@ -31,6 +31,7 @@ import { createZalkeraClient } from "@zalkera/client";
 export const zalkera = createZalkeraClient({
   baseUrl: process.env.ZALKERA_API_BASE!,  // 잘커라 백엔드 URL (뒤에 /api 붙이지 않음)
   tenant:  process.env.ZALKERA_TENANT!,     // 콘솔에서 발급받은 당신의 테넌트 코드
+  secretKey: process.env.ZALKERA_STOREFRONT_KEY, // (선택) 콘솔에서 발급 — 서버 전용
 });
 ```
 
@@ -90,7 +91,11 @@ export const zalkera = createZalkeraClient({
 ```bash
 npm i @zalkera/client
 # lib/zalkera.ts 에 서버 전용 싱글턴 (2절)
-# ZALKERA_API_BASE, ZALKERA_TENANT 를 env 에
+# ZALKERA_API_BASE, ZALKERA_TENANT, ZALKERA_SITE_URL 을 env 에
+#   ⚠ ZALKERA_SITE_URL 은 이 사이트의 **공개 절대 주소**다(예: https://shop.example.com).
+#     sitemap·robots·JSON-LD 가 절대 URL 을 요구하는데(아래 절), 안 주면 http://localhost:3000 이
+#     박힌 채로 배포된다. robots.txt 는 revalidate 가 없어 그대로 굳는다.
+#   (선택) ZALKERA_STOREFRONT_KEY — 서버 전용 시크릿. 브라우저에 노출 금지.
 # llms.txt 를 읽고(또는 AI 에게 주고) 화면을 만든다
 ```
 

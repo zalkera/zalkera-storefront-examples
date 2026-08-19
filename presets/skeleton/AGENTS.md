@@ -119,7 +119,7 @@ export async function POST(req: Request) {
   **면제는 출구가 아니라 기록이다** — "운영 데이터를 써도 좋다"고 적는 일이니, 그 라우트가 **누구의**
   데이터를 건드리는지 확인하고 사유를 사람이 읽을 수 있게 남겨라.
   ⚠ 종전에는 이 규약을 소스를 **텍스트로 파싱**해 재는 시험이 있었고 **네 판 연속 뚫렸다.**
-  그 이력은 `src/lib/previewGuard.ts` 머리말에 있다 — 파싱으로 되돌리지 마라.
+  그 이력은 `src/lib/preview.ts` 머리말에 있다 — 파싱으로 되돌리지 마라.
 - 소셜 로그인은 **서버 `state` 쿠키 대조**가 한 겹 더 있다(`/api/auth/social/start` 발행 → 교환에서 대조 →
   즉시 소각). `CallbackHandler` 의 `sessionStorage` 대조는 **UX 지 방어가 아니다** — 그걸 방어로 세지 마라.
   state 쿠키는 `sameSite: "lax"` 여야 한다(`strict` 면 authorize 복귀에서 안 실려 로그인이 깨진다).
@@ -234,7 +234,7 @@ const access = {accessToken, phone, context: {clientIp: visitorIp(await headers(
 
 **아직 안 나가는 것도 적어 둔다**(교본이 실물보다 앞서면 그것도 갈라짐이다): 영업시간(`openingHours`)은 백엔드에 **저장 자리만** 섰고 이 템플릿의 렌더 소비는 아직 없다 — llms.txt §5.1 에도 규범으로 안 실려 있다(본보기가 못 지키는 규범은 공표하지 않는다).
 
-반대 방향의 시차도 적어 둔다: 카테고리 라우트(`/c/{slug}`)는 **이 레포에 실재하고** 위 표에 좌표가 있지만, llms.txt **§5.1 의 규범 문구로는 아직 안 실려 있다**(레시피는 §4.1-a 에 있다). 실물이 먼저 서고 공표가 뒤따르는 순서라 갈라짐이 아니다 — 순서가 반대면 그때가 갈라짐이다.
+반대 방향의 시차는 **해소됐다**: 카테고리 라우트(`/c/{slug}`)의 `CollectionPage` 는 llms.txt **§5.1 에 규범으로 실려 있고**(레시피는 §4.1-a), `@zalkera/client` 가 배송하는 보장표(패키지 안의 contracts 디렉터리)의 COMMERCE required 에도 `product-category-collectionpage` 로 들어 있다. **이 절을 지우지 마라** — 지우면 `zalkera-aeo-check --category COMMERCE` 의 required 가 하나 빈다. (아직 규범에 없는 것의 예는 바로 위 `openingHours` 다.)
 
 ## UI 프리미티브·아이콘
 
@@ -389,7 +389,7 @@ npx prettier --list-different .
 
 검사기가 **둘**이고, 재는 대상이 다르다. 하나로 합치지 마라 — 소스가 규약대로여도 산출물에 그래프가 안 나갈 수 있고, 그 반대도 가능하다.
 
-**① 소스 검사 — `npm run validate`**(`scripts/validate-storefront.mjs`, CI 게이트). 어휘 사본이 여러 레포에 흩어져 있어 사람 주석 규약으로는 갈라짐을 못 막으므로, 기계가 센다 — **C2** 는 렌더러 switch 가 `SECTION_CONTRACT` 를 덮는지, **S6** 는 남의 토큰 어휘가 섞였는지, **N1~N5** 는 위 콘텐츠 좌표의 형상(매니페스트·섹션 형상·참조 무결·`sortOrder` 잔존·id 형 직기입)을 본다. **X1** 은 변이 라우트 핸들러마다 교차사이트 가드가 **본문 첫 구문**에 있고 반환값이 차단에 쓰이는지(위 BFF 절), **X2** 는 읽기 GET 면제의 전제인 "CORS 헤더 0건"이 유지되는지, **X3** 는 OAuth state 쿠키의 1회용 소각과 `sameSite` 를 본다 — X1 은 파일이 아니라 **핸들러 본문 단위**로 재므로 화살표 export·`GET` 에만 건 가드·반환값 버리기·가드를 뒤로 미루기·주석이나 문자열로 위장한 가드가 전부 걸린다. 이 레포는 `tailwind-tokens`·`content=source` 둘 다 선언한 레포라 **S·N 규칙 위반이 에러**로 막힌다.
+**① 소스 검사 — `npm run validate`**(`scripts/validate-storefront.mjs`, CI 게이트). 어휘 사본이 여러 레포에 흩어져 있어 사람 주석 규약으로는 갈라짐을 못 막으므로, 기계가 센다 — **C2** 는 렌더러 switch 가 `SECTION_CONTRACT` 를 덮는지, **S6** 는 남의 토큰 어휘가 섞였는지, **N1~N5** 는 위 콘텐츠 좌표의 형상(매니페스트·섹션 형상·참조 무결·`sortOrder` 잔존·id 형 직기입)을 본다. **X1** 은 변이 라우트 핸들러마다 교차사이트 가드가 **본문 첫 구문**에 있고 반환값이 차단에 쓰이는지(위 BFF 절), **X2** 는 읽기 GET 면제의 전제인 "CORS 헤더 0건"이 유지되는지, **X3** 는 OAuth state 쿠키의 1회용 소각과 `sameSite` 를 본다 — X1 은 파일이 아니라 **핸들러 본문 단위**로 재므로 화살표 export·`GET` 에만 건 가드·반환값 버리기·가드를 뒤로 미루기·주석이나 문자열로 위장한 가드가 전부 걸린다. 이 레포는 `tailwind-tokens`·`content=source` 둘 다 선언한 레포라 **S1·S2·S4·S6 와 N 규칙 위반이 에러**로 막힌다. ⚠ **S5(추가 `.css`)와 X 축은 어느 모드에서도 경고다** — `--gate` 에서도 rc 를 올리지 않는다(실측: src/app 아래에 .css 한 장을 더 두면 `⚠️ [S5]` 가 뜨고 rc 는 그대로 · 같은 하네스에서 S2 는 `❌`). 검사기를 「막아 준다」의 근거로 읽지 마라. `CUSTOMIZE.md` 의 같은 절이 이 사실을 적고 있다.
 **X1~X3 는 선언과 무관하게 경고다 — 기계가 막지 않는다.** 그 축은 "우리 심볼을 썼는가"를 재지
 "교차 오리진을 실제로 막았는가"를 재지 못하므로, 통과가 안전을 뜻하지 않는다. 경고가 보이면 네가 고쳐라.
 재현: 변이 라우트에서 `assertSameOrigin` 두 줄을 지우고 `npm run validate` → `⚠️ [X1]` 에 rc 0.

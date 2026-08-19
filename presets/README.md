@@ -47,10 +47,13 @@ cp -r src presets/<new-code>/src     # 새 팩은 여기서 시작합니다
 
 | code | 콘솔 노출명 | 성격 | 구성 | 소스 파일 | 원본과 다른 곳 |
 |---|---|---|---|---|---|
-| `skeleton` | 출발 골격 | **골격** — "명세대로 짜면 이 배선이 나온다" | home(4섹션) · 진열 없음 | 103 | 없음(원본 그대로) |
-| `shop-goods` | 재화 판매형 | **커머스** — 물건을 진열하고 장바구니·결제로 보낸다 | home(6섹션 + 진열 레일) · shipping | 103 | `src/app/page.tsx`(레일) |
-| `beauty-nail` | 네일샵형 | **예약** — 시술을 보여주고 예약으로 보낸다 | home(8섹션 + 진열 레일) · about · visit | 103 | `src/app/page.tsx`(레일) |
-| `biz-standard` | 기업 소개형 | **기업소개** — 회사·서비스를 설명하고 상담으로 보낸다 | home(8섹션) · about · consult | 103 | `SiteHeader`(장바구니·로그인 없음) |
+| `skeleton` | 출발 골격 | **골격** — "명세대로 짜면 이 배선이 나온다" | home(4섹션) · 진열 없음 | 118 | `src/components/SiteHeader.tsx` |
+| `shop-goods` | 재화 판매형 | **커머스** — 물건을 진열하고 장바구니·결제로 보낸다 | home(6섹션 + 진열 레일) · shipping | 118 | `src/app/page.tsx`(레일) |
+| `beauty-nail` | 네일샵형 | **예약** — 시술을 보여주고 예약으로 보낸다 | home(8섹션 + 진열 레일) · about · visit | 118 | `src/app/page.tsx`(레일) |
+| `biz-standard` | 기업 소개형 | **기업소개** — 회사·서비스를 설명하고 상담으로 보낸다 | home(8섹션) · about · consult | 118 | `src/components/SiteHeader.tsx`(장바구니·로그인 없음) |
+
+> 재현: `git ls-files -- presets/<code>/src | wc -l` · 다른 곳은 팩과 루트의 같은 좌표를 `cmp` 로 비교.
+> 네 팩 모두 **정확히 한 파일**만 다르다 — 그것이 「팩의 얼굴」이고 나머지 117 은 바이트 동일이다.
 
 **시드는 넷 다 `themeColors` 하나뿐입니다** — 팩은 고객 DB 에 상품·갈래를 만들지 않습니다(팩 v3).
 팩의 차이는 데이터가 아니라 **얼굴 저작 · 전환 동선 · 소스 · 보장 주장** 넷으로 표현됩니다.
@@ -230,9 +233,15 @@ zip 루트에는 `llms.txt` 도 실립니다 — 설치된 `@zalkera/client` 의
 `node scripts/lib/wiring-parity.mjs` 가 판정하고(**CI 스텝 · 팩 게이트가 같은 함수를 부릅니다**), 규칙은 둘입니다:
 
 - **파일 목록** — 전 팩에 **있어야 하고** sha 가 같아야 합니다. 없는 것도 위반입니다(가드를 지우는 것이
-  고치는 것보다 쉬우면 안 됩니다). `lib/{crossOrigin,http,session,oauth,safeUrl,oauthState,env,buildEnv,
-  zalkera,theme,preview}.ts` · `app/{robots,sitemap}.ts` · 가드 회귀 픽스처 둘(`crossOrigin.test.ts`·
-  `oauthState.test.ts`).
+  고치는 것보다 쉬우면 안 됩니다). **정본은 코드입니다** — 목록을 여기 베끼면 늘어날 때마다 낡습니다
+  (실제로 낡아서 15개로 적혀 있었고 지금은 29개입니다). 지금 무엇이 잠겨 있는지는 이렇게 봅니다:
+
+  ```bash
+  node --input-type=module -e 'import {WIRING_FILES} from "./scripts/lib/wiring-parity.mjs"; console.log(WIRING_FILES.join("\n"))'
+  ```
+
+  대략 `src/lib/` 의 전송·인증·안전 배선과 그 회귀 픽스처, `src/middleware.ts`, `app/{robots,sitemap}.ts`
+  입니다.
 - **디렉터리 목록** — `src/app/api/**`·`src/app/media/**`·`src/app/auth/**` 에서 **둘 이상의 팩이 가진**
   같은 경로는 바이트 동일해야 합니다. 한 팩에만 있는 파일은 통과입니다 — 드리프트가 아니라 그 팩의 새 능력입니다.
 
@@ -242,9 +251,9 @@ zip 루트에는 `llms.txt` 도 실립니다 — 설치된 `@zalkera/client` 의
 
 - `theme.ts` 는 **들어왔습니다.** 얼굴처럼 보이지만 실체는 고객 값을 `<html>` inline style 로 넣는 주입
   지점이라(화이트리스트 파서), 한 벌만 느슨해지면 CSS 주입이 그 팩에서만 열립니다.
-- `content.ts` 는 **빠졌습니다.** `AGENTS.md` 의 "중립 배선" 목록에는 있지만 실체는 **얼굴 로더**입니다 —
-  팩이 자기 콘텐츠 형상을 늘리는 것은 정상이고, 이 파일이 지키는 유일한 안전축(링크 소독)은 `safeUrl.ts`
-  가 갖고 있으며 그쪽이 잠겨 있습니다.
+- `content.ts` 는 **들어와 있습니다.** 얼굴 로더로 보이지만 네 팩의 실물이 바이트 동일이고(재현:
+  `md5sum src/lib/content.ts presets/*/src/lib/content.ts`), 이 파일이 예약 세그먼트·소유 판정으로
+  들어가는 입구라 한 벌만 느슨해지면 그 팩에서만 판정이 갈립니다.
 - `src/app/api/**` 가 **통째로 들어왔습니다.** 오버레이 시절엔 `revalidate`·`media` 둘만 잠갔는데, 실측하면
   BFF 라우트 전부가 `assertSameOrigin` 으로 서 있는 전송층이고 디자인이 한 줄도 없습니다. 한 팩에서 그 한
   줄이 빠지면 그 사이트만 교차사이트 위조에 열립니다(오버레이 심의 때 재현된 결함이 그것이었습니다).

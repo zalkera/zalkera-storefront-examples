@@ -21,8 +21,13 @@ export const dynamic = "force-static";
 export const revalidate = 300;
 
 /**
- * ISR 캐시 태그 — site-config(테마·레이아웃, 전 페이지)·products(카탈로그)·
- * product:{slug}(이 상품만). 백엔드가 해당 태그로 이 상세만 콕 집어 revalidate 한다.
+ * ISR 캐시 태그 — site-config(테마·레이아웃, 전 페이지)·products(카탈로그).
+ *
+ * ⚠ **`product:{slug}` 로 이 상세만 콕 집어 무효화되는 일은 없다.** 백엔드가 그 태그를 **일부러
+ *   안 붙인다** — 오퍼레이션 페이로드의 상품 참조가 고객이 말로 지시한 모호 참조라 slug 와 일치한다는
+ *   보장이 없기 때문이다(`@zalkera/client` 의 `llms.txt` §「캐시 태그」). 상품 페이지도 `products` 로
+ *   받는다. 아래에서 이 태그를 함께 다는 것은 **미래 대비이자 무해**일 뿐이니, 「상품별 즉시 무효화」
+ *   위에 설계를 얹지 마라.
  *
  * generateMetadata 와 페이지가 **같은 인자로** 부르므로 Next request memoization 이 1회로 합친다 —
  * 인자가 갈리면 조용히 2회가 된다.

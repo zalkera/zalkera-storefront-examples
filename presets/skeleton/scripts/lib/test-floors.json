@@ -12,5 +12,6 @@
     "scripts/lib/childEnv.test.mjs": 7,
     "scripts/lib/vendorSet.test.mjs": 3,
     "src/lib/content.test.ts": 3,
-    "src/lib/reservedSegments.test.ts": 4
+    "src/lib/reservedSegments.test.ts": 4,
+    "src/lib/mediaCache.test.ts": 11
 }
