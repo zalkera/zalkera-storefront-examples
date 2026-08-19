@@ -36,8 +36,9 @@ function run(...args) {
  *   `floor-gate.mjs` 가 그 실패로 죽고, 그러면 스위트별 통과 수 하한이 **아예 안 걸린다.**
  *   CI 는 새 체크아웃이라 초록이어서 이 적색은 사람 손에서만 났다.
  *
- *   그리고 이름 붙인 회귀를 정작 못 잡았다 — **이미 있는 폴더에 낮은 번호 zip 이 새로 얹히는**
- *   경우. 커밋이 막겠다고 적은 형상이 바로 그것이다. 목록을 비교하면 둘 다 잡힌다.
+ *   ⚠ **낮은 번호가 얹히는 것은 이 오라클이 못 막는다.** 그쪽은 팩이 성공하는 경로(rc=0)이고
+ *     여기서 재는 것은 반려 경로뿐이다. 그 형상은 `pack-preset.mjs` 의 **단조성 관문**이 막는다
+ *     (아래 시험이 함께 잰다).
  *
  * ⚠ **이름만 본다.** 같은 이름을 제자리에서 덮어쓰는 것은 못 잡는다. 그리고 이 판정은 **파일을
  *   읽기 전에 서는 관문**에만 해당한다 — 팩은 zip 을 쓴 뒤 `verify-zip` 을 돌리므로, 검수 실패로
@@ -86,6 +87,28 @@ test("앞자리 0 은 안 받는다 — 사람 눈에 같은 번호가 다른 �
     }
 });
 
+test("이미 있는 것보다 낮은 번호는 안 굽는다 — 되돌릴 수 없는 자리다", () => {
+    // 이 도구가 `--version` 을 필수로 만든 이유가 그 형상인데, 정작 낮은 번호는 안 막고 있었다.
+    // ⚠ 이 관문은 **로컬 폴더만** 본다 — 카탈로그의 최신은 원장이 안다. 그 한계는 KDoc 에 적혀 있다.
+    const zips = listing()
+        .split("\n")
+        .filter(Boolean)
+        .map((n) => /-(\d+\.\d+\.\d+)\.zip$/.exec(n)?.[1])
+        .filter(Boolean);
+    if (zips.length === 0) return; // 구운 것이 없으면 잴 것이 없다(CI 의 새 체크아웃).
+    const max = zips.sort((a, b) => {
+        const x = a.split(".").map(Number);
+        const y = b.split(".").map(Number);
+        return x[0] - y[0] || x[1] - y[1] || x[2] - y[2];
+    })[zips.length - 1];
+    const [j, n, p2] = max.split(".").map(Number);
+    for (const low of [`${j}.${n}.${p2}`, `${j}.${n}.${Math.max(p2 - 1, 0)}`, "0.0.1"]) {
+        const result = run("--version", low, "skeleton", "--no-verify", "--allow-dirty");
+        strictEqual(result.code, 1, `"${low}" 이 통과했다(현재 최대 ${max})`);
+        ok(/보다 높지 않습니다/.test(result.err), result.err.slice(0, 200));
+    }
+});
+
 test("컬럼 폭을 넘기면 팩 전에 멈춘다 — 적재 400 을 미리 잡는다", () => {
     const {code, err} = run("--version", `1.0.${"9".repeat(38)}`);
     strictEqual(code, 1);
@@ -95,14 +118,16 @@ test("컬럼 폭을 넘기면 팩 전에 멈춘다 — 적재 400 을 미리 잡
 test("양성 통제군 — 옳은 번호는 버전 관문을 지난다", () => {
     // 프리셋 코드 검사는 버전 검사 **바로 뒤**에 있다. 그 문구가 나왔다는 것은 버전이 통과했다는 뜻이고,
     // 몇 분짜리 게이트·빌드를 돌리지 않고도 그것을 확인할 수 있다.
-    const {code, err} = run("--version", "1.2.3", "BAD_Code");
+    // `--allow-rewind` 는 **단조성 관문을 비키기 위한 것**이다 — 여기서 재는 것은 형식 관문이고,
+    // 낮은 번호를 안 쓰면 이 시험이 판마다 낡는다.
+    const {code, err} = run("--version", "1.2.3", "BAD_Code", "--allow-rewind");
     strictEqual(code, 1);
     ok(/프리셋 디렉터리 이름/.test(err), err.slice(0, 200));
     ok(!/--version/.test(err), `버전 관문이 옳은 번호를 막았다: ${err.slice(0, 200)}`);
 });
 
 test("0.0.0 은 옳은 형식이다 — 과소독이 아니다", () => {
-    const {code, err} = run("--version", "0.0.0", "BAD_Code");
+    const {code, err} = run("--version", "0.0.0", "BAD_Code", "--allow-rewind");
     strictEqual(code, 1);
     ok(/프리셋 디렉터리 이름/.test(err), err.slice(0, 200));
 });

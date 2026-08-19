@@ -1178,6 +1178,50 @@ if (version.length > MAX_VERSION_LENGTH) {
     console.error(`--version 이 ${version.length}자입니다 — 상한 ${MAX_VERSION_LENGTH}자(theme_artifact.version).`);
     process.exit(1);
 }
+
+/**
+ * **여기 있는 것보다 낮은 번호로는 안 굽는다.**
+ *
+ * 이 도구가 `--version` 을 필수로 만든 이유가 「잊고 낮은 번호로 구우면 되돌릴 수 없다」인데,
+ * 정작 낮은 번호를 **막지는 않았다**. 형식만 보고 통과시켰다 — 경고문이 사람에게 「이미 발행된
+ * 최신보다 높아야 합니다」라고 말하기만 했다.
+ *
+ * ⚠ **이것은 원장이 아니다.** `dist-presets/` 는 gitignore 라 카탈로그의 상태를 모른다. 여기서
+ *   막는 것은 「같은 자리에 이미 있는 것보다 낮게 굽기」뿐이고, 그보다 앞선 승격본이 원격에
+ *   있으면 이 검사는 아무 말도 못 한다(그때는 `--version` 안내가 시키는 원장 조회가 유일한 답이다).
+ *   그래도 실무에서 밟히는 형상은 대부분 이쪽이다 — 방금 구운 옆에 낮은 것을 얹는 것.
+ */
+const cmpVersion = (a, b) => {
+    const x = a.split(".").map(Number);
+    const y = b.split(".").map(Number);
+    return x[0] - y[0] || x[1] - y[1] || x[2] - y[2];
+};
+const localMax = (() => {
+    let best = null;
+    let names = [];
+    try {
+        names = readdirSync(OUT_DIR);
+    } catch {
+        return null;
+    }
+    for (const name of names) {
+        const m = /^(?:[a-z0-9][a-z0-9-]*)-(\d+\.\d+\.\d+)\.zip$/.exec(name);
+        if (m && (best === null || cmpVersion(m[1], best) > 0)) best = m[1];
+    }
+    return best;
+})();
+if (localMax !== null && cmpVersion(version, localMax) <= 0 && !args.includes("--allow-rewind")) {
+    console.error(`--version ${version} 은 dist-presets/ 에 이미 있는 ${localMax} 보다 높지 않습니다.`);
+    console.error("  키가 {code}/{version}.zip 이라 낮은 번호는 덮어쓰기가 아니라 **새 객체**이고,");
+    console.error("  promote 하면 신규 테넌트가 그 판을 받습니다. 되돌릴 수 없습니다.");
+    console.error("");
+    console.error("  · 다시 구우려면 dist-presets/ 를 비우거나 더 높은 번호를 주십시오.");
+    console.error("  · 일부러 낮게 구워야 하면 --allow-rewind 를 붙이십시오(그 판단은 사람 몫입니다).");
+    console.error("");
+    console.error("  ⚠ 이 검사는 **로컬 폴더만** 봅니다 — 카탈로그의 최신은 원장이 압니다:");
+    console.error('    curl -s "$API/api/system/themes/<code>/artifacts" -H "Authorization: Bearer $TOKEN"');
+    process.exit(1);
+}
 for (const code of targets) {
     if (!CODE_REGEX.test(code)) {
         console.error(`프리셋 디렉터리 이름 "${code}" 은 팩 코드 형식(${CODE_REGEX.source})이 아닙니다 — 이 이름은 매니페스트·테마 코드로 그대로 갑니다.`);

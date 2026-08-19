@@ -93,7 +93,7 @@ test("통제군 — 면제 목록이 배송 라우트의 마커와 일치한다"
     // 지우면 라우트가 줄고, 그때 「걷기가 깨졌다」는 틀린 사유로 반려한다.
     assert.ok(files.length > 0, "src/app 아래 route 파일을 하나도 못 찾았다 — 걷기가 깨졌다");
     const marked = files
-        .filter((f) => /^\/\/ zalkera-allow-preview-write:[ \t]*\S/m.test(readFileSync(f, "utf8")))
+        .filter((f) => /^\/\/ zalkera-allow-preview-write:[ \t   -   　]*\S/m.test(readFileSync(f, "utf8")))
         .map((f) =>
             dirname(f)
                 .slice(appDir.length)
@@ -119,7 +119,7 @@ test("면제 목록에 유령이 없다 — 온전한 트리에서만", () => {
             e.isDirectory() ? walk(join(d, e.name)) : e.name.startsWith("route.") ? [join(d, e.name)] : [],
         );
     const marked = walk(appDir)
-        .filter((f) => /^\/\/ zalkera-allow-preview-write:[ \t]*\S/m.test(readFileSync(f, "utf8")))
+        .filter((f) => /^\/\/ zalkera-allow-preview-write:[ \t   -   　]*\S/m.test(readFileSync(f, "utf8")))
         .map((f) =>
             dirname(f)
                 .slice(appDir.length)
