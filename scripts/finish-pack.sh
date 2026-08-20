@@ -18,7 +18,10 @@ cd "$(dirname "$0")/.."
 ROOT="$(pwd)"
 
 echo "── 1. @zalkera/client 최신본 설치"
-npm install
+# ⚠ **맨 `npm install` 로는 안 올라간다.** 락파일에 핀이 있으면 그 핀을 유지한다 —
+#    `package.json` 범위가 `^0.24.0` 이라 0.24.1 을 받아야 할 것 같지만 받지 않는다.
+#    이름을 대고 부르면 그때 범위를 다시 푼다.
+npm install "@zalkera/client@$(node -p "require('./package.json').dependencies['@zalkera/client']")"
 INSTALLED=$(node -p "require('./node_modules/@zalkera/client/package.json').version")
 PINNED=$(node -p "require('./package-lock.json').packages['node_modules/@zalkera/client'].version")
 echo "   설치본 $INSTALLED · 락파일 $PINNED"
