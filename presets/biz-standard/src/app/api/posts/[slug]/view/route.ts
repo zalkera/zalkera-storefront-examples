@@ -11,7 +11,7 @@ import {routeParam} from "@/lib/routeParam";
  * inquiry/route.ts 의 clientIp 관용구를 복제한다. 이 축은 **레이트리밋이 아니라 조회 dedup** 이다 —
  * 키가 `sha256(방문자 IP|User-Agent)` 이고 **게시글별·UTC 하루** 단위라, 안 넘기면 IP 가 테넌트 서버
  * 하나로 뭉쳐 **게시글마다 하루 한 건**으로 접힌다(429 가 아니라 집계가 죽는다 — 그 UA 는 방문자 것이
- * 아니라 서버 것이라 상수다). 프리뷰에서는 세지 않는다(초안 열람이 조회로 잡히면 안 됨).
+ * 아니라 서버 것이라 상수다). 미리보기에서는 세지 않는다(초안 열람이 조회로 잡히면 안 됨).
  */
 export async function POST(req: Request, {params}: {params: Promise<{slug: string}>}) {
     const blocked = assertSameOrigin(req);

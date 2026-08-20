@@ -13,17 +13,27 @@ import {mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync} from "node:fs
 import {join} from "node:path";
 import {tmpdir} from "node:os";
 import {fileURLToPath} from "node:url";
-import {judgeFloors, REQUIRED_FLOORS, FLOOR_KEY_REGEX} from "./floors.mjs";
+import {judgeFloors, REQUIRED_FLOORS, REPO_ONLY_FLOORS, FLOOR_KEY_REGEX, isCanonicalRepo} from "./floors.mjs";
 
-/** 요구 스위트가 전부 있는 트리. */
+/**
+ * 요구 스위트가 전부 있는 트리.
+ *
+ * ⚠ 무엇이든 있다고 답하므로 `presets`·`scripts/pack-preset.mjs` 도 참이 되고, 그래서 **정본 저장소**로
+ * 판정된다 — 그러면 요구가 `REPO_ONLY_FLOORS` 까지 늘어난다. 그 사실을 모르고 쓰면 「표를
+ * 비우면 반려한다」 같은 시험이 엉뚱한 사유로 초록이 된다.
+ */
 const allExist = () => true;
-/** 정상 표 — 요구치와 같다. */
-const ok = () => ({...REQUIRED_FLOORS});
+/** 팩 트리(정본이 아닌 트리). 요구는 [REQUIRED_FLOORS] 뿐이다. */
+const packTree = (f) => f !== "presets" && f !== "scripts/pack-preset.mjs";
+/** 정상 표 — 정본 저장소의 요구치와 같다. */
+const ok = () => ({...REQUIRED_FLOORS, ...REPO_ONLY_FLOORS});
+/** 정본 저장소가 요구하는 스위트 수. */
+const wantAll = Object.keys(REQUIRED_FLOORS).length + Object.keys(REPO_ONLY_FLOORS).length;
 
 test("정상 표는 통과하고 요구 스위트를 전부 집행한다", () => {
     const {bad, effective} = judgeFloors(ok(), allExist);
     assert.deepEqual(bad, []);
-    assert.equal(Object.keys(effective).length, Object.keys(REQUIRED_FLOORS).length);
+    assert.equal(Object.keys(effective).length, wantAll);
 });
 
 test("표를 비우면 반려한다 — 집행은 살지만 비우기는 게이트를 끄려는 시도다", () => {
@@ -33,7 +43,7 @@ test("표를 비우면 반려한다 — 집행은 살지만 비우기는 게이�
         `비운 표가 통과했다: ${JSON.stringify(bad)}`,
     );
     // 요구치는 살아 있어야 한다 — 비워도 집행이 0 이 되면 안 된다.
-    assert.equal(Object.keys(effective).length, Object.keys(REQUIRED_FLOORS).length);
+    assert.equal(Object.keys(effective).length, wantAll);
 });
 
 test("항목을 줄이면 반려한다", () => {
@@ -251,4 +261,43 @@ describe("하한 집계는 실행된 시험만 센다", () => {
         assert.equal(counted, 0);
         assert.equal(legacy, 1, "종전 오라클이 빈 파일을 0 으로 세기 시작했다면 이 시험의 전제가 바뀐 것이다");
     });
+});
+
+test("팩 트리에서는 정본 전용 스위트를 요구하지 않는다 — 요구하면 멀쩡한 팩이 막힌다", () => {
+    // 팩에 안 실리는 것을 공통 요구로 올리면 「가드 미달」이라는 **틀린 사유**로 배송이 멈춘다.
+    // 그 사유는 고객에게 「당신 소스에 가드가 없다」로 읽힌다.
+    const {bad} = judgeFloors({...REQUIRED_FLOORS}, packTree);
+    assert.deepEqual(bad, [], `팩 트리가 반려됐다: ${JSON.stringify(bad)}`);
+});
+
+test("팩 트리에서도 실리는 스위트는 그대로 요구한다", () => {
+    const missing = (f) => packTree(f) && f !== "src/lib/crossOrigin.test.ts";
+    const {bad} = judgeFloors({...REQUIRED_FLOORS}, missing);
+    assert.ok(
+        bad.some((b) => b.includes("crossOrigin.test.ts 가 없습니다")),
+        `팩에 실리는 가드가 사라졌는데 통과했다: ${JSON.stringify(bad)}`,
+    );
+});
+
+test("정본 저장소에서는 정본 전용 스위트도 요구한다 — 안 하면 조용히 지울 수 있다", () => {
+    const missing = (f) => f !== "scripts/lib/packGate.test.mjs";
+    const {bad} = judgeFloors(ok(), missing);
+    assert.ok(
+        bad.some((b) => b.includes("packGate.test.mjs 가 없습니다")),
+        `정본에서 팩 관문 시험이 사라졌는데 통과했다: ${JSON.stringify(bad)}`,
+    );
+});
+
+test("판별자는 둘 다 있어야 참이다 — 폴더 이름 하나로 고객 트리가 정본이 되면 안 된다", () => {
+    // 고객이 `presets/` 를 만드는 것만으로 참이 되면, 그 트리에 없는 스위트를 요구해 고객 CI 가
+    // 영구 적색이 된다. 그 사이 그 사이트는 「말로 고치기」가 구조적으로 막힌다.
+    assert.equal(isCanonicalRepo(() => true), true);
+    assert.equal(isCanonicalRepo((f) => f === "presets"), false);
+    assert.equal(isCanonicalRepo((f) => f === "scripts/pack-preset.mjs"), false);
+    assert.equal(isCanonicalRepo(() => false), false);
+});
+
+test("두 표는 겹치지 않는다 — 겹치면 어느 쪽 하한이 참인지 알 수 없다", () => {
+    const both = Object.keys(REQUIRED_FLOORS).filter((f) => f in REPO_ONLY_FLOORS);
+    assert.deepEqual(both, []);
 });

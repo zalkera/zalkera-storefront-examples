@@ -162,6 +162,16 @@ const SOURCE_EXCLUDES = [
     // 배송물에서 이것을 import 하는 코드는 0건이고(실측), 크롤러 정본은 `@zalkera/client` 에 있다.
     "scripts/lib/site-crawl.mjs",
     "scripts/lib/wiring-parity.mjs",
+    // ⚠ **그 픽스처도 함께 뺀다.** 본체만 빼고 시험을 실으면 고객 트리에서 단독 실행 시
+    // `ERR_MODULE_NOT_FOUND` 로 죽는다 — 형제 `visitor-ip-parity` 가 그렇게 한 번 나갔다.
+    "scripts/lib/wiringParity.test.mjs",
+    // 시험용 zip 작성기와 그 시험 — 검사기가 아니라 도구다. 고객이 부를 표면이 없다.
+    "scripts/lib/miniZip.mjs",
+    "scripts/lib/verifyZipJudgments.test.mjs",
+    // 신호 정리 시험은 이 레포의 `dist-presets` 에 든 zip 을 대상으로 삼는다 — 고객 트리엔 없다.
+    "scripts/lib/verifyZipSignal.test.mjs",
+    // 배송 문서(`docs/byo-headless-guide.md`)와 소스의 env 이름 대조 — 우리 문서에 대한 규율이다.
+    "scripts/lib/docEnvNames.test.mjs",
     // 팩 도구(`pack-preset.mjs`)가 시드값을 테마 계약과 대조할 때만 쓰는 판독기와 그 시험.
     // 그 도구가 정본 전용이라 둘 다 같다 — 고객 트리에서 부를 표면이 없다.
     "scripts/lib/themeEnums.mjs",

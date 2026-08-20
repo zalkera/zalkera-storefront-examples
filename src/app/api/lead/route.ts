@@ -27,7 +27,7 @@ export async function POST(req: Request) {
     const badType = assertJsonContentType(req);
     if (badType) return badType;
     if (isPreview()) {
-        return NextResponse.json({message: "프리뷰 모드에서는 리드 접수가 비활성화됩니다."}, {status: 403});
+        return NextResponse.json({message: "미리보기 모드에서는 리드 접수가 비활성화됩니다."}, {status: 403});
     }
     const input = await readJsonBody(req);
     if (!input) return invalidBody();

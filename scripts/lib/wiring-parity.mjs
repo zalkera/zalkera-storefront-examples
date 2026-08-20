@@ -61,8 +61,9 @@ export const WIRING_FILES = [
     "src/lib/buildEnv.ts", // 오프라인 빌드 강하 — 서빙 빌드에 켜지면 콘텐츠 빈 아티팩트가 나간다
     "src/lib/zalkera.ts", // 클라이언트 싱글턴(baseUrl·X-Tenant·스토어프론트 키 주입 지점)
     "src/lib/theme.ts", // 고객 값 → `<html>` inline style 주입(화이트리스트 파서)
-    "src/lib/preview.ts", // 프리뷰 판별
-    // ⚠ 프리뷰 쓰기 차단의 **집행 지점**이다. 한 벌에서 빠지면 그 팩만 조용히 샌다 —
+    "src/lib/theme.test.ts", // 그 화이트리스트가 무엇을 막는지 — 한 벌만 느슨해지면 그 팩에서만 열린다
+    "src/lib/preview.ts", // 미리보기 판별
+    // ⚠ 미리보기 쓰기 차단의 **집행 지점**이다. 한 벌에서 빠지면 그 팩만 조용히 샌다 —
     //   `WIRING_MISSING` 이 부재도 위반으로 잡는 이유가 이것이다.
     "src/middleware.ts",
     "src/lib/previewGuard.ts",

@@ -23,7 +23,7 @@ const ALLOW_MARKER =
     /^\/\/ zalkera-allow-preview-write:[ \t   -   　]*(?![\p{Cf}\p{Mn}\p{Me}\p{Cc}\p{Co}\p{Cn}\p{Default_Ignorable_Code_Point}\u2800])\S/mu;
 
 /**
- * **프리뷰 쓰기 차단의 회귀 픽스처.**
+ * **미리보기 쓰기 차단의 회귀 픽스처.**
  *
  * 집행은 `src/middleware.ts` 가 한다. 이 파일은 그 판정(`previewGuard.ts` 의 순수 함수)을 전수로
  * 시험하고, **관문이 실제로 배선돼 있는지**를 통제군으로 확인한다.
@@ -84,10 +84,10 @@ test("면제 목록에 없는 것은 전부 막는다 — 새 라우트는 아�
 
 test("통제군 — 미들웨어가 실제로 있고 이 판정을 부른다(없으면 아무 일도 안 일어난다)", () => {
     const mw = join(SRC, "middleware.ts");
-    assert.ok(existsSync(mw), "src/middleware.ts 가 없다 — 프리뷰 쓰기 차단이 통째로 꺼진다");
+    assert.ok(existsSync(mw), "src/middleware.ts 가 없다 — 미리보기 쓰기 차단이 통째로 꺼진다");
     const code = readFileSync(mw, "utf8");
     assert.match(code, /isPreviewBlockedWrite/, "미들웨어가 판정을 안 부른다");
-    assert.match(code, /\bisPreview\(\)/, "미들웨어가 프리뷰 여부를 안 본다");
+    assert.match(code, /\bisPreview\(\)/, "미들웨어가 미리보기 여부를 안 본다");
     assert.match(code, /status:\s*403/, "미들웨어가 403 을 안 낸다");
     // matcher 는 **정적 파일만** 뺀다. 경로 목록으로 좁히면 빠뜨린 자리가 조용히 무방비가 된다.
     // 무엇을 덮는지는 여기서 문면으로 재지 않고 **빌드 산출물**로 잰다(`scripts/lib/gate-probe.mjs`)
@@ -117,13 +117,13 @@ test("통제군 — 면제 목록이 배송 라우트의 마커와 일치한다"
                 .replace(/\/\([^)]+\)/g, ""),
         )
         .sort();
-    // ⚠ **한 방향만 위험하다.** 검수받지 않은 마커가 트리에 있으면 그 라우트가 프리뷰에서 쓴다 —
+    // ⚠ **한 방향만 위험하다.** 검수받지 않은 마커가 트리에 있으면 그 라우트가 미리보기에서 쓴다 —
     //   그것이 이 시험이 막는 것이다. 반대(목록에 있는데 라우트가 없음)는 아무 권한도 안 준다.
     //   안 쓰는 능력을 지운 사이트는 늘 그 상태가 되므로, 그것까지 반려하면 **정상 커스터마이즈가
     //   빨개진다**.
     const allowed: readonly string[] = PREVIEW_WRITE_ALLOW;
     const unauthorized = marked.filter((route) => !allowed.includes(route));
-    assert.deepEqual(unauthorized, [], `검수 안 받은 프리뷰 쓰기 면제 마커: ${unauthorized.join(" ")}`);
+    assert.deepEqual(unauthorized, [], `검수 안 받은 미리보기 쓰기 면제 마커: ${unauthorized.join(" ")}`);
 });
 
 test("면제 목록에 유령이 없다 — 온전한 트리에서만", () => {

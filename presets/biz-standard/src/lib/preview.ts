@@ -1,5 +1,5 @@
 /**
- * 프리뷰 모드 판별. 프리뷰 러너가 `next dev` 프로세스에 NEXT_PUBLIC_ZALKERA_PREVIEW=1 을 주입한다(구 이름도 수용).
+ * 미리보기 모드 판별. 미리보기 러너가 `next dev` 프로세스에 NEXT_PUBLIC_ZALKERA_PREVIEW=1 을 주입한다(구 이름도 수용).
  * =1 이면 프로덕션 공개 API(읽기)만 소비하고 쓰기(체크아웃·장바구니 변경)를 차단해 프로덕션 데이터를 오염시키지 않는다.
  */
 // NEXT_PUBLIC_* 는 빌드 시 리터럴로 치환되므로 동적 키 접근이 불가하다 — 두 이름을 그대로 나열한다.
@@ -7,7 +7,7 @@ export const isPreview = (): boolean =>
     process.env.NEXT_PUBLIC_ZALKERA_PREVIEW === "1" || process.env.NEXT_PUBLIC_ONEQUE_PREVIEW === "1";
 
 // ⚠ **여기에 적용 지점을 나열하지 마라.** 손으로 관리하던 목록이 둘에서 멈춰 있는 사이 카트 세 곳이
-//   무방비가 되고, 그동안 `CUSTOMIZE.md` 는 "장바구니 쓰기가 막힌다"고 보증한다 — 프리뷰
+//   무방비가 되고, 그동안 `CUSTOMIZE.md` 는 "장바구니 쓰기가 막힌다"고 보증한다 — 미리보기
 //   빌드에서 항목 삭제가 운영 백엔드까지 간다. 목록은 반드시 낡는다.
 //
 //   지금 집행하는 것은 **`src/middleware.ts` 하나**다 — 요청의 메서드·경로만 보므로 라우트가 어떤

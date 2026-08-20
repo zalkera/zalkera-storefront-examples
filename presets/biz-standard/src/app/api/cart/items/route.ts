@@ -11,9 +11,9 @@ export async function POST(req: Request) {
     if (blocked) return blocked;
     const badType = assertJsonContentType(req);
     if (badType) return badType;
-    // 프리뷰 모드는 읽기전용 — 프로덕션 데이터 오염 방지로 쓰기를 차단한다.
+    // 미리보기 모드는 읽기전용 — 프로덕션 데이터 오염 방지로 쓰기를 차단한다.
     if (isPreview()) {
-        return NextResponse.json({message: "프리뷰 모드에서는 장바구니 변경이 비활성화됩니다."}, {status: 403});
+        return NextResponse.json({message: "미리보기 모드에서는 장바구니 변경이 비활성화됩니다."}, {status: 403});
     }
     const body = await readJsonBody(req);
     if (!body) return invalidBody();

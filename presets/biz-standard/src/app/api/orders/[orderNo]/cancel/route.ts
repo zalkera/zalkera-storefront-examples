@@ -22,7 +22,7 @@ export async function POST(req: Request, {params}: {params: Promise<{orderNo: st
     const badType = assertJsonContentType(req);
     if (badType) return badType;
     if (isPreview()) {
-        return NextResponse.json({message: "프리뷰 모드에서는 주문 취소가 비활성화됩니다."}, {status: 403});
+        return NextResponse.json({message: "미리보기 모드에서는 주문 취소가 비활성화됩니다."}, {status: 403});
     }
     const accessToken = await getAccessToken();
     const body = await readJsonBody(req);

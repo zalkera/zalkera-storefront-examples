@@ -93,7 +93,7 @@ npm run dev                    # http://localhost:3000
 > ⚠ **`ZALKERA_API_BASE`·`ZALKERA_TENANT` 는 구 `ONEQUE_` 접두를 더 이상 받지 않습니다.** 폴백을
 > "그대로 동작한다"고 적어 뒀는데 거짓이었고, 그 말을 믿은 BYO 배포는 기동에 실패합니다.
 >
-> 다만 **`NEXT_PUBLIC_ONEQUE_PREVIEW` 는 지금도 받습니다**(`src/lib/preview.ts` — 구 프리뷰 러너 호환).
+> 다만 **`NEXT_PUBLIC_ONEQUE_PREVIEW` 는 지금도 받습니다**(`src/lib/preview.ts` — 구 미리보기 러너 호환).
 > "구 접두는 전부 죽었다"로 넓혀 읽지 마십시오. 새로 쓸 때는 `ZALKERA_` 로 쓰십시오.
 
 ## AI 매뉴얼 — `llms.txt`

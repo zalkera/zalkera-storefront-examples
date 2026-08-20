@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 빌드 산출물의 프리뷰 관문 matcher 가 **이 트리의 라우트를 전부 덮는가**.
+ * 빌드 산출물의 미리보기 관문 matcher 가 **이 트리의 라우트를 전부 덮는가**.
  *
  * 리터럴(`^/.*$`)을 요구하면 정적 파일을 빼는 정당한 완화도, 다른 규약(`proxy`)으로의 이행도 막힌다.
  * 그래서 **성질**을 잰다 — 아래 프로브가 전부 관문을 통과해야 하고, 정적 프로브는 빠져도 된다.
@@ -49,7 +49,7 @@ try {
     process.exit(2);
 }
 if (entries.length === 0) {
-    console.error("[gate-probe] 프리뷰 관문이 빌드에 안 실렸습니다 — 쓰기 차단이 통째로 꺼집니다.");
+    console.error("[gate-probe] 미리보기 관문이 빌드에 안 실렸습니다 — 쓰기 차단이 통째로 꺼집니다.");
     console.error("  src/middleware.ts 의 위치·이름·export 를 보십시오. Next 판을 올렸다면 규약 이행이 필요할 수 있습니다.");
     process.exit(1);
 }

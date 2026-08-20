@@ -107,7 +107,7 @@ export async function POST(req: Request) {
   서로 `same-site`** 다 — 그 관용구는 테넌트-대-테넌트 위조를 열어 둔 채 "고쳤다"고 기록된다.
 - **스킴을 비교하지 마라.** 서빙 오케스트레이터가 `x-forwarded-proto: "http"` 를 넣는데 공개 스킴은
   https 다. 비교하면 전 사이트가 즉시 죽는다. 호스트만 본다.
-- **프리뷰 모드는 쓰기를 막는다 — 그리고 그 판정은 `src/middleware.ts` 한 곳에 있다.**
+- **미리보기 모드는 쓰기를 막는다 — 그리고 그 판정은 `src/middleware.ts` 한 곳에 있다.**
   새 라우트는 **아무것도 안 해도 덮인다**(선언 형태·파일명과 무관하다). 단 matcher 가 빼는 접두
   (`_next/static`·`_next/image`·`images/`·`favicon.ico`) 밑은 예외이고,
   그 형상은 `npm run build && node scripts/lib/gate-probe.mjs` 가 잡는다. 라우트 안의
@@ -197,7 +197,7 @@ const access = {accessToken, phone, context: {clientIp: visitorIp(await headers(
 **중립 배선 — 지우지 마십시오** (능력이 아니라 플랫폼 계약입니다):
 `src/lib/theme.ts` + layout 의 테마 주입 · `src/app/media/[id]/` 프록시 · `src/app/api/revalidate/` ·
 `src/lib/{crossOrigin,safeUrl,env,buildEnv}.ts` · `robots.ts`·`sitemap.ts` · `src/lib/content.ts` ·
-`src/middleware.ts` + `src/lib/previewGuard.ts`(프리뷰 쓰기 차단) ·
+`src/middleware.ts` + `src/lib/previewGuard.ts`(미리보기 쓰기 차단) ·
 **`src/lib/{session,authHint,useAuthHint}.ts`** — 세션 배선은 쇼핑몰 전용이 아닙니다. 예약·리뷰·동의
 라우트와 `SiteHeader` 가 씁니다(재현: `grep -rl '@/lib/session\|@/lib/authHint\|@/lib/useAuthHint' src`).
 쇼핑몰·예약·회원 기능을 **전부** 지울 때만 함께 지웁니다.

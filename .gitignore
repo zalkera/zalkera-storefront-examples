@@ -29,3 +29,8 @@ dist-preview
 
 # 팩 출처 원장 — 로컬 기록(dist-presets 를 비워도 살아남아야 한다)
 .pack-provenance.json
+
+# 편집기 확장이 적는 로컬 표시 — **이 폴더가 어느 사이트의 어느 판인지**를 기록한다.
+# `.zalkera/` 자체는 무시하지 않는다: 팩의 시드가 그 아래 산다.
+# 올릴 때도 빠진다(확장의 `zip.ts` 가 같은 경로 하나만 뺀다) — 두 자리가 같은 경로를 봐야 한다.
+.zalkera/source.json

@@ -115,7 +115,12 @@ export function runRanges(src) {
             }
         }
         // 지시자와 chomp 는 **어느 순서로도** 온다(`|2-` · `|-2`). 둘 다 받는다.
-        const block = /^(\s*)(-\s+)?(?:"run"|'run'|run):\s*[|>]([-+]?\d*|\d*[-+]?)\s*(?:#.*)?$/.exec(ln);
+        // ⚠ **키와 콜론 사이에 공백이 올 수 있다.** `run : |` 은 유효한 YAML 이고 GitHub 이 그대로
+        //    실행한다. 여기만 공백을 안 받으면 한 칸으로 이 검사기를 통째로 피할 수 있다.
+        //    재현: `printf 'jobs:\n  a:\n    steps:\n      - run : echo hi\n' |
+        //          python3 -c 'import yaml,sys; print(yaml.safe_load(sys.stdin)["jobs"]["a"]["steps"][0])'`
+        //          → `{'run': 'echo hi'}`
+        const block = /^(\s*)(-\s+)?(?:"run"|'run'|run)\s*:\s*[|>]([-+]?\d*|\d*[-+]?)\s*(?:#.*)?$/.exec(ln);
         if (block) {
             keyIndent = block[1].length + (block[2] ? block[2].length : 0);
             // ⚠ `|0` 은 YAML 상 무효다. 그리고 0 을 받으면 본문 들여쓰기가 **키 열과 같아져**
@@ -130,7 +135,7 @@ export function runRanges(src) {
             }
             continue;
         }
-        const inline = /^(\s*)(?:-\s+)?(?:"run"|'run'|run):[^\S\n](.*)$/.exec(ln);
+        const inline = /^(\s*)(?:-\s+)?(?:"run"|'run'|run)\s*:[^\S\n](.*)$/.exec(ln);
         if (inline && inline[2].trim().length > 0) out.push({line: i + 1, text: inline[2]});
     }
     return out;
@@ -152,21 +157,95 @@ export function runRanges(src) {
  * ⚠ **키 열로 잰다.** `- env:` 에서 대시 열을 쓰면 뒤따르는 형제 키(`with:` 등)를 매핑 안으로
  *   삼켜, 무해한 인자가 이름을 오염시킨다. `run:` 쪽과 같은 계열의 결함이다.
  */
+/**
+ * 내용줄(빈 줄·주석 제외)마다 세 가지를 **한 번에** 구한다.
+ *
+ * ⚠ 이것이 없으면 `taintedRegions` 가 **제곱**이 된다. 열 0 의 `env:` 는 ⑴ 위로 더 얕은 줄을
+ *   영영 못 만나 꼭대기까지 훑고 ⑵ 아래로도 더 얕은 줄이 없어 파일 끝까지 훑기 때문이다.
+ *   실측(열 0 `env:` 만 있는 파일): 고치기 전 2,000줄 67ms · 8,000줄 1,056ms · 20,000줄 6,592ms.
+ *   재현: `node scripts/lib/workflow-syntax.bench.mjs`
+ *
+ * 이 검사기는 **고객 트리에서도 돈다**(팩에 실린다). 고객이 만든 큰 워크플로 하나가 그 CI 를
+ * 붙잡고 있게 둘 이유가 없다.
+ *
+ * - `shallower[i]` — 위쪽으로 처음 만나는 **더 얕은** 내용줄(없으면 `-1`).
+ * - `nextAtOrShallower[i]` — 아래쪽으로 처음 만나는 **같거나 더 얕은** 내용줄(없으면 줄 수).
+ * - `nextShallower[i]` — 아래쪽으로 처음 만나는 **더 얕은** 내용줄(없으면 줄 수).
+ *
+ * 빈 줄과 주석은 어느 축에서도 세지 않는다 — YAML 은 주석의 들여쓰기에 뜻을 두지 않는다.
+ */
+function indentIndex(lines) {
+    const n = lines.length;
+    const content = [];
+    const indent = new Array(n).fill(-1);
+    for (let i = 0; i < n; i++) {
+        const t = lines[i].trim();
+        if (t === "" || t.startsWith("#")) continue;
+        indent[i] = lines[i].length - lines[i].trimStart().length;
+        content.push(i);
+    }
+    const shallower = new Array(n).fill(-1);
+    const nextAtOrShallower = new Array(n).fill(n);
+    const nextShallower = new Array(n).fill(n);
+
+    // 위쪽: 들여쓰기가 단조 증가하는 스택.
+    const up = [];
+    for (const i of content) {
+        while (up.length > 0 && indent[up[up.length - 1]] >= indent[i]) up.pop();
+        shallower[i] = up.length > 0 ? up[up.length - 1] : -1;
+        up.push(i);
+    }
+    // 아래쪽: 같은 스택을 뒤에서부터. 두 축을 따로 굴린다(하나는 `<=`, 하나는 `<`).
+    const downLE = [];
+    const downLT = [];
+    for (let k = content.length - 1; k >= 0; k--) {
+        const i = content[k];
+        while (downLE.length > 0 && indent[downLE[downLE.length - 1]] > indent[i]) downLE.pop();
+        nextAtOrShallower[i] = downLE.length > 0 ? downLE[downLE.length - 1] : n;
+        downLE.push(i);
+
+        while (downLT.length > 0 && indent[downLT[downLT.length - 1]] >= indent[i]) downLT.pop();
+        nextShallower[i] = downLT.length > 0 ? downLT[downLT.length - 1] : n;
+        downLT.push(i);
+    }
+    /** 파일의 첫 내용줄(없으면 `-1`). */
+    const first = content.length > 0 ? content[0] : -1;
+    return {indent, shallower, nextAtOrShallower, nextShallower, first, content};
+}
+
+/**
+ * `stop` 다음이면서 `before` 앞인 첫 내용줄. 없으면 `-1`.
+ *
+ * 이 구간은 **한 형제 묶음 안**이라 파일 크기와 무관하게 짧다 — 여기만 직접 훑어도 제곱이 안 된다.
+ */
+function nextContentAfter(lines, ix, stop, before) {
+    for (let j = stop + 1; j < before; j++) {
+        if (ix.indent[j] >= 0) return j;
+    }
+    return -1;
+}
+
 function taintedRegions(src) {
     const lines = src.split("\n");
+    const ix = indentIndex(lines);
     const regions = [];
     for (let i = 0; i < lines.length; i++) {
         const head = /^(\s*)(-\s+)?env:\s*(?:#.*)?$/.exec(lines[i]);
         if (!head) continue;
         const keyCol = head[1].length + (head[2] ? head[2].length : 0);
-        // 매핑의 끝: 키 열보다 **깊지 않은** 첫 줄.
-        let mapEnd = lines.length;
-        for (let j = i + 1; j < lines.length; j++) {
-            if (lines[j].trim() === "" || lines[j].trim().startsWith("#")) continue;
-            const c = lines[j].length - lines[j].trimStart().length;
-            if (c <= keyCol) {
-                mapEnd = j;
-                break;
+        // 매핑의 끝: 키 열보다 **깊지 않은** 첫 줄. `- env:` 는 키 열이 대시 뒤라 그 줄 자신의
+        // 들여쓰기와 다르다 — 그때만 미리 계산을 못 쓰고 직접 훑는다(시퀀스 항목은 드물고 짧다).
+        let mapEnd;
+        if (ix.indent[i] === keyCol) {
+            mapEnd = ix.nextAtOrShallower[i];
+        } else {
+            mapEnd = lines.length;
+            for (let j = i + 1; j < lines.length; j++) {
+                if (ix.indent[j] < 0) continue;
+                if (ix.indent[j] <= keyCol) {
+                    mapEnd = j;
+                    break;
+                }
             }
         }
         // 이름의 유효 범위: 그 `env:` 의 **형제 묶음** 전체.
@@ -177,35 +256,44 @@ function taintedRegions(src) {
         //   범위는 **같은 열의 형제까지**이고, 그 앞의 대시줄은 스텝의 첫 줄이므로 함께 든다.
         let scopeFrom = i + 1;
         if (!head[2]) {
-            for (let j = i - 1; j >= 0; j--) {
-                const raw = lines[j];
-                if (raw.trim() === "") continue;
-                // ⚠ **주석은 건너뛴다.** YAML 은 주석의 들여쓰기에 뜻을 두지 않으므로, 열 0 주석
-                //    한 줄이 훑기를 끊으면 그 아래 선언을 통째로 못 본다 — 이 수정 자체가 주석
-                //    하나로 무력화된다.
-                if (raw.trim().startsWith("#")) continue;
-                const c = raw.length - raw.trimStart().length;
-                if (c < keyCol) {
-                    // ⚠ **시퀀스 항목의 대시줄은 그 묶음의 첫 줄이다.** 대시의 열은 키 열보다
-                    //    얕지만 그 줄부터가 한 스텝이다 — 여기서 끊으면 `- run: …` 뒤에 `env:` 를
-                    //    둔 스텝(가장 흔한 작성 순서)의 run 을 범위 밖으로 밀어낸다.
-                    // ⚠ **대시 뒤 공백은 한 칸이 아닐 수 있다.** `-  run:` 도 유효한 YAML 이고,
-                    //    이 파일의 다른 정규식은 전부 `-\s+` 로 그것을 받는다 — 여기만 `+2` 로
-                    //    박으면 검사기가 자기 문법과 어긋난다. 대시줄 **자신의 키 열**로 잰다.
-                    const dash = /^(\s*)-(\s+)\S/.exec(raw);
-                    if (dash && dash[1].length + 1 + dash[2].length === keyCol) scopeFrom = j + 1;
-                    break;
+            // 위로 훑던 것을 미리 계산한 표로 바꾼다. 뜻은 같다 — 「키 열보다 얕은 첫 줄에서
+            // 멈추고, 그 사이를 전부 범위에 넣는다」.
+            const stop = ix.shallower[i];
+            if (stop >= 0) {
+                // ⚠ **시퀀스 항목의 대시줄은 그 묶음의 첫 줄이다.** 대시의 열은 키 열보다 얕지만
+                //    그 줄부터가 한 스텝이다 — 여기서 끊으면 `- run: …` 뒤에 `env:` 를 둔 스텝
+                //    (가장 흔한 작성 순서)의 run 을 범위 밖으로 밀어낸다.
+                // ⚠ **대시 뒤 공백은 한 칸이 아닐 수 있다.** `-  run:` 도 유효한 YAML 이고, 이 파일의
+                //    다른 정규식은 전부 `-\s+` 로 그것을 받는다 — 여기만 `+2` 로 박으면 검사기가
+                //    자기 문법과 어긋난다. 대시줄 **자신의 키 열**로 잰다.
+                const dash = /^(\s*)-(\s+)\S/.exec(lines[stop]);
+                if (dash && dash[1].length + 1 + dash[2].length === keyCol) {
+                    scopeFrom = stop + 1;
+                } else {
+                    // 멈춘 줄 **다음**의 내용줄부터가 범위다. 바로 위가 멈춘 줄이면 범위는 그대로.
+                    const firstInside = nextContentAfter(lines, ix, stop, i);
+                    if (firstInside >= 0) scopeFrom = firstInside + 1;
                 }
-                scopeFrom = j + 1;
+            } else if (ix.first >= 0 && ix.first < i) {
+                // 더 얕은 줄이 위에 없다 — 파일 첫 내용줄까지 전부 범위다.
+                scopeFrom = ix.first + 1;
             }
         }
-        let scopeEnd = lines.length;
-        for (let j = mapEnd; j < lines.length; j++) {
-            if (lines[j].trim() === "" || lines[j].trim().startsWith("#")) continue;
-            const c = lines[j].length - lines[j].trimStart().length;
-            if (c < keyCol) {
-                scopeEnd = j;
-                break;
+        // 형제 묶음의 끝: `mapEnd` 부터 처음 만나는 **더 얕은** 줄.
+        let scopeEnd;
+        if (mapEnd >= lines.length) {
+            scopeEnd = lines.length;
+        } else if (ix.indent[mapEnd] < keyCol) {
+            scopeEnd = mapEnd;
+        } else if (ix.indent[mapEnd] === keyCol) {
+            scopeEnd = ix.nextShallower[mapEnd];
+        } else {
+            scopeEnd = lines.length;
+            for (let j = mapEnd; j < lines.length; j++) {
+                if (ix.indent[j] >= 0 && ix.indent[j] < keyCol) {
+                    scopeEnd = j;
+                    break;
+                }
             }
         }
         for (let j = i + 1; j < mapEnd; j++) {
@@ -239,6 +327,35 @@ export function runInjections(src) {
         }
     }
     return found;
+}
+
+/**
+ * **이 검사기가 못 읽는 `run`** — 흐름형 매핑 안에 든 것.
+ *
+ * `- {run: "echo …"}` 는 유효한 YAML 이고 GitHub 이 그대로 실행한다. 이 파일의 판정은 줄 단위
+ * 블록 스타일을 읽으므로 그 형태를 **못 본다.**
+ * 재현: `printf 'jobs:\n  a:\n    steps:\n      - {run: "echo hi"}\n' |
+ *       python3 -c 'import yaml,sys; print(yaml.safe_load(sys.stdin)["jobs"]["a"]["steps"][0])'`
+ *       → `{'run': 'echo hi'}`
+ *
+ * ⚠ **못 보는 것과 통과는 다르다.** 조용히 넘기면 한 줄로 검사기를 피할 수 있고, 그 사실이
+ *   아무 데서도 안 보인다. 위반으로 단정하지도 않는다 — 흐름형 안의 값이 안전할 수도 있고,
+ *   거짓 실패는 고객 배포를 무환불로 막는다. **못 읽었다고 말하는 것**이 이 함수의 전부다.
+ *
+ * 흐름형을 제대로 읽으려면 YAML 파서가 필요하다. 이 레포는 의존을 늘리지 않는 쪽을 골랐고,
+ * 그 선택의 대가가 여기 보이게 두는 것이 그 선택을 정직하게 만든다.
+ */
+export function unreadableRun(src) {
+    const out = [];
+    src.split("\n").forEach((ln, i) => {
+        const brace = ln.indexOf("{");
+        if (brace < 0) return;
+        // `${{ … }}` 의 중괄호는 흐름형이 아니다.
+        if (/\$\{\{/.test(ln.slice(0, brace + 1))) return;
+        const after = ln.slice(brace);
+        if (/[{,]\s*(?:"run"|'run'|run)\s*:/.test(after)) out.push({line: i + 1, text: ln.trim()});
+    });
+    return out;
 }
 
 /**

@@ -9,7 +9,7 @@ import {setAuthHint} from "@/lib/authHint";
  * "후기 더 보기" 아일랜드용 페이지 조회 프록시 — 브라우저가 이걸 친다.
  *
  * **왜 BFF 인가**: availability 와 같은 근거 — 읽기 공개 API 라도 브라우저 직호출은 baseUrl 노출·
- * `X-Tenant` 위조 면을 연다(`/media/[id]`·availability 선례). 인증은 안 붙인다(공개 읽기라 프리뷰에서도 동작).
+ * `X-Tenant` 위조 면을 연다(`/media/[id]`·availability 선례). 인증은 안 붙인다(공개 읽기라 미리보기에서도 동작).
  *
  * **size 는 클라 입력을 안 받는다** — 상수 10 고정. 백엔드 전역 상한 부재를 방어하고, 상품 상세 RSC 의
  * 첫 페이지 `size:10` 과 반드시 일치시켜 페이지 경계를 어긋나지 않게 한다.
@@ -49,7 +49,7 @@ export async function POST(req: Request) {
     const badType = assertJsonContentType(req);
     if (badType) return badType;
     if (isPreview()) {
-        return NextResponse.json({message: "프리뷰 모드에서는 후기 작성이 비활성화됩니다."}, {status: 403});
+        return NextResponse.json({message: "미리보기 모드에서는 후기 작성이 비활성화됩니다."}, {status: 403});
     }
     const accessToken = await getAccessToken();
     if (!accessToken) return NextResponse.json({message: "로그인이 필요합니다."}, {status: 401});

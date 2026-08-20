@@ -1,4 +1,4 @@
-// zalkera-allow-preview-write: 자기 세션만 닫는다 — 막으면 프리뷰에서 로그아웃 뒤 화면을 못 본다.
+// zalkera-allow-preview-write: 자기 세션만 닫는다 — 막으면 미리보기에서 로그아웃 뒤 화면을 못 본다.
 import {NextResponse} from "next/server";
 import {assertSameOrigin} from "@/lib/http";
 import {zalkera} from "@/lib/zalkera";

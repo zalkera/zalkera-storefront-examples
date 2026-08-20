@@ -14,6 +14,7 @@ import {join, dirname} from "node:path";
 import {tmpdir} from "node:os";
 import {readFileSync} from "node:fs";
 import {fileURLToPath} from "node:url";
+import {childEnv, INHERITED_NOISE} from "./childEnv.mjs";
 
 /** 시험용 트리 하나. `evil.mjs` 는 실행되면 흔적을 남긴다. */
 function fixture() {
@@ -145,4 +146,51 @@ test("하한표의 키를 argv 로 넘기지 않는다", () => {
     const gate = judgingSpawns().find((s) => /floor-gate\.mjs/.test(s.call));
     assert.ok(gate, "하한 게이트를 부르는 spawn 이 없다 — 집행 지점이 사라졌다");
     assert.match(gate.call, /join\(HERE,/, `러너 자신의 게이트가 아니라 zip 의 사본을 부른다:\n${gate.call}`);
+});
+
+// ── 규율의 **실물**을 문다 ─────────────────────────────────────────────────
+//
+// 위 시험들은 규율을 **베껴 적은 사본**(`clean()`)을 잰다. 사본은 넷 중 둘만 지웠고, 나머지 둘을
+// 목록에서 빼도 아무도 안 죽었다 — 그중 `NEXT_PUBLIC_*_PREVIEW` 는 **빌드의 뜻을 바꾼다**.
+// 여기서부터는 `verify-zip` 이 실제로 부르는 그 함수를 직접 부른다.
+
+test("판정을 바꾸는 상속 변수를 전부 지운다", () => {
+    const base = {
+        PATH: "/usr/bin",
+        NODE_TEST_CONTEXT: "child-v8",
+        NODE_OPTIONS: "--import=./evil.mjs",
+        NEXT_PUBLIC_ZALKERA_PREVIEW: "1",
+        NEXT_PUBLIC_ONEQUE_PREVIEW: "1",
+    };
+    const env = childEnv({}, base);
+    for (const k of INHERITED_NOISE) {
+        assert.equal(k in env, false, `${k} 가 자식에게 그대로 갔다`);
+    }
+    assert.equal(env.PATH, "/usr/bin", "무해한 변수까지 지웠다");
+});
+
+test("미리보기 판별자는 **이름 둘 다** 지운다 — 한쪽만 지우면 다른 쪽으로 샌다", () => {
+    // 개명 과도기라 이름이 둘이다. 한쪽만 막으면 미리보기 빌드를 상용인 줄 알고 재게 된다.
+    assert.ok(INHERITED_NOISE.includes("NEXT_PUBLIC_ZALKERA_PREVIEW"));
+    assert.ok(INHERITED_NOISE.includes("NEXT_PUBLIC_ONEQUE_PREVIEW"));
+});
+
+test("선언한 값은 상속값을 덮는다 — 그리고 그것도 잡음이면 지워진다", () => {
+    assert.equal(childEnv({A: "새것"}, {A: "옛것"}).A, "새것");
+    // 얹은 값이라도 판정을 바꾸는 이름이면 남기지 않는다 — 규율이 얹는 쪽만 비켜 가면 구멍이다.
+    assert.equal("NODE_OPTIONS" in childEnv({NODE_OPTIONS: "--x"}, {}), false);
+});
+
+test("원본 환경을 건드리지 않는다", () => {
+    const base = {NODE_OPTIONS: "--x", KEEP: "1"};
+    childEnv({}, base);
+    assert.equal(base.NODE_OPTIONS, "--x", "부른 쪽의 환경이 바뀌었다");
+});
+
+test("`verify-zip` 이 이 문을 실제로 쓴다 — 사본이 다시 생기면 잡는다", () => {
+    // 규율이 두 벌이 되는 것이 이 파일이 고친 병이다. 문면으로 본다: 자기 `INHERITED_NOISE` 를
+    // 다시 선언하면 그것은 사본이다.
+    const runner = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "verify-zip.mjs"), "utf8");
+    assert.match(runner, /import \{childEnv\} from "\.\/lib\/childEnv\.mjs"/, "공용 문을 안 쓴다");
+    assert.doesNotMatch(runner, /const INHERITED_NOISE\s*=/, "규율이 두 벌이 됐다");
 });

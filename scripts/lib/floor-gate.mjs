@@ -118,6 +118,24 @@ if (counted.size === 0) {
     process.exit(2);
 }
 
+// ⚠ **표 밖의 스위트를 남기지 않는다.** 표에 없으면 하한이 없고, 하한이 없으면 그 스위트는
+//   **조용히 지울 수 있다.** 팩 관문·팩 매니페스트처럼 배송을 막는 판정을 재는 것이 그 상태로
+//   있으면, 지우는 것이 고치는 것보다 싸진다.
+//
+//   재현: `cp scripts/lib/floors.test.mjs scripts/lib/stray.test.mjs; node scripts/lib/floor-gate.mjs;
+//         echo rc=$?; rm scripts/lib/stray.test.mjs` → rc=1
+//
+//   대상은 «통과를 낸 파일»이다. 통과 0건짜리 빈 스위트는 이 그물 밖이다 — 그것은 애초에
+//   가드가 아니고, 트리를 따로 훑으면 러너의 글롭 의미를 두 벌로 흉내 내게 된다.
+const unlisted = [...counted.keys()].filter((f) => !(f in effective));
+if (unlisted.length) {
+    console.error("❌ 가드 회귀 스위트 — 하한표 밖의 스위트가 있습니다:");
+    for (const f of unlisted.sort()) console.error(`   · ${f}`);
+    console.error("\n   표에 없으면 하한이 없고, 하한이 없으면 그 스위트는 조용히 지울 수 있습니다.");
+    console.error("   scripts/lib/floors.mjs 의 REQUIRED_FLOORS 와 scripts/lib/test-floors.json 에 적으십시오.");
+    process.exit(1);
+}
+
 const short = [];
 for (const [f, min] of Object.entries(effective)) {
     const got = counted.get(f) ?? 0;

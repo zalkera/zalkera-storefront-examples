@@ -28,6 +28,7 @@ import {
     readWorkflow,
     runInjections,
     runRanges,
+    unreadableRun,
 } from "./lib/workflow-syntax.mjs";
 
 const DIR = join(fileURLToPath(new URL("..", import.meta.url)), ".github", "workflows");
@@ -293,4 +294,130 @@ test("`run:` 범위 인식이 살아 있다 — 깨지면 위 두 판정이 공�
     ok(lines.includes("c"), `한 줄 run 을 놓쳤다: ${JSON.stringify(lines)}`);
     ok(lines.includes("d"), `\`>\` 블록을 놓쳤다: ${JSON.stringify(lines)}`);
     strictEqual(runRanges("steps:\n  - uses: actions/checkout@v4\n").length, 0, "run 이 아닌 줄을 셌다");
+});
+
+// ── 위험 목록의 미검증 축 ───────────────────────────────────────────────────
+//
+// `UNTRUSTED` 는 여섯인데 픽스처가 무는 것은 둘이었다. 목록에 이름만 있고 아무도 안 물면,
+// 정규식 하나를 지워도 전건 초록이다 — 그 자리가 곧 다음 판의 구멍이다.
+
+test("사람이 이름을 정하는 값은 전부 잡는다 — 목록에 이름만 있으면 안 된다", () => {
+    const shapes = {
+        "github.event": "${{ github.event.pull_request.title }}",
+        "github.head_ref": "${{ github.head_ref }}",
+        "github.base_ref": "${{ github.base_ref }}",
+        "github.ref_name": "${{ github.ref_name }}",
+        "github.ref": "${{ github.ref }}",
+        "inputs.": "${{ inputs.name }}",
+    };
+    for (const [what, expr] of Object.entries(shapes)) {
+        const src = `jobs:\n  a:\n    steps:\n      - run: echo ${expr}\n`;
+        const found = runInjections(src);
+        strictEqual(found.length, 1, `${what} 를 놓쳤다`);
+        strictEqual(found[0].where, "run", what);
+    }
+});
+
+test("같은 값들이 `env:` 를 거쳐 와도 잡는다", () => {
+    for (const expr of ["${{ github.base_ref }}", "${{ inputs.name }}", "${{ github.ref }}"]) {
+        const src = `jobs:\n  a:\n    env:\n      A: ${expr}\n    steps:\n      - run: echo \${{ env.A }}\n`;
+        const found = runInjections(src);
+        strictEqual(found.length, 1, `env 경유 ${expr} 를 놓쳤다`);
+        strictEqual(found[0].where, "env");
+    }
+});
+
+test("음성 통제군 — 사람이 못 정하는 값은 잡지 않는다", () => {
+    // 「무엇이든 잡는다」 구현이면 위 시험이 전부 초록이다. 오탐은 고객 배포를 무환불로 막는다.
+    for (const expr of [
+        "${{ secrets.NPM_TOKEN }}",
+        "${{ github.sha }}",
+        "${{ github.repository }}",
+        "${{ runner.os }}",
+        "${{ matrix.node }}",
+        "${{ github.run_id }}",
+        "${{ steps.x.outputs.y }}",
+        "${{ env.SAFE }}",
+    ]) {
+        const src = `jobs:\n  a:\n    steps:\n      - run: echo ${expr}\n`;
+        deepStrictEqual(runInjections(src), [], `오탐: ${expr}`);
+    }
+});
+
+test("`env:` 에 든 값이 안전하면 그 이름을 쓰는 run 도 통과한다", () => {
+    const src = "jobs:\n  a:\n    env:\n      A: ${{ github.sha }}\n    steps:\n      - run: echo ${{ env.A }}\n";
+    deepStrictEqual(runInjections(src), []);
+});
+
+test("`.yaml` 확장자도 본다 — 한쪽만 보면 이름만 바꿔 검사를 피한다", () => {
+    const dir = mkdtempSync(join(tmpdir(), "zalkera-wfext-"));
+    try {
+        writeFileSync(join(dir, "a.yml"), "on: push\n");
+        writeFileSync(join(dir, "b.yaml"), "on: push\n");
+        writeFileSync(join(dir, "c.txt"), "on: push\n");
+        writeFileSync(join(dir, "d.yamlx"), "on: push\n");
+        const {files, skipped} = listWorkflowFiles(dir, fsMod);
+        deepStrictEqual(files, ["a.yml", "b.yaml"]);
+        deepStrictEqual(skipped, []);
+    } finally {
+        rmSync(dir, {recursive: true, force: true});
+    }
+});
+
+test("`env:` 가 열 0 로 길게 이어져도 제곱이 되지 않는다", () => {
+    // 이 검사기는 팩에 실려 고객 트리에서도 돈다. 판정이 제곱이면 큰 워크플로 하나가 그 CI 를
+    // 붙잡는다. 재현·수치: `node scripts/lib/workflow-syntax.bench.mjs`
+    const src = "env:\n".repeat(20_000) + "jobs:\n  a:\n    steps:\n      - run: echo ${{ github.event.x }}\n";
+    const started = Date.now();
+    const found = runInjections(src);
+    const ms = Date.now() - started;
+    strictEqual(found.length, 1, "판정이 바뀌었다");
+    ok(ms < 2_000, `20,000줄에 ${ms}ms 걸렸다 — 선형이 아니다`);
+});
+
+test("키와 콜론 사이 공백으로 검사기를 피할 수 없다", () => {
+    // `run : …` 는 유효한 YAML 이고 GitHub 이 그대로 실행한다. 한 칸으로 판정을 통째로 피할 수
+    // 있으면 그것은 가드가 아니다. 형태의 근거는 `lib/workflow-syntax.mjs` 의 재현 명령에 있다.
+    const shapes = [
+        "jobs:\n  a:\n    steps:\n      - run : echo ${{ github.event.x }}\n",
+        "jobs:\n  a:\n    steps:\n      - run  : |\n          echo ${{ github.event.x }}\n",
+        'jobs:\n  a:\n    steps:\n      - "run" : echo ${{ github.event.x }}\n',
+    ];
+    for (const src of shapes) strictEqual(runInjections(src).length, 1, `놓쳤다: ${src.trim()}`);
+});
+
+test("흐름형 `run` 은 «통과»가 아니라 «못 읽음»으로 선다", () => {
+    // `- {run: "…"}` 도 유효한 YAML 이다. 줄 단위 판정으로는 못 읽는데, 조용히 넘기면 한 줄로
+    // 검사기를 피할 수 있고 그 사실이 아무 데서도 안 보인다.
+    const flow = 'jobs:\n  a:\n    steps:\n      - {run: "echo ${{ github.event.x }}"}\n';
+    strictEqual(runInjections(flow).length, 0, "줄 단위 판정이 흐름형을 읽은 척했다");
+    strictEqual(unreadableRun(flow).length, 1, "못 읽은 것을 조용히 넘겼다");
+});
+
+test("못 읽음 판정은 평범한 줄을 잡지 않는다", () => {
+    // 거짓 실패는 고객 배포를 무환불로 막는다.
+    for (const src of [
+        "jobs:\n  a:\n    steps:\n      - run: echo ${{ github.sha }}\n",
+        "jobs:\n  a:\n    steps:\n      - run: echo '{}'\n",
+        "jobs:\n  a:\n    steps:\n      - with: {node: 22}\n",
+        "jobs:\n  a:\n    steps:\n      - run: jq '{a: .b}' x.json\n",
+        // 쉼표는 흐름형의 구분자이기도 하다 — 중괄호가 없으면 그냥 셸 명령의 쉼표다.
+        "jobs:\n  a:\n    steps:\n      - run: echo one, run: two\n",
+        "jobs:\n  a:\n    steps:\n      - run: sed 's/a,run:/x/' f\n",
+    ]) {
+        deepStrictEqual(unreadableRun(src), [], `오탐: ${src.trim()}`);
+    }
+});
+
+test("이 트리의 워크플로에는 못 읽는 `run` 이 없다", () => {
+    // 있으면 그 자리는 아무도 안 본 채 초록이다. 새로 생기면 여기서 멈춘다.
+    for (const name of scanned()) {
+        const src = readWorkflow(DIR, name, fsMod);
+        ok(src !== null, `${name} 을 못 읽었다`);
+        deepStrictEqual(
+            unreadableRun(src),
+            [],
+            `${name}: 흐름형 run 은 이 검사기가 못 읽습니다 — 블록 스타일로 적어 주십시오`,
+        );
+    }
 });

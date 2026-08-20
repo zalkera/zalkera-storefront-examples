@@ -26,7 +26,7 @@ export async function POST(req: Request) {
     const badType = assertJsonContentType(req);
     if (badType) return badType;
     if (isPreview()) {
-        return NextResponse.json({message: "프리뷰 모드에서는 문의가 비활성화됩니다."}, {status: 403});
+        return NextResponse.json({message: "미리보기 모드에서는 문의가 비활성화됩니다."}, {status: 403});
     }
     // 원 방문자 IP. 이걸 안 넘기면 위 주석의 사고가 난다(첫 홉 직접 추출은 위조 가능·금지).
     const ip = visitorIp(req.headers);

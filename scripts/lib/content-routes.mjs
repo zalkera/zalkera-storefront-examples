@@ -89,7 +89,25 @@ if (!existsSync(pagesDir)) {
 {
     const appPaths = join(root, ".next", "app-path-routes-manifest.json");
     const listSrc = join(root, "src", "lib", "reservedSegments.ts");
-    if (existsSync(appPaths) && existsSync(listSrc)) {
+    // ⚠ **"없으니 통과"가 아니다.** 종전에는 둘 중 하나만 없어도 이 축이 통째로 **조용히** 꺼지고
+    //    rc 0 으로 끝났다 — 빌드 없이 부르면 언제나 초록이었다는 뜻이다. 위 ⓐ 가 같은 함정을
+    //    이미 닫아 두었는데 여기만 열려 있었다.
+    //
+    //    두 호출부(`ci.yml`·`verify-zip --pack`)는 **전부 빌드 뒤에** 부른다. 산출물이 없다는 것은
+    //    「잴 것이 없다」가 아니라 「못 쟀다」다.
+    //    재현: `rm -rf .next && node scripts/lib/content-routes.mjs; echo rc=$?` → rc=2
+    if (!existsSync(listSrc)) {
+        console.error(`❌ sitemap 제외 목록 — ${listSrc} 가 없습니다(통과가 아닙니다).`);
+        console.error("   예약 세그먼트 목록이 없으면 무엇을 가리는지 판정할 수 없습니다.");
+        process.exit(2);
+    }
+    if (!existsSync(appPaths)) {
+        console.error("❌ sitemap 제외 목록 — 라우트 산출물이 없습니다(통과가 아닙니다).");
+        console.error(`   ${appPaths}`);
+        console.error("   먼저 `npm run build` 를 돌리십시오 — 빌드가 아는 라우트로 대조하는 검사입니다.");
+        process.exit(2);
+    }
+    {
         let manifest;
         try {
             manifest = JSON.parse(readFileSync(appPaths, "utf8"));

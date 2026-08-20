@@ -20,7 +20,7 @@ export async function DELETE(req: Request, {params}: {params: Promise<{code: str
     const blocked = assertSameOrigin(req);
     if (blocked) return blocked;
     if (isPreview()) {
-        return NextResponse.json({message: "프리뷰 모드에서는 예약 취소가 비활성화됩니다."}, {status: 403});
+        return NextResponse.json({message: "미리보기 모드에서는 예약 취소가 비활성화됩니다."}, {status: 403});
     }
     const accessToken = await getAccessToken();
     if (!accessToken) {

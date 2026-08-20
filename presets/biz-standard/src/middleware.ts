@@ -4,10 +4,10 @@ import {isPreview} from "@/lib/preview";
 import {isPreviewBlockedWrite} from "@/lib/previewGuard";
 
 /**
- * 프리뷰 모드 쓰기 차단의 **집행 지점**. 판정은 `src/lib/previewGuard.ts` 가 한다.
+ * 미리보기 모드 쓰기 차단의 **집행 지점**. 판정은 `src/lib/previewGuard.ts` 가 한다.
  *
  * 요청의 메서드와 경로만 보므로 라우트 소스의 선언 형태·파일명과 무관하게 걸린다.
- * 라우트 안의 `if (isPreview())` 는 이중 방어다 — 프리뷰에서는 여기서 먼저 끊긴다.
+ * 라우트 안의 `if (isPreview())` 는 이중 방어다 — 미리보기에서는 여기서 먼저 끊긴다.
  *
  * ## matcher 는 정적 산출 접두만 뺀다
  *
@@ -30,7 +30,7 @@ export function middleware(req: NextRequest) {
     if (!isPreviewBlockedWrite(req.method, req.nextUrl.pathname)) return NextResponse.next();
     return NextResponse.json(
         {
-            message: "프리뷰 모드에서는 쓰기가 비활성화됩니다.",
+            message: "미리보기 모드에서는 쓰기가 비활성화됩니다.",
             code: "PREVIEW_READ_ONLY",
         },
         {status: 403},

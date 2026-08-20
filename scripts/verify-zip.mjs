@@ -57,6 +57,7 @@ import {existsSync, lstatSync, mkdtempSync, readFileSync, readdirSync, rmSync, s
 import {basename, join, relative, resolve} from "node:path";
 import {tmpdir} from "node:os";
 import {fileURLToPath} from "node:url";
+import {childEnv} from "./lib/childEnv.mjs";
 import {junkTopLevel} from "./lib/junkEntries.mjs";
 import {derivedRoutes, appDirOf, sourceRoot, SYNTHETIC} from "./lib/routes.mjs";
 
@@ -100,27 +101,6 @@ const BUILD_ENV = {
     ZALKERA_TENANT: "ci-placeholder",
     ZALKERA_OFFLINE_BUILD: "1",
 };
-
-/**
- * 자식의 판정을 바꾸는 **상속 변수**. 측정 자식을 띄우기 전에 지운다.
- *
- * 이 러너가 어떤 환경에서 불릴지 우리가 정하지 못한다 — 이것들이 남아 있으면 자식이 다른 모드로
- * 돌고, 그 결과를 우리가 판정으로 읽는다. 값이 아니라 **의미**가 바뀌는 자리다.
- *
- * `NODE_TEST_CONTEXT` — node 러너가 자식 모드로 돌아 `# pass N` 요약 줄을 안 낸다. 그러면
- *   하한 파싱이 `-1` 이 되어 **멀쩡한 팩이 전 스위트 0/하한으로 거짓 반려**된다.
- *   재현: `NODE_TEST_CONTEXT=child-v8 node --experimental-strip-types --test <시험파일> | grep '^# pass'` → 무출력
- * `NODE_OPTIONS` — 자식 node 에 임의 플래그를 주입한다.
- * `NEXT_PUBLIC_*_PREVIEW` — 프리뷰 판별자가 이것을 읽어 빌드의 뜻이 바뀐다.
- */
-const INHERITED_NOISE = ["NODE_TEST_CONTEXT", "NODE_OPTIONS", "NEXT_PUBLIC_ZALKERA_PREVIEW", "NEXT_PUBLIC_ONEQUE_PREVIEW"];
-
-/** 측정 자식에게 줄 환경. 상속 잡음을 지우고 선언한 값만 얹는다. */
-function childEnv(extra = {}) {
-    const env = {...process.env, ...extra};
-    for (const k of INHERITED_NOISE) delete env[k];
-    return env;
-}
 
 /** 검사 결과 한 줄을 찍고 통과 여부를 돌려준다 — 호출부가 `failed` 를 세운다. */
 const record = (name, ok, detail = "") => {
@@ -267,6 +247,7 @@ function effectiveRoot(dir) {
  *
  *     verify-zip.mjs
  *     validate-storefront.mjs      ← 규약 검사(`VALIDATOR`)를 spawn 한다
+ *     lib/childEnv.mjs             ← 측정 자식 환경(판정을 바꾸는 상속 변수 제거)
  *     lib/floors.mjs               ← 하한 판정
  *     lib/junkEntries.mjs          ← 조기 반려 판정
  *     lib/routes.mjs               ← 관문 등재 프로브 도출
@@ -403,6 +384,33 @@ function removeWork() {
     }
 }
 process.on("exit", removeWork);
+
+/**
+ * **신호는 `exit` 훅을 안 태운다.** Ctrl-C 한 번이면 작업 트리가 그대로 남는다 — `--pack` 은
+ * zip 을 풀고 그 트리를 빌드하므로 남는 것이 수백 MB 다. 기다리다 그만두는 것은 **정상적인
+ * 사용**이라(빌드가 몇 분이다) 그때 치우는 것이 예외가 아니라 기본이어야 한다.
+ *
+ * 재현(크기): `node scripts/verify-zip.mjs <팩>.zip --pack --keep` 뒤 출력의 작업 트리에 `du -sh`.
+ *
+ * 훅을 걸면 그 신호의 기본 종료가 사라지므로 **여기서 직접 끝내야 한다.** 코드는 기본 동작을
+ * 흉내 낸 `128 + 신호번호`다.
+ *
+ * ⚠ **그 코드가 늘 나오지는 않는다.** 이 러너는 `spawnSync` 로 자식을 여럿 돌리는데, 신호가
+ *   그 안에서 도착하면 JS 훅은 그 호출이 끝난 뒤에야 돌고, 그 사이 본류가 먼저 자기 종료
+ *   코드로 끝낼 수 있다. 보장되는 것은 **작업 트리가 남지 않는다**이고, 종료 코드는 신호가
+ *   어디서 도착했느냐에 달렸다.
+ *
+ * 실측(같은 zip · `TMPDIR` 을 빈 폴더로 주고 트리 생성 직후 SIGINT):
+ *   훅 없음 → rc=-2 · 작업 트리 1개 981KB 잔존 · 훅 있음 → 트리 0개.
+ *   재현: `scripts/lib/verifyZipSignal.test.mjs`
+ */
+const SIGNAL_EXIT = {SIGINT: 130, SIGTERM: 143, SIGHUP: 129};
+for (const [sig, code] of Object.entries(SIGNAL_EXIT)) {
+    process.on(sig, () => {
+        removeWork();
+        process.exit(code);
+    });
+}
 
 /** 실패 문면이 "임시 공간 부족"으로 읽히면 조치를 한 줄 덧붙인다. 아니면 조용히 지나간다. */
 function hintTmpSpace(text) {
@@ -902,7 +910,7 @@ try {
                     if (t.status !== 0 || bad.length || short.length) {
                         const why = bad.length ? bad.join(" · ") : short.length ? short.join(" · ") : `\n   ${out.trim().split("\n").slice(-8).join("\n   ")}`;
                         record("가드 회귀 스위트", false, why);
-                        console.error(`   교차사이트·프리뷰·소독기 가드가 옳은지 재는 자리입니다.`);
+                        console.error(`   교차사이트·미리보기·소독기 가드가 옳은지 재는 자리입니다.`);
                         failed = true;
                     } else {
                         // 게이트가 낸 마지막 줄을 그대로 옮긴다 — 개수를 여기서 다시 세면 사본이 갈린다.
@@ -931,8 +939,8 @@ try {
                         }
                     }
 
-                    // ⑧-a **프리뷰 관문이 빌드에 실렸는가.** 재는 것은 소스가 아니라 **Next 가 방금 실은
-                    //     산출물**이다. 관문(`src/middleware.ts`)이 등재되지 않으면 프리뷰 쓰기 차단이
+                    // ⑧-a **미리보기 관문이 빌드에 실렸는가.** 재는 것은 소스가 아니라 **Next 가 방금 실은
+                    //     산출물**이다. 관문(`src/middleware.ts`)이 등재되지 않으면 미리보기 쓰기 차단이
                     //     조용히 전부 꺼지는데, 소스를 읽는 검사는 그 형상을 못 본다 — 파일이 멀쩡해도
                     //     위치 오류·matcher 오염·**규약 폐지**(Next 16 이 이미 deprecated 경고를 낸다)로
                     //     안 실릴 수 있다. 위 ⑦-b 스위트의 통제군은 문면 검사라 여기까지는 못 온다.
@@ -955,7 +963,7 @@ try {
                             //   이 자리가 꺼진다. 이 러너 옆 사본을 쓴다.
                             const routes = derivedRoutes(appDirOf(root));
                             if (routes === null) {
-                                record("프리뷰 관문 등재", false, "src/app 에서 라우트를 도출하지 못했습니다 — 무엇을 덮어야 하는지 알 수 없습니다");
+                                record("미리보기 관문 등재", false, "src/app 에서 라우트를 도출하지 못했습니다 — 무엇을 덮어야 하는지 알 수 없습니다");
                                 failed = true;
                             } else {
                                 // 트리에 **없는** 경로를 섞는다 — "새 라우트가 아무것도 안 해도 덮인다"는
@@ -964,13 +972,13 @@ try {
                                 const res = entries.flatMap((x) => (x.matchers ?? []).map((m) => new RegExp(m.regexp)));
                                 const missed = MUST.filter((p) => !res.some((r) => r.test(p)));
                                 if (entries.length === 0) {
-                                    record("프리뷰 관문 등재", false, "빌드에 안 실렸습니다 — 프리뷰 쓰기 차단이 통째로 꺼집니다");
+                                    record("미리보기 관문 등재", false, "빌드에 안 실렸습니다 — 미리보기 쓰기 차단이 통째로 꺼집니다");
                                     failed = true;
                                 } else if (missed.length) {
-                                    record("프리뷰 관문 등재", false, `라우트가 관문 밖입니다 — ${missed.slice(0, 6).join(" · ")}${missed.length > 6 ? ` 외 ${missed.length - 6}개` : ""}`);
+                                    record("미리보기 관문 등재", false, `라우트가 관문 밖입니다 — ${missed.slice(0, 6).join(" · ")}${missed.length > 6 ? ` 외 ${missed.length - 6}개` : ""}`);
                                     failed = true;
                                 } else {
-                                    record("프리뷰 관문 등재", true, `트리에서 도출한 ${routes.length}개 + 미존재 ${SYNTHETIC.length}개 전부 덮임`);
+                                    record("미리보기 관문 등재", true, `트리에서 도출한 ${routes.length}개 + 미존재 ${SYNTHETIC.length}개 전부 덮임`);
                                 }
                             }
                         }
@@ -978,7 +986,7 @@ try {
 
                     // ⑧-b **관문이 실제로 막는가.** 등재 검사는 "실렸는가·무엇을 덮는가"만 본다 —
                     //     판정을 무력화한 관문과 라우트 가드까지 제거한 소스를 못 가른다.
-                    //     `--pack` 에서만 돈다(프리뷰·비프리뷰 빌드를 각각 한 번 더 굽는다).
+                    //     `--pack` 에서만 돈다(미리보기·미리보기가 아닌 빌드를 각각 한 번 더 굽는다).
                     //
                     //     ⚠ **부재를 건너뛰지 않는다.** 이 파일이 없으면 팩이 세운 유일한 행위 오라클이
                     //       꺼진다 — 파일 하나를 지우고 관문을 무력화한 zip 이 항목 수만 하나 줄어든 채
@@ -990,10 +998,10 @@ try {
                     //       재현: zip 안 `scripts/lib/gate-behavior.mjs` 를 `process.exit(0)` 으로 바꾸고
                     //             관문을 무력화한 뒤 `node scripts/verify-zip.mjs <zip> --pack`
                     if (packMode && !existsSync(GATE_BEHAVIOR)) {
-                        record("프리뷰 관문 행위", false, `${GATE_BEHAVIOR} 가 없습니다 — 관문이 실제로 막는지 잴 수단이 사라집니다`);
+                        record("미리보기 관문 행위", false, `${GATE_BEHAVIOR} 가 없습니다 — 관문이 실제로 막는지 잴 수단이 사라집니다`);
                         failed = true;
                     } else if (packMode && !existsSync(join(root, "scripts", "lib", "gate-behavior.mjs"))) {
-                        record("프리뷰 관문 행위", false, "zip 에 scripts/lib/gate-behavior.mjs 가 없습니다 — 고객이 그 검사를 돌릴 수 없습니다");
+                        record("미리보기 관문 행위", false, "zip 에 scripts/lib/gate-behavior.mjs 가 없습니다 — 고객이 그 검사를 돌릴 수 없습니다");
                         failed = true;
                     } else if (packMode) {
                         const g = spawnSync("node", [GATE_BEHAVIOR, "."], {
@@ -1004,10 +1012,10 @@ try {
                         });
                         const gout = `${g.stdout ?? ""}${g.stderr ?? ""}`.trim();
                         if (g.status !== 0) {
-                            record("프리뷰 관문 행위", false, `\n   ${gout.split("\n").slice(-6).join("\n   ")}`);
+                            record("미리보기 관문 행위", false, `\n   ${gout.split("\n").slice(-6).join("\n   ")}`);
                             failed = true;
                         } else {
-                            record("프리뷰 관문 행위", true, gout.split("\n").pop());
+                            record("미리보기 관문 행위", true, gout.split("\n").pop());
                         }
                     }
 

@@ -18,8 +18,19 @@
  *   오탐의 반경은 우리 레포뿐이지만, 막힌 사람은 검사기를 끄고 싶어진다 — 끄이는 검사기는 없는
  *   검사기보다 나쁘다.
  *
- * 실행: `node scripts/lib/visitor-ip-parity.test.mjs`
+ * ## 왜 `node:test` 인가
+ *
+ * 종전에는 **맨 스크립트**였다 — 형태를 훑어 `process.exit(1)` 하는. 판정은 그때도 섰지만
+ * 하한 게이트가 이 파일을 **셀 수 없었다**: 시험이 하나도 없는 파일은 자기 이름으로 통과 1건만
+ * 내고, 리포터는 그것을 일부러 뺀다. 그래서 `CASES` 를 통째로 비워도 초록이었고, 하한표에
+ * 올릴 수도 없었다 — 하한이 늘 0 이니까.
+ *
+ * 형태 하나가 시험 하나다. 그래야 몇 형태를 재고 있는지가 통과 수로 드러난다.
+ *
+ * 실행: `node --test scripts/lib/visitor-ip-parity.test.mjs`
  */
+import {test} from "node:test";
+import assert from "node:assert/strict";
 import {mkdtempSync, mkdirSync, writeFileSync, rmSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
@@ -72,24 +83,32 @@ const CASES = [
     ["동명 지역 헬퍼", 'const {cancelOrder} = helpers;\nexport default () => cancelOrder("a");', false],
 ];
 
-const root = mkdtempSync(join(tmpdir(), "visitor-ip-fixtures-"));
-mkdirSync(join(root, "src", "app"), {recursive: true});
-let failed = 0;
-
-for (const [name, source, shouldFlag] of CASES) {
-    writeFileSync(join(root, "src", "app", "case.tsx"), source);
-    const flagged = checkVisitorIp(root).violations.length > 0;
-    if (flagged !== shouldFlag) {
-        failed += 1;
-        console.error(`  ✗ ${name} — ${flagged ? "잡혔다" : "통과했다"}(기대: ${shouldFlag ? "잡힘" : "통과"})`);
+/** 형태 하나를 트리에 심고 검사기를 돌린다. 트리는 형태마다 새로 만든다 — 앞 형태가 안 남는다. */
+function flags(source) {
+    const root = mkdtempSync(join(tmpdir(), "visitor-ip-fixtures-"));
+    try {
+        mkdirSync(join(root, "src", "app"), {recursive: true});
+        writeFileSync(join(root, "src", "app", "case.tsx"), source);
+        return checkVisitorIp(root).violations.length > 0;
+    } finally {
+        rmSync(root, {recursive: true, force: true});
     }
 }
-rmSync(root, {recursive: true, force: true});
 
-if (failed > 0) {
-    console.error(`\n방문자 IP 검사기 픽스처 ${failed}건 실패 — 판정이 바뀌었다.`);
-    console.error("의도한 변경이면 이 파일의 기대값을 같이 고쳐라. **기대값을 안 고치고 통과시키지 마라** —");
-    console.error("이 파일이 있는 이유가 그 조용한 회귀를 막는 것이다.");
-    process.exit(1);
+for (const [name, source, shouldFlag] of CASES) {
+    test(`${shouldFlag ? "잡는다" : "통과시킨다"} — ${name}`, () => {
+        assert.equal(
+            flags(source),
+            shouldFlag,
+            shouldFlag
+                ? "위반인데 통과했다 — 위조 가능한 IP 가 팩에 실려도 CI 가 초록이 된다"
+                : "정상인데 잡혔다 — 이유 없이 막히면 사람이 검사기를 끈다",
+        );
+    });
 }
-console.log(`방문자 IP 검사기 픽스처 통과 — ${CASES.length}형태(위반 ${CASES.filter((c) => c[2]).length} · 정상 ${CASES.filter((c) => !c[2]).length})`);
+
+test("형태 표가 비지 않았다 — 비면 위 시험이 0건이 되고 그것은 «통과»처럼 보인다", () => {
+    // 이 파일이 맨 스크립트였을 때 정확히 이것이 가능했다.
+    assert.ok(CASES.filter((c) => c[2]).length >= 5, "위반 형태가 모자란다");
+    assert.ok(CASES.filter((c) => !c[2]).length >= 5, "정상 형태(오탐 통제군)가 모자란다");
+});

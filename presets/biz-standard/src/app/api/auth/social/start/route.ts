@@ -1,4 +1,4 @@
-// zalkera-allow-preview-write: 로그인 흐름 — 막으면 프리뷰에서 로그인한 화면을 못 본다.
+// zalkera-allow-preview-write: 로그인 흐름 — 막으면 미리보기에서 로그인한 화면을 못 본다.
 import {NextResponse} from "next/server";
 import {assertJsonContentType, assertSameOrigin} from "@/lib/http";
 import {PROVIDER_CONFIG, buildAuthorizeUrl, callbackPath, parseProviderParam} from "@/lib/oauth";

@@ -20,9 +20,9 @@ export async function POST(req: Request) {
     if (blocked) return blocked;
     const badType = assertJsonContentType(req);
     if (badType) return badType;
-    // 프리뷰 모드는 읽기전용 — 실제 예약·결제 생성을 차단한다.
+    // 미리보기 모드는 읽기전용 — 실제 예약·결제 생성을 차단한다.
     if (isPreview()) {
-        return NextResponse.json({message: "프리뷰 모드에서는 예약이 비활성화됩니다."}, {status: 403});
+        return NextResponse.json({message: "미리보기 모드에서는 예약이 비활성화됩니다."}, {status: 403});
     }
     const accessToken = await getAccessToken();
     if (!accessToken) {
