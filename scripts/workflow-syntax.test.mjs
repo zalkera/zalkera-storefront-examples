@@ -236,6 +236,25 @@ test("스텝의 첫 줄이 대시줄이어도 그 스텝이 묶음이다", () =>
     strictEqual(runInjections(src).length, 1, "한 줄 run 뒤 env 후선언을 놓쳤다");
 });
 
+test("대시 뒤 공백은 한 칸이 아닐 수 있다", () => {
+    // `-  run:` 도 유효한 YAML 이다. 이 파일의 다른 정규식은 전부 `-\s+` 로 그것을 받으므로,
+    // 여기만 한 칸으로 박으면 검사기가 자기 문법과 어긋난다.
+    const T = `${O} github.event.issue.title }}`;
+    for (const gap of [1, 2, 3]) {
+        const dash = "-" + " ".repeat(gap);
+        const ind = " ".repeat(6 + 1 + gap);
+        const src = `jobs:\n  j:\n    steps:\n      ${dash}run: echo "${O} env.T }}"\n${ind}env:\n${ind}  T: ${T}\n`;
+        strictEqual(runInjections(src).length, 1, `대시 뒤 ${gap}칸을 놓쳤다`);
+    }
+});
+
+test("`steps:` 와 첫 스텝 사이의 주석도 훑기를 끊지 않는다", () => {
+    // 앞으로 훑는 마지막 자리(`scopeEnd`)다. 되돌려도 아무도 모르던 곳이라 여기서 문다.
+    const T = `${O} github.event.issue.title }}`;
+    const src = `jobs:\n  j:\n    env:\n      T: ${T}\n    steps:\n# 주석\n      - run: echo "${O} env.T }}"\n`;
+    strictEqual(runInjections(src).length, 1, "주석이 잡 범위를 끊었다");
+});
+
 test("주석은 훑기를 끊지 않는다 — YAML 은 주석 들여쓰기에 뜻을 두지 않는다", () => {
     // 열 0 주석 한 줄이 훑기를 끊으면, 위 수정 자체가 주석 하나로 무력화된다.
     const T = `${O} github.event.issue.title }}`;

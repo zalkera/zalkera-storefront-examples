@@ -189,8 +189,11 @@ function taintedRegions(src) {
                     // ⚠ **시퀀스 항목의 대시줄은 그 묶음의 첫 줄이다.** 대시의 열은 키 열보다
                     //    얕지만 그 줄부터가 한 스텝이다 — 여기서 끊으면 `- run: …` 뒤에 `env:` 를
                     //    둔 스텝(가장 흔한 작성 순서)의 run 을 범위 밖으로 밀어낸다.
-                    const dash = /^(\s*)-\s+\S/.exec(raw);
-                    if (dash && raw.indexOf("-") + 2 === keyCol) scopeFrom = j + 1;
+                    // ⚠ **대시 뒤 공백은 한 칸이 아닐 수 있다.** `-  run:` 도 유효한 YAML 이고,
+                    //    이 파일의 다른 정규식은 전부 `-\s+` 로 그것을 받는다 — 여기만 `+2` 로
+                    //    박으면 검사기가 자기 문법과 어긋난다. 대시줄 **자신의 키 열**로 잰다.
+                    const dash = /^(\s*)-(\s+)\S/.exec(raw);
+                    if (dash && dash[1].length + 1 + dash[2].length === keyCol) scopeFrom = j + 1;
                     break;
                 }
                 scopeFrom = j + 1;
