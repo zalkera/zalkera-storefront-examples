@@ -11,7 +11,7 @@ import {deepStrictEqual, ok, strictEqual} from "node:assert/strict";
 import {test} from "node:test";
 import {cmpVersion, mergeCodes, packGateDecision} from "./pack-gate.mjs";
 
-const CLEAN = {head: "aaaaaaa", dirty: false, allowRewind: false};
+const CLEAN = {head: "aaaaaaa", dirty: false, clientSha: "cccccc", allowRewind: false};
 const decide = (over) => packGateDecision({...CLEAN, ...over});
 
 test("cmpVersion 은 숫자로 본다 — 사전순이면 1.4.9 가 1.4.10 보다 크다", () => {
@@ -35,19 +35,19 @@ test("판정표 — 각 줄이 하나의 자리다", () => {
         ],
         [
             "같은 깨끗한 트리에서 세트를 잇는다",
-            {version: "1.4.43", localMax: "1.4.43", prior: {head: "aaaaaaa", dirty: false, codes: ["skeleton"]}},
+            {version: "1.4.43", localMax: "1.4.43", prior: {head: "aaaaaaa", dirty: false, clientSha: "cccccc", codes: ["skeleton"]}},
             null,
             true,
         ],
         [
             "다른 트리에서 같은 번호",
-            {version: "1.4.43", localMax: "1.4.43", prior: {head: "bbbbbbb", dirty: false, codes: ["skeleton"]}},
+            {version: "1.4.43", localMax: "1.4.43", prior: {head: "bbbbbbb", dirty: false, clientSha: "cccccc", codes: ["skeleton"]}},
             "LEDGER_SPLIT",
             false,
         ],
         [
             "원장이 더러운 트리에서 나왔다",
-            {version: "1.4.43", localMax: "1.4.43", prior: {head: "aaaaaaa", dirty: true, codes: ["skeleton"]}},
+            {version: "1.4.43", localMax: "1.4.43", prior: {head: "aaaaaaa", dirty: true, clientSha: "cccccc", codes: ["skeleton"]}},
             "LEDGER_SPLIT",
             false,
         ],
@@ -56,7 +56,7 @@ test("판정표 — 각 줄이 하나의 자리다", () => {
             {
                 version: "1.4.43",
                 localMax: "1.4.43",
-                prior: {head: "aaaaaaa", dirty: false, codes: ["skeleton"]},
+                prior: {head: "aaaaaaa", dirty: false, clientSha: "cccccc", codes: ["skeleton"]},
                 dirty: true,
             },
             "LEDGER_SPLIT",
@@ -64,8 +64,28 @@ test("판정표 — 각 줄이 하나의 자리다", () => {
         ],
         [
             "원장에 있는데 옆에 더 높은 판이 있다 — 이어굽기가 아니라 되돌리기다",
-            {version: "1.4.42", localMax: "1.4.43", prior: {head: "aaaaaaa", dirty: false, codes: ["skeleton"]}},
+            {version: "1.4.42", localMax: "1.4.43", prior: {head: "aaaaaaa", dirty: false, clientSha: "cccccc", codes: ["skeleton"]}},
             "NOT_HIGHER",
+            false,
+        ],
+        [
+            "트리는 같은데 client 운반본이 다르다 — git 이 못 보는 갈림",
+            {
+                version: "1.4.43",
+                localMax: "1.4.43",
+                prior: {head: "aaaaaaa", dirty: false, clientSha: "dddddd", codes: ["skeleton"]},
+            },
+            "LEDGER_SPLIT",
+            false,
+        ],
+        [
+            "지문이 없는 옛 원장 항목은 「다르다」로 본다 — fail-closed",
+            {
+                version: "1.4.43",
+                localMax: "1.4.43",
+                prior: {head: "aaaaaaa", dirty: false, codes: ["skeleton"]},
+            },
+            "LEDGER_SPLIT",
             false,
         ],
     ];
@@ -83,7 +103,7 @@ test("--allow-rewind 로는 원장을 못 비킨다 — 갈린 판본은 사람�
     const d = decide({
         version: "1.4.43",
         localMax: "1.4.43",
-        prior: {head: "bbbbbbb", dirty: false, codes: ["skeleton"]},
+        prior: {head: "bbbbbbb", dirty: false, clientSha: "cccccc", codes: ["skeleton"]},
         allowRewind: true,
     });
     strictEqual(d.code, "LEDGER_SPLIT");

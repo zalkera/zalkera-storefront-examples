@@ -12,11 +12,15 @@ import {MUTATING_METHODS, PREVIEW_WRITE_ALLOW, isPreviewBlockedWrite} from "./pr
  * 사유는 **보이는 글자**여야 한다. `\S` 만으로는 폭 없는 공백(U+200B)·결합 문자(U+034F)가
  * 「글자」로 통과해, 사유 없는 면제가 사유 있는 면제로 보였다. 그 셋을 앞에서 막는다.
  *
- * ⚠ **완전히는 못 막는다.** 한글 채움문자(U+3164)는 문자 범주가 `Lo` 라 어떤 범주 배제로도 안
- *   걸린다. 이 마커는 사람이 읽는 장치이지 봉인이 아니다 — 그 사실을 적어 두어야 다음 사람이
- *   「막혀 있다」고 믿고 심의를 건너뛰지 않는다.
+ * 범주 배제는 `Cf`·`Mn`·`Me` 만으로는 얕다 — 제어문자(`Cc`)·사유역(`Co`)·미할당(`Cn`)과
+ * 한글 채움문자류(`Default_Ignorable_Code_Point`)가 「글자」로 통과했다. 점자 공백(U+2800)은
+ * 어느 범주에도 안 걸려 따로 적는다. 재현: `node scripts/lib/marker-coverage.mjs`
+ *
+ * ⚠ 이 마커는 **사람이 읽는 장치이지 봉인이 아니다.** 사유가 있어 보이게 만드는 길은 늘 남는다
+ *   (예: 뜻 없는 한 글자). 판정이 막는 것은 「사유가 아예 없는 것」까지다.
  */
-const ALLOW_MARKER = /^\/\/ zalkera-allow-preview-write:[ \t   -   　]*(?![\p{Cf}\p{Mn}\p{Me}])\S/mu;
+const ALLOW_MARKER =
+    /^\/\/ zalkera-allow-preview-write:[ \t   -   　]*(?![\p{Cf}\p{Mn}\p{Me}\p{Cc}\p{Co}\p{Cn}\p{Default_Ignorable_Code_Point}\u2800])\S/mu;
 
 /**
  * **프리뷰 쓰기 차단의 회귀 픽스처.**
@@ -157,6 +161,11 @@ test("면제 마커의 사유는 보이는 글자여야 한다", () => {
         ["폭 없는 공백만", " \u200b"],
         ["결합 문자만", " \u034f"],
         ["바이트 순서 표시만", " \ufeff"],
+        ["제어문자만", " \u0001"],
+        ["사유역 문자만", " \ue000"],
+        ["한글 채움문자만", " \u3164"],
+        ["점자 공백만", " \u2800"],
+        ["미할당 코드포인트만", " \u0378"],
     ]) {
         assert.ok(!ALLOW_MARKER.test(line(reason)), `${what}이 사유로 통과했다`);
     }

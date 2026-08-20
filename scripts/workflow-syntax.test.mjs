@@ -1,21 +1,16 @@
 /**
- * **워크플로 파일이 GitHub 에서 실제로 기동하는가.**
+ * **워크플로 검사 — 판정은 픽스처로, 집행은 트리로.**
  *
- * ■ 왜 생겼나
- *   `client-upgrade.yml` 이 세 번 연속 **startup failure** 였다. 원인은 `run: |` 블록 안에 적어 둔
- *   주석이었다 — 블록 스칼라 안에서는 `#` 이 YAML 주석이 아니라 **본문**이라, 거기 글자 그대로
- *   쓴 GitHub 식(달러 + 이중 중괄호)이 진짜 식으로 읽혔다. 안이 비어 있어 파일 전체가
- *   「An expression was expected」로 파싱에 실패했고, 워크플로는 한 번도 안 돌았다.
- *   보간을 경고하는 주석이 보간으로 파일을 죽였다.
+ * ■ 통제군이 트리를 물면 안 된다
+ *   종전 통제군은 「`client-upgrade.yml` 이 트리에 있는가」였다. 그 파일은 **고객 소유**이고
+ *   지우는 것이 정상적인 선택인데(그 워크플로는 레포 쓰기 권한을 갖는다), 지우면 고객의
+ *   `npm test` 가 빨개지고 `floor-gate` 까지 죽어 **배포가 막혔다.** 거짓 양성은 고객의 배포를
+ *   무환불로 막고, 거짓 음성은 우리가 못 잡을 뿐이다 — 이 레포가 `visitor-ip-parity` 를 배송에서
+ *   뺀 근거와 같다.
  *
- * ■ 왜 로컬 검사로 잡히지 않았나
- *   YAML 파서는 통과시킨다. 블록 스칼라 본문은 파서에게 그냥 문자열이다. GitHub 만 그 문자열을
- *   한 번 더 해석한다 — 즉 **YAML 이 유효한 것과 워크플로가 유효한 것은 다른 문제**다.
- *   그래서 여기서 재는 것은 「식이 문법적으로 성립하는가」다.
- *
- * ■ 왜 팩에도 실리나
- *   이 워크플로는 고객 레포로 그대로 간다. 정본에서만 재면 고객 트리에서 같은 병이 나도 아무도
- *   모른다. `npm test` 에 붙어 고객 레포에서도 돈다.
+ * ■ 그래서 통제군은 검출기를 문다
+ *   픽스처에 결함을 심어 「검출기가 실제로 잡는가」를 재고, 트리에 대해서는 「걸리는 것이
+ *   없는가」만 본다. 그러면 고객이 워크플로를 어떻게 두든 판별력이 안 죽는다.
  *
  * 재현: `node --experimental-strip-types --test scripts/workflow-syntax.test.mjs`
  */
@@ -24,115 +19,112 @@ import {readFileSync, readdirSync} from "node:fs";
 import {join} from "node:path";
 import {fileURLToPath} from "node:url";
 import {test} from "node:test";
+import {EXPR_OPEN, emptyExpressions, runInjections, runRanges} from "./lib/workflow-syntax.mjs";
 
-const ROOT = fileURLToPath(new URL("..", import.meta.url));
-const DIR = join(ROOT, ".github", "workflows");
+const DIR = join(fileURLToPath(new URL("..", import.meta.url)), ".github", "workflows");
 
-/**
- * 사람이 이름 붙일 수 있는 값 — GitHub 이 「신뢰할 수 없다」고 문서에 적어 둔 칸이다.
- * `run:` 안에 보간되면 `$( )`·백틱이 셸에서 평가된다. `env:` 로 넘기면 셸이 값으로만 본다.
- *
- * 넓게 `github.` 전부를 막지 않는 이유: `github.sha`·`github.repository` 는 안전하고 흔해서
- * 막으면 면제가 늘어난다. **면제는 구멍이다** — 위험한 칸만 닫힌 목록으로 둔다.
- */
-const UNTRUSTED = [
-    /\bgithub\.event\b/,
-    /\bgithub\.head_ref\b/,
-    /\bgithub\.ref_name\b/,
-    /\bgithub\.ref\b/,
-    /\binputs\./,
-];
-
-/** 워크플로 파일 목록. 없으면 `null` — 고객이 `.github/` 를 지운 트리에서 거짓 실패를 내지 않는다. */
+/** 워크플로 파일 목록. 없으면 빈 배열 — 고객이 `.github/` 를 지운 트리에서 거짓 실패를 내지 않는다. */
 function workflowFiles() {
-    let names;
     try {
-        names = readdirSync(DIR);
+        return readdirSync(DIR)
+            .filter((n) => n.endsWith(".yml") || n.endsWith(".yaml"))
+            .sort();
     } catch {
-        return null;
+        return [];
     }
-    return names.filter((n) => n.endsWith(".yml") || n.endsWith(".yaml")).sort();
 }
 
-/** `${` + `{` 로 열리는 자리를 전부 찾는다. 이 파일 자체가 그 글자를 안 갖게 조립해 쓴다. */
-const OPEN = "$" + "{{";
+const O = EXPR_OPEN;
 
-/** `run:` 블록 스칼라의 본문 줄만 골라 `{line, text}` 로 준다. */
-function runBlockLines(src) {
-    const lines = src.split("\n");
-    const out = [];
-    let indent = -1;
-    for (let i = 0; i < lines.length; i++) {
-        const ln = lines[i];
-        const m = /^(\s*)(?:-\s+)?run:\s*[|>][-+]?\s*$/.exec(ln);
-        if (m) {
-            indent = m[1].length;
-            continue;
-        }
-        if (indent < 0) continue;
-        if (ln.trim() === "") continue;
-        if (ln.length - ln.trimStart().length <= indent) {
-            indent = -1;
-            continue;
-        }
-        out.push({line: i + 1, text: ln});
+test("통제군 — 빈 식을 잡는다. 이것 하나면 워크플로가 기동조차 못 한다", () => {
+    // 실제 사고 형상: `run: |` 블록 안 「주석」에 식을 글자 그대로 적었다. 블록 안에서는 `#` 이
+    // 주석이 아니라 본문이라 GitHub 이 그것을 식으로 읽는다.
+    const src = `jobs:\n  j:\n    steps:\n      - run: |\n          # ${O} }} 는 이렇게 쓰지 마라\n          echo hi\n`;
+    const hits = emptyExpressions(src);
+    strictEqual(hits.length, 1, "빈 식을 못 잡았다");
+    strictEqual(hits[0].why, "본문 없음");
+
+    strictEqual(emptyExpressions(`x: "${O} github.sha "`).length, 1, "안 닫힌 식을 못 잡았다");
+    strictEqual(emptyExpressions(`x: "${O} github.sha }}"`).length, 0, "정상 식을 잡았다(오탐)");
+});
+
+test("통제군 — `run:` 안 보간을 잡는다. 블록도 한 줄도", () => {
+    const block = `steps:\n  - run: |\n      git push origin HEAD:"${O} github.ref_name }}"\n`;
+    strictEqual(runInjections(block).length, 1, "블록 스칼라를 못 잡았다");
+
+    // 가장 흔한 작성 형태다. 블록만 보는 판정은 이 자리를 통째로 놓친다.
+    const inline = `steps:\n  - run: echo "${O} github.head_ref }}"\n`;
+    strictEqual(runInjections(inline).length, 1, "한 줄 run 을 못 잡았다");
+
+    // 한 줄에 식이 둘이고 위험한 쪽이 뒤에 있다 — 첫 매치만 보면 놓친다.
+    const second = `steps:\n  - run: echo "${O} github.sha }} ${O} github.head_ref }}"\n`;
+    strictEqual(runInjections(second).length, 1, "줄의 두 번째 식을 못 잡았다");
+
+    // 들여쓰기 지시자와 지시자 뒤 주석도 YAML 은 블록으로 읽는다.
+    const indicator = `steps:\n  - run: |2 # 주석\n      echo "${O} github.ref }}"\n`;
+    strictEqual(runInjections(indicator).length, 1, "`|2` 를 블록으로 못 읽었다");
+});
+
+test("통제군 — `env:` 를 거쳐 다시 꺼내는 자리를 잡는다", () => {
+    // 옮기는 것은 처방이다. 위험한 것은 `run:` 안에서 식으로 **다시 꺼내는** 쪽이다.
+    const relaunder = `jobs:\n  j:\n    env:\n      TITLE: ${O} github.event.issue.title }}\n    steps:\n      - run: echo "${O} env.TITLE }}"\n`;
+    const hits = runInjections(relaunder);
+    strictEqual(hits.length, 1, "세탁된 값을 다시 꺼내는 자리를 못 잡았다");
+    strictEqual(hits[0].where, "env");
+});
+
+test("음성 통제군 — `env:` 로 옮기고 셸 변수로 읽는 것이 정석이다. 이것을 막으면 안 된다", () => {
+    // 이 레포의 실제 처방이다. 여기서 걸리면 고칠 방법이 없다(실제로 한 번 걸렸다).
+    const safe = `steps:\n  - name: push\n    env:\n      REF: "${O} github.ref_name }}"\n    run: |\n      git push origin "HEAD:$REF"\n`;
+    strictEqual(runInjections(safe).length, 0, "정석 처방을 막았다");
+
+    // 오염되지 않은 env 를 꺼내는 것도 막지 않는다.
+    const clean = `jobs:\n  j:\n    env:\n      NAME: hello\n    steps:\n      - run: echo "${O} env.NAME }}"\n`;
+    strictEqual(runInjections(clean).length, 0, "멀쩡한 env 를 막았다");
+});
+
+test("음성 통제군 — 정상 워크플로를 막지 않는다. 거짓 실패가 고객 배포를 막는다", () => {
+    const fine = [
+        `steps:\n  - run: echo "${O} matrix.platform }}"\n`,
+        `steps:\n  - run: echo "${O} needs.build.outputs.sha }}"\n`,
+        `steps:\n  - run: echo "${O} github.sha }} ${O} github.repository }}"\n`,
+        `steps:\n  - run: npm ci\n`,
+        `steps:\n  - uses: actions/checkout@v4\n    with:\n      ref: "${O} github.ref_name }}"\n`,
+        `steps:\n  - run: echo "${O} fromJSON('{"a":1}').a }}"\n`,
+    ];
+    for (const src of fine) {
+        strictEqual(runInjections(src).length, 0, `거짓 실패: ${src.trim()}`);
+        strictEqual(emptyExpressions(src).length, 0, `거짓 실패(빈 식): ${src.trim()}`);
     }
-    return out;
-}
+    // `with:` 는 셸이 아니다 — 인자로 넘어가므로 `$( )` 가 평가되지 않는다. 여기서 막으면
+    // 우리 `checkout` 자신이 걸리고, 고객은 그것을 고칠 방법이 없다.
+});
 
-test("워크플로의 모든 식은 본문이 있다 — 빈 식 하나면 파일이 기동조차 못 한다", () => {
-    const files = workflowFiles();
-    if (files === null) return; // `.github/workflows` 자체가 없는 트리(고객이 지웠다).
-    ok(files.length > 0, `${DIR} 가 있는데 워크플로 파일이 0개다 — 검사가 헛돈다`);
-    for (const name of files) {
+test("트리 — 여기 있는 워크플로에 걸리는 것이 없다", () => {
+    // 고객이 워크플로를 지웠든 자기 것으로 갈았든 **없으면 잴 것이 없다.** 위 통제군이 검출기의
+    // 판별력을 이미 증명했으므로, 여기서 트리의 모양을 요구하지 않는다.
+    for (const name of workflowFiles()) {
         const src = readFileSync(join(DIR, name), "utf8");
-        let at = 0;
-        for (;;) {
-            const start = src.indexOf(OPEN, at);
-            if (start < 0) break;
-            const end = src.indexOf("}}", start);
-            const line = src.slice(0, start).split("\n").length;
-            ok(end > 0, `${name}:${line} 식이 닫히지 않았다`);
-            const body = src.slice(start + OPEN.length, end).trim();
-            ok(
-                body.length > 0,
-                `${name}:${line} 빈 식이다 — GitHub 이 「An expression was expected」로 파일 전체를 거부하고 ` +
-                    `워크플로가 기동하지 않는다. 주석에 식을 글자 그대로 쓰지 말 것(블록 스칼라 안에서는 주석이 본문이다).`,
-            );
-            at = end + 2;
-        }
+        const empty = emptyExpressions(src);
+        ok(
+            empty.length === 0,
+            `${name}: 빈 식 — GitHub 이 「An expression was expected」로 파일 전체를 거부하고 ` +
+                `워크플로가 기동하지 않는다. 자리: ${empty.map((e) => `${e.line}행(${e.why})`).join(", ")}`,
+        );
+        const inj = runInjections(src);
+        ok(
+            inj.length === 0,
+            `${name}: 사람이 이름을 정할 수 있는 값이 셸로 간다 — 스텝 \`env:\` 로 넘기고 셸에서는 ` +
+                `변수로 읽을 것. 자리: ${inj.map((h) => `${h.line}행 ${h.expr}`).join(", ")}`,
+        );
     }
 });
 
-test("`run:` 안에 사람이 이름 붙인 값을 보간하지 않는다 — 셸이 그것을 코드로 읽는다", () => {
-    const files = workflowFiles();
-    if (files === null) return;
-    for (const name of files) {
-        for (const {line, text} of runBlockLines(readFileSync(join(DIR, name), "utf8"))) {
-            const start = text.indexOf(OPEN);
-            if (start < 0) continue;
-            const end = text.indexOf("}}", start);
-            const body = end > 0 ? text.slice(start + OPEN.length, end) : text.slice(start);
-            for (const bad of UNTRUSTED) {
-                ok(
-                    !bad.test(body),
-                    `${name}:${line} 이 값(${body.trim()})은 사람이 이름을 정할 수 있다 — ` +
-                        `\`run:\` 에 보간되면 큰따옴표 안에서도 \`$( )\`·백틱이 평가된다. ` +
-                        `스텝 \`env:\` 로 넘기고 셸에서는 변수로 읽을 것.`,
-                );
-            }
-        }
-    }
-});
-
-test("양성 통제군 — 검사기가 실제로 무언가를 훑었다", () => {
-    const files = workflowFiles();
-    if (files === null) return;
-    const total = files.reduce((n, name) => n + runBlockLines(readFileSync(join(DIR, name), "utf8")).length, 0);
-    ok(total > 0, "`run:` 블록 본문을 한 줄도 못 찾았다 — 블록 인식이 깨졌다면 위 두 시험은 공허하다");
-    strictEqual(
-        files.includes("client-upgrade.yml"),
-        true,
-        "이 병이 난 파일이 목록에 없다 — 이름이 바뀌었으면 이 줄을 같이 고칠 것",
-    );
+test("`run:` 범위 인식이 살아 있다 — 깨지면 위 두 판정이 공허해진다", () => {
+    const src = `steps:\n  - run: |\n      a\n      b\n  - run: c\n  - name: x\n    run: >\n      d\n`;
+    const lines = runRanges(src).map((r) => r.text.trim());
+    ok(lines.includes("a") && lines.includes("b"), `블록 본문을 놓쳤다: ${JSON.stringify(lines)}`);
+    ok(lines.includes("c"), `한 줄 run 을 놓쳤다: ${JSON.stringify(lines)}`);
+    ok(lines.includes("d"), `\`>\` 블록을 놓쳤다: ${JSON.stringify(lines)}`);
+    strictEqual(runRanges("steps:\n  - uses: actions/checkout@v4\n").length, 0, "run 이 아닌 줄을 셌다");
 });

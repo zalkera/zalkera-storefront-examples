@@ -12,7 +12,7 @@ export const REQUIRED_FLOORS = {
     "src/lib/routeParam.test.ts": 5,
     "src/lib/content.test.ts": 3,
     "src/lib/reservedSegments.test.ts": 4,
-    "src/lib/previewGuard.test.ts": 7,
+    "src/lib/previewGuard.test.ts": 8,
     "src/lib/safeUrl.test.ts": 6,
     "src/lib/safeUrlDrift.test.ts": 4,
     "src/lib/mediaCache.test.ts": 11,
@@ -21,6 +21,7 @@ export const REQUIRED_FLOORS = {
     "scripts/lib/junkEntries.test.mjs": 8,
     "scripts/lib/childEnv.test.mjs": 7,
     "scripts/lib/vendorSet.test.mjs": 3,
+    "scripts/workflow-syntax.test.mjs": 7,
 };
 
 /**

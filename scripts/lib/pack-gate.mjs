@@ -27,23 +27,24 @@ export function cmpVersion(a, b) {
  * @param {object} input
  * @param {string} input.version 이번에 구울 번호.
  * @param {string|null} input.localMax `dist-presets/` 에 이미 있는 최대 번호. 없으면 `null`.
- * @param {{head: string, dirty: boolean, codes: string[]}|undefined} input.prior 원장의 같은 번호 항목.
+ * @param {{head: string, dirty: boolean, clientSha?: string, codes: string[]}|undefined} input.prior 원장 항목.
  * @param {string} input.head 지금 트리의 커밋.
  * @param {boolean} input.dirty 지금 트리가 더러운가.
+ * @param {string|null} input.clientSha 설치된 `@zalkera/client` 운반본(`llms.txt`)의 지문.
  * @param {boolean} input.allowRewind `--allow-rewind` 가 붙었는가.
  * @returns {{allow: boolean, code: null|"LEDGER_SPLIT"|"NOT_HIGHER", appendable: boolean}}
  */
-export function packGateDecision({version, localMax, prior, head, dirty, allowRewind}) {
+export function packGateDecision({version, localMax, prior, head, dirty, clientSha, allowRewind}) {
     // 원장이 먼저다. 종전에는 단조성이 앞에 있어, 「넷 중 하나만 구웠으니 나머지를 잇는다」는
     // 정상 작업이 `version <= localMax` 로 막혔고 사람이 관문을 비껴 굽다가 판본이 갈렸다.
-    if (prior && (prior.head !== head || prior.dirty || dirty)) {
+    //
+    // ⚠ **트리가 같다고 입력이 같은 것이 아니다.** zip 의 `llms.txt` 는 git 트리가 아니라 설치된
+    //   `node_modules/@zalkera/client` 에서 온다. `node_modules` 는 gitignore 라 `dirty` 가 못 본다.
+    //   그래서 그 운반본의 지문을 같이 잰다 — 지문이 없는 옛 원장 항목도 「다르다」로 본다(fail-closed).
+    if (prior && (prior.head !== head || prior.dirty || dirty || prior.clientSha !== clientSha)) {
         return {allow: false, code: "LEDGER_SPLIT", appendable: false};
     }
-    const appendable =
-        Boolean(prior) &&
-        !dirty &&
-        localMax !== null &&
-        cmpVersion(version, localMax) === 0;
+    const appendable = Boolean(prior) && localMax !== null && cmpVersion(version, localMax) === 0;
     if (localMax !== null && cmpVersion(version, localMax) <= 0 && !appendable && !allowRewind) {
         return {allow: false, code: "NOT_HIGHER", appendable};
     }

@@ -37,7 +37,13 @@ jobs:
           #   재현: `npx --yes node@20 --experimental-strip-types --test 'src/**/*.test.ts'; echo rc=$?`
           node-version: 22
 
-      - run: npm install          # lockfile 재생성 + 설치
+      # ⚠ `--ignore-scripts` — 이 잡은 `contents: write` 토큰을 들고 돌고, `checkout` 이 그것을
+      #   `.git/config` 에 남긴다. 락파일을 **재생성**하는 자리라 `npm ci` 를 못 쓰므로 범위 의존이
+      #   그 순간 최신으로 풀리는데, 그중 하나가 오염돼 있으면 설치 스크립트가 그 토큰을 가져간다.
+      #   이 트리의 의존 중 설치 스크립트를 쓰는 것은 0개다(재현:
+      #   `node -e "…node_modules 를 훑어 pre/post/install 스크립트를 센다"`). 나중에 그런 의존이
+      #   생기면 여기서 **크게 실패**하는 편이 조용히 도는 것보다 낫다.
+      - run: npm install --ignore-scripts   # lockfile 재생성 + 설치
       # 고객 zip 은 루트 `llms.txt`(= client 운반본의 사본)를 나른다. client 를 올리면 그 사본도
       # 같이 올라가야 명세가 안 낡는다 — 이 레포에는 사본이 없지만(정본 하나 원칙), 사본을 둔
       # 체크아웃에서 이 워크플로가 돌 때를 대비해 있으면 갱신한다. 없으면 무동작.

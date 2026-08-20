@@ -15,6 +15,11 @@ on:
     branches: [main, "oneque/change-*"]
   pull_request:
 
+# 레포·조직 기본값에 기대지 않는다. 이 워크플로는 읽기만 하면 된다 — 고객 레포마다 기본값이 다르고,
+# 기본이 write 인 곳에서는 여기서 도는 모든 것이 쓰기 토큰을 들고 돈다.
+permissions:
+  contents: read
+
 jobs:
   gate:
     runs-on: ubuntu-latest

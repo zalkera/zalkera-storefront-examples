@@ -9,7 +9,8 @@
  */
 import {ok, strictEqual} from "node:assert/strict";
 import {spawnSync} from "node:child_process";
-import {existsSync, mkdirSync, readFileSync, rmSync, writeFileSync} from "node:fs";
+import {existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync} from "node:fs";
+import {tmpdir} from "node:os";
 import {readdirSync} from "node:fs";
 import {fileURLToPath} from "node:url";
 import {dirname, join, resolve} from "node:path";
@@ -21,7 +22,11 @@ const SCRIPT = join(REPO, "scripts", "pack-preset.mjs");
 /** 스크립트를 그대로 돌린다 — 검사 대상은 **배송되는 진입점**이지 내부 함수가 아니다. */
 function run(...args) {
     const before = listing();
-    const r = spawnSync(process.execPath, [SCRIPT, ...args], {cwd: REPO, encoding: "utf8"});
+    const r = spawnSync(process.execPath, [SCRIPT, ...args], {
+        cwd: REPO,
+        encoding: "utf8",
+        env: {...process.env, ZALKERA_PACK_LEDGER: LEDGER},
+    });
     const after = listing();
     // ⚠ **여기서 잰다.** 호출부마다 손으로 부르면 자리가 빠진다 — 실제로 여덟 시험 중 둘에만
     //   걸려 있었고, 나머지 여섯 경로는 산출물이 남아도 초록이었다.
@@ -53,7 +58,12 @@ function listing() {
     }
 }
 
-const LEDGER = join(REPO, ".pack-provenance.json");
+/**
+ * 이 시험 **전용** 원장. 정본 원장(`REPO/.pack-provenance.json`)은 건드리지 않는다 — 종전에는
+ * 진짜 원장을 갈아 끼우고 `finally` 로 되돌렸는데, 시험이 중단되거나 두 판이 동시에 돌면
+ * 갈림 관문의 기록이 사라진 채 남았다. 그러면 다음 굽기에서 관문이 조용히 열린다.
+ */
+const LEDGER = join(mkdtempSync(join(tmpdir(), "zalkera-pv-")), "provenance.json");
 
 /**
  * **주변 상태에 기대지 않는다.** 단조성 관문은 `dist-presets/` 에 무언가 있어야 서는데, 그 폴더는
@@ -162,8 +172,8 @@ test("컬럼 폭을 넘기면 팩 전에 멈춘다 — 적재 400 을 미리 잡
 test("양성 통제군 — 옳은 번호는 버전 관문을 지난다", () => {
     // 프리셋 코드 검사는 버전 검사 **바로 뒤**에 있다. 그 문구가 나왔다는 것은 버전이 통과했다는 뜻이고,
     // 몇 분짜리 게이트·빌드를 돌리지 않고도 그것을 확인할 수 있다.
-    // `--allow-rewind` 는 **단조성 관문을 비키기 위한 것**이다 — 여기서 재는 것은 형식 관문이고,
-    // 낮은 번호를 안 쓰면 이 시험이 판마다 낡는다.
+    // 프리셋 코드 검사가 관문보다 **앞**에 있으므로 번호와 무관하게 이 문구가 나온다.
+    // `--allow-rewind` 를 남겨 두는 것은 관문 순서가 다시 바뀌어도 이 시험이 형식만 재게 하기 위해서다.
     const {code, err} = run("--version", "1.2.3", "BAD_Code", "--allow-rewind");
     strictEqual(code, 1);
     ok(/프리셋 디렉터리 이름/.test(err), err.slice(0, 200));

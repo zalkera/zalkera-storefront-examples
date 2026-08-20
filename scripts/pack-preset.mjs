@@ -1194,6 +1194,63 @@ for (const code of targets) {
 }
 
 /**
+ * **설치본이 락파일과 같은가, 그리고 그 운반본의 지문은 무엇인가.**
+ *
+ * ■ 왜 이것이 관문인가
+ *   zip 루트의 `llms.txt`(배송물 중 최대 파일)는 git 트리가 아니라 **설치된
+ *   `node_modules/@zalkera/client`** 에서 바이트 그대로 실린다. `node_modules` 는 gitignore 라
+ *   `git status --porcelain` 이 **못 본다.** 그래서 「깨끗한 트리」가 참인 채로 배송물이 갈릴 수
+ *   있었다 — 실제로 이 레포의 정본 체크아웃이 설치본과 락파일이 어긋난 상태였다.
+ *
+ * ■ 두 겹으로 막는다
+ *   ⑴ 설치본 버전이 락파일 핀과 다르면 여기서 멈춘다(`npm ci` 를 안 돌린 채 굽는 것).
+ *   ⑵ 운반본 `llms.txt` 의 sha 를 원장에 적어, 같은 번호를 이어 구울 때 **같은 입력**임을
+ *      증명하게 한다. 트리가 같아도 입력이 다르면 이어 굽기를 막는다.
+ */
+const clientState = (() => {
+    // ⚠ `req("@zalkera/client/package.json")` 은 **안 된다** — 그 패키지의 `exports` 맵이
+    //    `./package.json` 을 안 열어 둔다. 이미 존재가 보장된 운반본 경로에서 패키지 루트를 얻는다
+    //    (`llmsManualEntry()` 와 같은 우회다).
+    const req = createRequire(import.meta.url);
+    let clientRoot;
+    let installed;
+    try {
+        clientRoot = dirname(dirname(req.resolve("@zalkera/client/contracts/aeo-surface-guarantees.json")));
+        installed = JSON.parse(readFileSync(join(clientRoot, "package.json"), "utf8")).version;
+    } catch {
+        console.error("@zalkera/client 를 못 찾았습니다 — 이 체크아웃에서 npm ci 를 먼저 돌리십시오.");
+        process.exit(1);
+    }
+    let pinned = null;
+    try {
+        const lock = JSON.parse(readFileSync(join(ROOT, "package-lock.json"), "utf8"));
+        pinned = lock.packages?.["node_modules/@zalkera/client"]?.version ?? null;
+    } catch {
+        // 락파일이 없거나 형태가 다르면 대조할 잣대가 없다 — 그 사실을 아래에서 말한다.
+    }
+    if (pinned === null) {
+        console.error("package-lock.json 에서 @zalkera/client 핀을 못 읽었습니다 — 설치본을 대조할 수 없습니다.");
+        process.exit(1);
+    }
+    if (installed !== pinned) {
+        console.error(`설치된 @zalkera/client(${installed})가 락파일 핀(${pinned})과 다릅니다.`);
+        console.error("  zip 의 llms.txt 는 **설치본에서** 실립니다 — 이대로 구우면 낡은 명세가 전 테넌트로 갑니다.");
+        console.error("  node_modules 는 gitignore 라 「깨끗한 트리」로 보여도 이 어긋남은 안 보입니다.");
+        console.error("");
+        console.error("  · npm ci 를 돌린 뒤 다시 구우십시오.");
+        process.exit(1);
+    }
+    let llmsSha = null;
+    try {
+        llmsSha = createHash("sha256").update(readFileSync(join(clientRoot, "llms.txt"))).digest("hex");
+    } catch {
+        // 운반본이 없으면 `llmsManualEntry()` 가 뒤에서 LLMS_MISSING 으로 멈춘다. 여기서는 지문만 비운다.
+    }
+    return {version: installed, llmsSha};
+})();
+console.log(`  @zalkera/client ${clientState.version} (락파일 핀과 일치)`);
+
+/**
  * **한 버전은 한 판본에서만 나온다.**
  *
  * 실제로 갈렸다: 한 프리셋만 다른 커밋에서 다시 구워졌는데 **`.zalkera/pack.json` 의 버전은 넷 다
@@ -1212,12 +1269,24 @@ for (const code of targets) {
  *   같은 버전을 다시 부르면 단조성이 `version <= localMax` 로 먼저 걸려, 원장은 판정 자체에
  *   도달하지 못했다. 그런데 「넷 중 하나만 구웠으니 나머지를 잇는다」는 **정상 작업**이다 —
  *   실제로 그것 때문에 두 판이 갈렸다. 순서를 뒤집어, 원장이 「같은 깨끗한 트리」를 증명하면
- *   그 이어 굽기를 통과시킨다. 빌드가 결정론적이라 같은 트리는 같은 바이트를 낸다.
+ *   그 이어 굽기를 통과시킨다. 같은 트리 + 같은 운반본이면 같은 바이트가 나온다(zip 타임스탬프가 고정이다).
  *
  * ⚠ 더러운 트리에서 구우면 커밋 sha 로 판본을 특정할 수 없다 — 그때는 `dirty` 를 기록하고,
  *   같은 버전에 이어 붙이는 것을 막는다.
  */
-const LEDGER = join(ROOT, ".pack-provenance.json");
+/**
+ * 출처 원장의 자리. 시험이 **정본 원장을 갈아 끼우지 않도록** 경로를 주입받는다 — 종전에는
+ * 시험이 진짜 원장을 지웠다 덮었다 하고 `finally` 로만 되돌려서, 중단되거나 두 판이 동시에
+ * 돌면 원장이 사라졌다. 원장이 없으면 다음 굽기에서 갈림 관문이 **조용히 열린다**(fail-open).
+ *
+ * 주입이 뒷문이 되지 않게 **쓰면 큰 소리로 알린다** — 굽는 사람이 이 줄을 보고도 넘어갔다면
+ * 그건 판단이지 사고가 아니다.
+ */
+const LEDGER = process.env.ZALKERA_PACK_LEDGER ?? join(ROOT, ".pack-provenance.json");
+if (process.env.ZALKERA_PACK_LEDGER) {
+    console.error(`⚠ 출처 원장을 정본이 아닌 곳에서 읽습니다: ${LEDGER}`);
+    console.error("  ZALKERA_PACK_LEDGER 가 설정돼 있습니다 — 실제 굽기라면 이 변수를 지우십시오.");
+}
 const head = sourceProvenance();
 const dirty = execFileSync("git", ["status", "--porcelain"], {cwd: ROOT}).toString("utf8").trim().length > 0;
 const priorLedger = (() => {
@@ -1228,6 +1297,13 @@ const priorLedger = (() => {
     }
 })();
 const prior = priorLedger[version];
+// 원장을 손으로 고치는 것은 `LEDGER_SPLIT` 안내문이 시키는 정규 절차다. 그래서 형태를 한 번 잰다 —
+// `codes` 가 문자열이면 병합이 글자 단위로 쪼개지고, 안내문을 찍는 `join` 이 그 전에 터진다.
+if (prior && (typeof prior.head !== "string" || !Array.isArray(prior.codes))) {
+    console.error(`원장의 ${version} 항목이 깨졌습니다 — head 는 문자열, codes 는 배열이어야 합니다.`);
+    console.error(`  원장: ${LEDGER}`);
+    process.exit(1);
+}
 
 /**
  * **여기 있는 것보다 낮은 번호로는 안 굽는다** — `dist-presets/` 에 이미 있는 최대 번호.
@@ -1260,12 +1336,13 @@ const decision = packGateDecision({
     prior,
     head,
     dirty,
+    clientSha: clientState.llmsSha,
     allowRewind: args.includes("--allow-rewind"),
 });
 if (decision.code === "LEDGER_SPLIT") {
     console.error(`--version ${version} 은 이미 다른 트리에서 구워졌습니다 — 한 버전은 한 판본에서만 나옵니다.`);
-    console.error(`  이미 있는 것: HEAD ${prior.head}${prior.dirty ? "(더러운 트리)" : ""} · ${prior.codes.join(", ")}`);
-    console.error(`  지금:         HEAD ${head}${dirty ? "(더러운 트리)" : ""} · ${targets.join(", ")}`);
+    console.error(`  이미 있는 것: HEAD ${prior.head}${prior.dirty ? "(더러운 트리)" : ""} · client ${(prior.clientSha ?? "기록없음").slice(0, 12)} · ${(Array.isArray(prior.codes) ? prior.codes : []).join(", ")}`);
+    console.error(`  지금:         HEAD ${head}${dirty ? "(더러운 트리)" : ""} · client ${(clientState.llmsSha ?? "없음").slice(0, 12)} · ${targets.join(", ")}`);
     console.error("");
     console.error("  섞인 채로 승격하면 테넌트마다 다른 소스를 받습니다. **번호를 올려** 구우십시오.");
     console.error(`  이 버전을 정말 다시 만들어야 하면 원장에서 ${version} 항목을 지우고 dist-presets/ 의`);
@@ -1399,7 +1476,7 @@ for (const p of packed) {
 }
 writeFileSync(
     LEDGER,
-    `${JSON.stringify({...priorLedger, [version]: {head, dirty, codes: mergedCodes}}, null, 2)}\n`,
+    `${JSON.stringify({...priorLedger, [version]: {head, dirty, clientSha: clientState.llmsSha, codes: mergedCodes}}, null, 2)}\n`,
 );
 console.log("\n공개(노출 전환) — 적재와 분리돼 있어 올린 것이 곧바로 개시 대상이 되지는 않습니다:");
 for (const p of packed) {
