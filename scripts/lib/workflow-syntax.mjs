@@ -118,8 +118,10 @@ export function runRanges(src) {
         const block = /^(\s*)(-\s+)?(?:"run"|'run'|run):\s*[|>]([-+]?\d*|\d*[-+]?)\s*(?:#.*)?$/.exec(ln);
         if (block) {
             keyIndent = block[1].length + (block[2] ? block[2].length : 0);
+            // ⚠ `|0` 은 YAML 상 무효다. 그리고 0 을 받으면 본문 들여쓰기가 **키 열과 같아져**
+            //    형제 키(`env:`·`if:`)를 본문으로 삼킨다 — 앞서 두 번 차단됐던 그 형상이다.
             const digits = /\d+/.exec(block[3] ?? "");
-            if (digits) {
+            if (digits && Number(digits[0]) >= 1) {
                 bodyIndent = keyIndent + Number(digits[0]);
                 pending = false;
             } else {
@@ -167,7 +169,20 @@ function taintedRegions(src) {
                 break;
             }
         }
-        // 이름의 유효 범위: 그 `env:` 의 **형제 묶음**이 끝날 때까지.
+        // 이름의 유효 범위: 그 `env:` 의 **형제 묶음** 전체.
+        //
+        // ⚠ `env:` 줄부터 세면 안 된다. YAML·GitHub 은 선언 **순서와 무관하게** 그 묶음 전체에
+        //   값을 먹이므로, `steps:` 뒤에 `env:` 를 둔 잡에서 위쪽 `run:` 을 통째로 놓친다.
+        //   다만 `- env:`(시퀀스 항목)는 그 항목 자체가 묶음이라 그 줄부터다.
+        let scopeFrom = i + 1;
+        if (!head[2]) {
+            for (let j = i - 1; j >= 0; j--) {
+                if (lines[j].trim() === "") continue;
+                const c = lines[j].length - lines[j].trimStart().length;
+                if (c < keyCol) break;
+                scopeFrom = j + 1;
+            }
+        }
         let scopeEnd = lines.length;
         for (let j = mapEnd; j < lines.length; j++) {
             if (lines[j].trim() === "") continue;
@@ -182,7 +197,7 @@ function taintedRegions(src) {
             if (!entry) continue;
             if (!entry[3].includes(EXPR_OPEN)) continue;
             if (!UNTRUSTED.some((bad) => bad.test(entry[3]))) continue;
-            regions.push({name: entry[2], from: i + 1, to: scopeEnd + 1});
+            regions.push({name: entry[2], from: scopeFrom, to: scopeEnd});
         }
     }
     return regions;

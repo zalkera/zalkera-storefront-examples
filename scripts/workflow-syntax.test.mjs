@@ -112,7 +112,11 @@ test("트리 — 여기 있는 워크플로에 걸리는 것이 없다", () => {
     // 판별력을 이미 증명했으므로, 여기서 트리의 모양을 요구하지 않는다.
     for (const name of scanned()) {
         const src = readWorkflow(DIR, name, fsMod);
-        if (src === null) continue;
+        if (src === null) {
+            // ⚠ 조용히 넘기면 그 자리는 아무도 안 본 채 초록이 된다. 실패시키지는 않되 말한다.
+            console.error(`[workflow-syntax] 건너뜀: ${name} — 읽지 못했습니다(권한 등)`);
+            continue;
+        }
         const empty = emptyExpressions(src);
         ok(
             empty.length === 0,
@@ -185,6 +189,60 @@ test("폴더가 없으면 조용히 빈 목록 — 고객이 .github 를 지운 
     const {files, skipped} = listWorkflowFiles(join(tmpdir(), "zalkera-없는폴더-xyz"), fsMod);
     deepStrictEqual(files, []);
     deepStrictEqual(skipped, []);
+});
+
+test("지시자가 있으면 그 숫자가 본문 들여쓰기다 — 첫 줄로만 재면 진짜 본문을 놓친다", () => {
+    // 첫 줄이 과들여쓰기되면, 그보다 얕은 **진짜 본문 줄**이 블록 밖으로 밀린다.
+    // 기준점은 **키 열**이다(대시 열이 아니다) — PyYAML 로 대조해 확인한 규칙이다.
+    const over = `jobs:\n  j:\n    steps:\n      - run: |2\n            npm ci\n          echo "${O} github.event.issue.title }}"\n`;
+    strictEqual(runInjections(over).length, 1, "지시자 수준의 본문 줄을 놓쳤다");
+
+    // `|0` 은 YAML 상 무효이고, 0 을 받으면 본문 들여쓰기가 키 열과 같아져 형제 키를 삼킨다.
+    const zero = `jobs:\n  j:\n    steps:\n      - run: |0\n          npm ci\n        env:\n          T: ${O} github.event.issue.title }}\n`;
+    strictEqual(runInjections(zero).length, 0, "`|0` 이 형제 env 를 본문으로 삼켰다");
+});
+
+test("빈 블록 바로 뒤의 형제 키를 삼키지 않는다 — 대시 열로 재면 걸린다", () => {
+    // 이 형상이 대시 열 결함의 최소 재현이다. 본문이 없으므로 「첫 본문 줄」이 존재하지 않고,
+    // 기준을 대시 열로 잡으면 바로 다음 형제 키가 본문으로 들어간다.
+    const empty = `jobs:\n  j:\n    steps:\n      - run: |\n        if: ${O} github.ref }}\n`;
+    strictEqual(runInjections(empty).length, 0, "빈 블록 뒤 형제 if 를 삼켰다");
+});
+
+test("오염된 env 이름은 그 묶음 안에서만 산다", () => {
+    const T = `${O} github.event.issue.title }}`;
+    // 잡 경계 — 잡 a 의 오염이 잡 b 의 같은 이름을 걸면 고객이 고칠 수 없는 거짓 실패다.
+    const jobs = `jobs:\n  a:\n    env:\n      T: ${T}\n    steps:\n      - run: echo hi\n  b:\n    env:\n      T: 고정\n    steps:\n      - run: echo "${O} env.T }}"\n`;
+    strictEqual(runInjections(jobs).length, 0, "잡 경계를 안 봤다");
+
+    // 스텝 경계 — 범위가 한 줄만 더 가도 다음 스텝의 첫 줄을 문다.
+    const steps = `jobs:\n  j:\n    steps:\n      - env:\n          T: ${T}\n        run: echo "$T"\n      - run: echo "${O} env.T }}"\n`;
+    strictEqual(runInjections(steps).length, 0, "다음 스텝까지 범위가 샜다");
+
+    // 선언 **순서와 무관**하다 — YAML 도 GitHub 도 그렇게 먹인다.
+    const after = `jobs:\n  j:\n    steps:\n      - run: echo "${O} env.T }}"\n    env:\n      T: ${T}\n`;
+    strictEqual(runInjections(after).length, 1, "env 를 뒤에 선언하면 놓친다");
+
+    // 과소독 아님 — 같은 묶음 안에서는 여전히 잡는다.
+    const inside = `jobs:\n  j:\n    env:\n      T: ${T}\n    steps:\n      - run: echo "${O} env.T }}"\n`;
+    strictEqual(runInjections(inside).length, 1, "잡아야 할 것을 놓쳤다");
+});
+
+test("`env:` 와 같은 열의 형제 키는 그 매핑 안이 아니다", () => {
+    // 매핑의 끝을 「키 열보다 **깊지 않은** 첫 줄」로 잡아야 한다. `<` 로 두면 같은 열의 형제
+    // (`name:`·`if:`)가 env 항목으로 잡혀, 그 이름을 꺼내는 자리가 거짓으로 걸린다.
+    const src =
+        `jobs:\n  j:\n    env:\n      SAFE: hi\n    name: ${O} github.event.issue.title }}\n` +
+        `    steps:\n      - run: echo "${O} env.name }}"\n`;
+    strictEqual(runInjections(src).length, 0, "형제 키를 env 항목으로 셌다");
+});
+
+test("`- env:` 가 스텝 첫 키여도 뒤따르는 형제를 매핑 안으로 삼키지 않는다", () => {
+    // 대시 열로 재면 `with:` 가 env 매핑 안으로 들어가 무해한 인자가 이름을 오염시킨다.
+    const src =
+        `jobs:\n  j:\n    steps:\n      - env:\n          SAFE: hi\n        uses: actions/checkout@v4\n        with:\n          ref: "${O} github.head_ref }}"\n` +
+        `      - run: echo "${O} env.ref }}"\n`;
+    strictEqual(runInjections(src).length, 0, "with: 의 인자가 이름을 오염시켰다");
 });
 
 test("`run:` 범위 인식이 살아 있다 — 깨지면 위 두 판정이 공허해진다", () => {
