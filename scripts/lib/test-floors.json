@@ -19,6 +19,7 @@
     "scripts/lib/contentRoutes.test.mjs": 6,
     "src/lib/docsRev.test.ts": 1,
     "src/lib/theme.test.ts": 9,
+    "src/lib/preview.test.ts": 4,
     "scripts/lib/packGate.test.mjs": 6,
     "scripts/lib/packManifest.test.mjs": 7,
     "scripts/lib/themeEnums.test.mjs": 16,

@@ -37,6 +37,7 @@ export const REQUIRED_FLOORS = {
     "scripts/lib/contentRoutes.test.mjs": 6,
     "src/lib/docsRev.test.ts": 1,
     "src/lib/theme.test.ts": 9,
+    "src/lib/preview.test.ts": 4,
 };
 
 /**

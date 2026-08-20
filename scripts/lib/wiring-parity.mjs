@@ -63,6 +63,7 @@ export const WIRING_FILES = [
     "src/lib/theme.ts", // 고객 값 → `<html>` inline style 주입(화이트리스트 파서)
     "src/lib/theme.test.ts", // 그 화이트리스트가 무엇을 막는지 — 한 벌만 느슨해지면 그 팩에서만 열린다
     "src/lib/preview.ts", // 미리보기 판별
+    "src/lib/preview.test.ts", // 그 판별이 받는 **두 이름** — 하나를 지우면 그 배포의 쓰기 차단이 조용히 꺼진다
     // ⚠ 미리보기 쓰기 차단의 **집행 지점**이다. 한 벌에서 빠지면 그 팩만 조용히 샌다 —
     //   `WIRING_MISSING` 이 부재도 위반으로 잡는 이유가 이것이다.
     "src/middleware.ts",
