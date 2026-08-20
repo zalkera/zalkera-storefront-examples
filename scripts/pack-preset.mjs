@@ -93,6 +93,7 @@ import {checkWiringParity} from "./lib/wiring-parity.mjs";
 import {readThemeEnums as readThemeEnumsFrom} from "./lib/themeEnums.mjs";
 import {checkVisitorIp} from "./lib/visitor-ip-parity.mjs";
 import {contentManifest} from "./lib/contentManifest.mjs";
+import {cmpVersion, mergeCodes, packGateDecision} from "./lib/pack-gate.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const PRESETS_DIR = join(ROOT, "presets");
@@ -144,6 +145,10 @@ const SOURCE_EXCLUDES = [
     // 그 도구의 버전 관문 시험 — 도구가 없는 트리에서 돌면 「모듈 없음」으로 죽는다.
     // 고객 트리의 가드 회귀 스위트가 그 실패를 자기 결함으로 읽는다.
     "scripts/pack-version.test.mjs",
+    // 그 도구의 **판정부와 그 시험**도 같은 이유로 뺀다 — 고객이 부를 표면이 아니고,
+    // 부르는 쪽(`pack-preset.mjs`)이 배송본에 없어서 트리에 있어도 아무것도 안 한다.
+    "scripts/lib/pack-gate.mjs",
+    "scripts/lib/packGate.test.mjs",
     "scripts/gen-preset-assets.mjs",
     "scripts/preset-canvas.mjs",
     // ⚠ **카탈로그 미리보기를 굽는 사내 도구다**(promote 절차·스모크 테넌트·`dist-preview` S3 프리픽스).
@@ -1179,23 +1184,59 @@ if (version.length > MAX_VERSION_LENGTH) {
     process.exit(1);
 }
 
+// 인자 검증은 git·파일시스템을 만지기 **전에** 끝낸다 — 아래 원장이 `sourceProvenance()` 를 부르므로,
+// 이 검사가 뒤에 있으면 잘못된 코드 이름이 「더러운 트리」 오류에 가려진다.
+for (const code of targets) {
+    if (!CODE_REGEX.test(code)) {
+        console.error(`프리셋 디렉터리 이름 "${code}" 은 팩 코드 형식(${CODE_REGEX.source})이 아닙니다 — 이 이름은 매니페스트·테마 코드로 그대로 갑니다.`);
+        process.exit(1);
+    }
+}
+
 /**
- * **여기 있는 것보다 낮은 번호로는 안 굽는다.**
+ * **한 버전은 한 판본에서만 나온다.**
  *
- * 이 도구가 `--version` 을 필수로 만든 이유가 「잊고 낮은 번호로 구우면 되돌릴 수 없다」인데,
- * 정작 낮은 번호를 **막지는 않았다**. 형식만 보고 통과시켰다 — 경고문이 사람에게 「이미 발행된
- * 최신보다 높아야 합니다」라고 말하기만 했다.
+ * 실제로 갈렸다: 한 프리셋만 다른 커밋에서 다시 구워졌는데 **`.zalkera/pack.json` 의 버전은 넷 다
+ * 같았고**, `verify-zip` 도 통과시켰다. 그대로 승격하면 테넌트마다 다른 소스를 받는다. 사람 눈에만
+ * 걸렸다 — 팩에는 자기가 어느 트리에서 나왔는지 적는 칸이 없기 때문이다.
+ *
+ * 매니페스트에는 못 넣는다: 백엔드 `PackManifestReader` 가 strict 파싱이라 키를 하나 더 넣는 순간
+ * 그 zip 을 통째로 거부한다(계약 확장은 rev 상향으로만). 그래서 **zip 밖 원장**에 적는다.
+ *
+ * ■ 원장이 `dist-presets/` 밖에 사는 이유
+ *   단조성 관문의 안내문이 「`dist-presets/` 를 비우십시오」라고 말한다. 원장이 그 안에 있으면
+ *   **안내를 따르는 순간 감시자가 자기를 지운다** — 그러고 나면 갈린 판본을 아무도 못 잡는다.
+ *   레포 루트에 두고 `.gitignore` 로 뺀다(로컬 기록인 것은 그대로다).
+ *
+ * ■ 이 검사가 단조성보다 **먼저** 서는 이유
+ *   같은 버전을 다시 부르면 단조성이 `version <= localMax` 로 먼저 걸려, 원장은 판정 자체에
+ *   도달하지 못했다. 그런데 「넷 중 하나만 구웠으니 나머지를 잇는다」는 **정상 작업**이다 —
+ *   실제로 그것 때문에 두 판이 갈렸다. 순서를 뒤집어, 원장이 「같은 깨끗한 트리」를 증명하면
+ *   그 이어 굽기를 통과시킨다. 빌드가 결정론적이라 같은 트리는 같은 바이트를 낸다.
+ *
+ * ⚠ 더러운 트리에서 구우면 커밋 sha 로 판본을 특정할 수 없다 — 그때는 `dirty` 를 기록하고,
+ *   같은 버전에 이어 붙이는 것을 막는다.
+ */
+const LEDGER = join(ROOT, ".pack-provenance.json");
+const head = sourceProvenance();
+const dirty = execFileSync("git", ["status", "--porcelain"], {cwd: ROOT}).toString("utf8").trim().length > 0;
+const priorLedger = (() => {
+    try {
+        return JSON.parse(readFileSync(LEDGER, "utf8"));
+    } catch {
+        return {};
+    }
+})();
+const prior = priorLedger[version];
+
+/**
+ * **여기 있는 것보다 낮은 번호로는 안 굽는다** — `dist-presets/` 에 이미 있는 최대 번호.
  *
  * ⚠ **이것은 원장이 아니다.** `dist-presets/` 는 gitignore 라 카탈로그의 상태를 모른다. 여기서
  *   막는 것은 「같은 자리에 이미 있는 것보다 낮게 굽기」뿐이고, 그보다 앞선 승격본이 원격에
  *   있으면 이 검사는 아무 말도 못 한다(그때는 `--version` 안내가 시키는 원장 조회가 유일한 답이다).
  *   그래도 실무에서 밟히는 형상은 대부분 이쪽이다 — 방금 구운 옆에 낮은 것을 얹는 것.
  */
-const cmpVersion = (a, b) => {
-    const x = a.split(".").map(Number);
-    const y = b.split(".").map(Number);
-    return x[0] - y[0] || x[1] - y[1] || x[2] - y[2];
-};
 const localMax = (() => {
     let best = null;
     let names = [];
@@ -1210,7 +1251,30 @@ const localMax = (() => {
     }
     return best;
 })();
-if (localMax !== null && cmpVersion(version, localMax) <= 0 && !args.includes("--allow-rewind")) {
+
+// 판정은 `scripts/lib/pack-gate.mjs` 한 곳에만 있다 — 여기 있을 때 「같은 트리 이어굽기」 분기를
+// 시험이 한 번도 못 밟았다(트리 상태와 폴더 상태에 동시에 매여 있었다). 문면만 여기서 만든다.
+const decision = packGateDecision({
+    version,
+    localMax,
+    prior,
+    head,
+    dirty,
+    allowRewind: args.includes("--allow-rewind"),
+});
+if (decision.code === "LEDGER_SPLIT") {
+    console.error(`--version ${version} 은 이미 다른 트리에서 구워졌습니다 — 한 버전은 한 판본에서만 나옵니다.`);
+    console.error(`  이미 있는 것: HEAD ${prior.head}${prior.dirty ? "(더러운 트리)" : ""} · ${prior.codes.join(", ")}`);
+    console.error(`  지금:         HEAD ${head}${dirty ? "(더러운 트리)" : ""} · ${targets.join(", ")}`);
+    console.error("");
+    console.error("  섞인 채로 승격하면 테넌트마다 다른 소스를 받습니다. **번호를 올려** 구우십시오.");
+    console.error(`  이 버전을 정말 다시 만들어야 하면 원장에서 ${version} 항목을 지우고 dist-presets/ 의`);
+    console.error("  그 버전 zip 도 함께 지운 뒤, 네 벌을 한 번에 구우십시오.");
+    console.error(`  원장: ${LEDGER}`);
+    console.error("  ⚠ --allow-rewind 로는 이 관문을 못 비킵니다 — 갈린 판본은 사람이 승인할 성질이 아닙니다.");
+    process.exit(1);
+}
+if (decision.code === "NOT_HIGHER") {
     console.error(`--version ${version} 은 dist-presets/ 에 이미 있는 ${localMax} 보다 높지 않습니다.`);
     console.error("  키가 {code}/{version}.zip 이라 낮은 번호는 덮어쓰기가 아니라 **새 객체**이고,");
     console.error("  promote 하면 신규 테넌트가 그 판을 받습니다. 되돌릴 수 없습니다.");
@@ -1222,49 +1286,13 @@ if (localMax !== null && cmpVersion(version, localMax) <= 0 && !args.includes("-
     console.error('    curl -s "$API/api/system/themes/<code>/artifacts" -H "Authorization: Bearer $TOKEN"');
     process.exit(1);
 }
-for (const code of targets) {
-    if (!CODE_REGEX.test(code)) {
-        console.error(`프리셋 디렉터리 이름 "${code}" 은 팩 코드 형식(${CODE_REGEX.source})이 아닙니다 — 이 이름은 매니페스트·테마 코드로 그대로 갑니다.`);
-        process.exit(1);
-    }
+if (decision.appendable) {
+    console.log(`  같은 트리(${head})에서 ${version} 를 잇습니다 — 이미 구운 것: ${prior.codes.join(", ")}`);
 }
+const mergedCodes = mergeCodes(prior, targets);
 
 console.log(`프리셋 팩 — version=${version}, 대상 ${targets.join(", ")}`);
-const head = sourceProvenance();
 
-/**
- * **한 버전은 한 판본에서만 나온다.**
- *
- * 실제로 갈렸다: 한 프리셋만 다른 커밋에서 다시 구워졌는데 **`.zalkera/pack.json` 의 버전은 넷 다
- * 같았고**, `verify-zip` 도 통과시켰다. 그대로 승격하면 테넌트마다 다른 소스를 받는다. 사람 눈에만
- * 걸렸다 — 팩에는 자기가 어느 트리에서 나왔는지 적는 칸이 없기 때문이다.
- *
- * 매니페스트에는 못 넣는다: 백엔드 `PackManifestReader` 가 strict 파싱이라 키를 하나 더 넣는 순간
- * 그 zip 을 통째로 거부한다(계약 확장은 rev 상향으로만). 그래서 **zip 밖 원장**에 적는다.
- * `dist-presets/` 는 gitignore 라 이것도 로컬 기록이지만, 갈림을 굽는 자리에서 막기에는 충분하다.
- *
- * ⚠ 더러운 트리에서 구우면 커밋 sha 로 판본을 특정할 수 없다 — 그때는 `dirty` 를 기록하고,
- *   같은 버전에 이어 붙이는 것을 막는다.
- */
-const LEDGER = join(OUT_DIR, ".provenance.json");
-const dirty = execFileSync("git", ["status", "--porcelain"], {cwd: ROOT}).toString("utf8").trim().length > 0;
-const priorLedger = (() => {
-    try {
-        return JSON.parse(readFileSync(LEDGER, "utf8"));
-    } catch {
-        return {};
-    }
-})();
-const prior = priorLedger[version];
-if (prior && (prior.head !== head || prior.dirty || dirty)) {
-    console.error(`--version ${version} 은 이미 다른 트리에서 구워졌습니다 — 한 버전은 한 판본에서만 나옵니다.`);
-    console.error(`  이미 있는 것: HEAD ${prior.head}${prior.dirty ? "(더러운 트리)" : ""} · ${prior.codes.join(", ")}`);
-    console.error(`  지금:         HEAD ${head}${dirty ? "(더러운 트리)" : ""} · ${targets.join(", ")}`);
-    console.error("");
-    console.error("  섞인 채로 승격하면 테넌트마다 다른 소스를 받습니다. dist-presets/ 를 비우고");
-    console.error("  네 벌을 **한 번에** 다시 구우십시오.");
-    process.exit(1);
-}
 const source = sourceEntries();
 console.log(`  공용 프로젝트 배선 ${source.length}개 파일(git 추적 − src/·팩 도구·시드 원본) · HEAD ${head}`);
 
@@ -1371,7 +1399,7 @@ for (const p of packed) {
 }
 writeFileSync(
     LEDGER,
-    `${JSON.stringify({...priorLedger, [version]: {head, dirty, codes: targets}}, null, 2)}\n`,
+    `${JSON.stringify({...priorLedger, [version]: {head, dirty, codes: mergedCodes}}, null, 2)}\n`,
 );
 console.log("\n공개(노출 전환) — 적재와 분리돼 있어 올린 것이 곧바로 개시 대상이 되지는 않습니다:");
 for (const p of packed) {

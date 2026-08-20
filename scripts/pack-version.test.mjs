@@ -9,6 +9,7 @@
  */
 import {ok, strictEqual} from "node:assert/strict";
 import {spawnSync} from "node:child_process";
+import {existsSync, mkdirSync, readFileSync, rmSync, writeFileSync} from "node:fs";
 import {readdirSync} from "node:fs";
 import {fileURLToPath} from "node:url";
 import {dirname, join, resolve} from "node:path";
@@ -52,6 +53,47 @@ function listing() {
     }
 }
 
+const LEDGER = join(REPO, ".pack-provenance.json");
+
+/**
+ * **주변 상태에 기대지 않는다.** 단조성 관문은 `dist-presets/` 에 무언가 있어야 서는데, 그 폴더는
+ * gitignore 라 **CI 의 새 체크아웃에서는 늘 비어 있다.** 종전 시험은 그때 조용히 통과했고, 그래서
+ * 관문을 통째로 지워도 CI 가 초록이었다. 여기서 잴 것을 직접 만든다.
+ *
+ * 관문은 **이름만** 보므로(zip 을 열지 않는다) 빈 파일이면 족하다. 번호를 0.0.2 로 두어 실제 판
+ * (3.x)보다 낮게 잡는다 — 옆에 진짜 팩이 있어도 `localMax` 가 흔들리지 않는다.
+ */
+function withFixtureZip(fn) {
+    const dir = join(REPO, "dist-presets");
+    const file = join(dir, "zzgatefixture-0.0.2.zip");
+    mkdirSync(dir, {recursive: true});
+    ok(!existsSync(file), `픽스처 이름이 이미 쓰이고 있다: ${file}`);
+    writeFileSync(file, "");
+    try {
+        fn();
+    } finally {
+        rmSync(file, {force: true});
+    }
+}
+
+/**
+ * 원장을 이 시험이 정한 내용으로 갈아 끼우고, 끝나면 원상 복구한다.
+ *
+ * ⚠ 치우기만 해서는 안 된다 — 원장이 「같은 깨끗한 트리」를 증명하면 단조성 관문이 **정상적으로**
+ *   열리므로, 그 상태를 모르는 시험은 판마다 결과가 달라진다.
+ */
+function withLedger(content, fn) {
+    const saved = existsSync(LEDGER) ? readFileSync(LEDGER) : null;
+    if (content === null) rmSync(LEDGER, {force: true});
+    else writeFileSync(LEDGER, `${JSON.stringify(content, null, 2)}\n`);
+    try {
+        fn();
+    } finally {
+        if (saved === null) rmSync(LEDGER, {force: true});
+        else writeFileSync(LEDGER, saved);
+    }
+}
+
 test("--version 이 없으면 멈춘다 — 기본값을 쓰지 않는다", () => {
     const result = run();
     strictEqual(result.code, 1, "인자 없이 부르면 무언가를 구웠다");
@@ -88,6 +130,7 @@ test("앞자리 0 은 안 받는다 — 사람 눈에 같은 번호가 다른 �
 });
 
 test("이미 있는 것보다 낮은 번호는 안 굽는다 — 되돌릴 수 없는 자리다", () => {
+  withLedger(null, () => withFixtureZip(() => {
     // 이 도구가 `--version` 을 필수로 만든 이유가 그 형상인데, 정작 낮은 번호는 안 막고 있었다.
     // ⚠ 이 관문은 **로컬 폴더만** 본다 — 카탈로그의 최신은 원장이 안다. 그 한계는 KDoc 에 적혀 있다.
     const zips = listing()
@@ -95,7 +138,7 @@ test("이미 있는 것보다 낮은 번호는 안 굽는다 — 되돌릴 수 �
         .filter(Boolean)
         .map((n) => /-(\d+\.\d+\.\d+)\.zip$/.exec(n)?.[1])
         .filter(Boolean);
-    if (zips.length === 0) return; // 구운 것이 없으면 잴 것이 없다(CI 의 새 체크아웃).
+    ok(zips.length > 0, "픽스처를 깔았는데 목록이 비었다 — 이 시험은 주변 상태에 기대면 안 된다");
     const max = zips.sort((a, b) => {
         const x = a.split(".").map(Number);
         const y = b.split(".").map(Number);
@@ -107,6 +150,7 @@ test("이미 있는 것보다 낮은 번호는 안 굽는다 — 되돌릴 수 �
         strictEqual(result.code, 1, `"${low}" 이 통과했다(현재 최대 ${max})`);
         ok(/보다 높지 않습니다/.test(result.err), result.err.slice(0, 200));
     }
+  }));
 });
 
 test("컬럼 폭을 넘기면 팩 전에 멈춘다 — 적재 400 을 미리 잡는다", () => {
@@ -130,4 +174,58 @@ test("0.0.0 은 옳은 형식이다 — 과소독이 아니다", () => {
     const {code, err} = run("--version", "0.0.0", "BAD_Code", "--allow-rewind");
     strictEqual(code, 1);
     ok(/프리셋 디렉터리 이름/.test(err), err.slice(0, 200));
+});
+
+/**
+ * 관문을 지난 **뒤** 빠르게 죽는 인자. 존재하지 않는 프리셋이라 소스 수집에서 멈추므로, 몇 분짜리
+ * 빌드를 돌리지 않고도 「어느 관문이 먼저 섰는가」를 볼 수 있다.
+ */
+const PAST_GATES = ["zznope", "--allow-dirty", "--no-verify"];
+
+test("원장은 dist-presets 밖에 산다 — 안내대로 폴더를 비워도 감시자가 살아남는다", () => {
+    // 종전에는 `dist-presets/.provenance.json` 이었다. 그런데 단조성 관문의 안내문이
+    // 「dist-presets/ 를 비우십시오」라고 말한다 — 안내를 따르면 감시자가 자기를 지웠다.
+    withLedger({"9.9.9": {head: "deadbee", dirty: false, codes: ["skeleton"]}}, () => {
+        const {code, err} = run("--version", "9.9.9", ...PAST_GATES);
+        strictEqual(code, 1);
+        ok(/이미 다른 트리에서 구워졌습니다/.test(err), err.slice(0, 300));
+        const shown = /원장: (\S+)/.exec(err);
+        ok(shown, `원장 경로를 안 알려 준다: ${err.slice(0, 300)}`);
+        ok(!shown[1].includes("dist-presets"), `원장이 아직 dist-presets 안이다: ${shown[1]}`);
+    });
+});
+
+test("옛 자리에 둔 원장은 읽지 않는다 — 자리를 옮겼다는 주장의 대우", () => {
+    // 음성 통제군이다. 옛 경로에 **다른 트리** 항목을 두고도 관문이 안 서면, 스크립트가 그 자리를
+    // 더는 안 본다는 뜻이다. 이 시험이 없으면 「옮겼다」는 주장이 문면으로만 남는다.
+    const decoy = join(REPO, "dist-presets", ".provenance.json");
+    const saved = existsSync(decoy) ? readFileSync(decoy) : null;
+    mkdirSync(join(REPO, "dist-presets"), {recursive: true});
+    writeFileSync(decoy, JSON.stringify({"9.9.9": {head: "deadbee", dirty: false, codes: ["skeleton"]}}));
+    try {
+        withLedger(null, () => {
+            const {err} = run("--version", "9.9.9", ...PAST_GATES);
+            ok(!/이미 다른 트리에서 구워졌습니다/.test(err), `옛 자리를 아직 읽는다: ${err.slice(0, 300)}`);
+        });
+    } finally {
+        if (saved === null) rmSync(decoy, {force: true});
+        else writeFileSync(decoy, saved);
+    }
+});
+
+test("--allow-rewind 로는 원장을 못 비킨다 — 두 관문이 지키는 것이 다르다", () => {
+    // 되돌리기는 사람이 책임질 수 있다. 한 버전이 두 트리에서 나온 것은 책임질 성질이 아니라 사고다.
+    withLedger({"9.9.9": {head: "deadbee", dirty: false, codes: ["skeleton"]}}, () => {
+        const {code, err} = run("--version", "9.9.9", "--allow-rewind", ...PAST_GATES);
+        strictEqual(code, 1);
+        ok(/이미 다른 트리에서 구워졌습니다/.test(err), err.slice(0, 300));
+    });
+});
+
+test("음성 통제군 — 원장에 없는 번호는 원장 관문에 안 걸린다", () => {
+    // 위 세 시험이 **무조건 서는 문장**을 재고 있지 않음을 보인다.
+    withLedger({"1.2.3": {head: "deadbee", dirty: false, codes: ["skeleton"]}}, () => {
+        const {err} = run("--version", "9.9.9", ...PAST_GATES);
+        ok(!/이미 다른 트리에서 구워졌습니다/.test(err), err.slice(0, 300));
+    });
 });

@@ -26,3 +26,6 @@ dist-preview
 
 # 에이전트 격리 워크트리 — 팩 게이트의 DIRTY_TREE 를 유발하고 git add -A 로 gitlink 가 섞인다
 .claude-wt/
+
+# 팩 출처 원장 — 로컬 기록(dist-presets 를 비워도 살아남아야 한다)
+.pack-provenance.json

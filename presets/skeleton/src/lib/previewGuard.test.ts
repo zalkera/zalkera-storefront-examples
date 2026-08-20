@@ -6,6 +6,19 @@ import {fileURLToPath} from "node:url";
 import {MUTATING_METHODS, PREVIEW_WRITE_ALLOW, isPreviewBlockedWrite} from "./previewGuard.ts";
 
 /**
+ * 면제 마커의 판정. **한 벌만 둔다** — 종전에는 같은 정규식이 아래 두 자리에 각각 박혀 있어,
+ * 한쪽만 고치면 다른 쪽이 옛 규칙으로 남았다.
+ *
+ * 사유는 **보이는 글자**여야 한다. `\S` 만으로는 폭 없는 공백(U+200B)·결합 문자(U+034F)가
+ * 「글자」로 통과해, 사유 없는 면제가 사유 있는 면제로 보였다. 그 셋을 앞에서 막는다.
+ *
+ * ⚠ **완전히는 못 막는다.** 한글 채움문자(U+3164)는 문자 범주가 `Lo` 라 어떤 범주 배제로도 안
+ *   걸린다. 이 마커는 사람이 읽는 장치이지 봉인이 아니다 — 그 사실을 적어 두어야 다음 사람이
+ *   「막혀 있다」고 믿고 심의를 건너뛰지 않는다.
+ */
+const ALLOW_MARKER = /^\/\/ zalkera-allow-preview-write:[ \t   -   　]*(?![\p{Cf}\p{Mn}\p{Me}])\S/mu;
+
+/**
  * **프리뷰 쓰기 차단의 회귀 픽스처.**
  *
  * 집행은 `src/middleware.ts` 가 한다. 이 파일은 그 판정(`previewGuard.ts` 의 순수 함수)을 전수로
@@ -93,7 +106,7 @@ test("통제군 — 면제 목록이 배송 라우트의 마커와 일치한다"
     // 지우면 라우트가 줄고, 그때 「걷기가 깨졌다」는 틀린 사유로 반려한다.
     assert.ok(files.length > 0, "src/app 아래 route 파일을 하나도 못 찾았다 — 걷기가 깨졌다");
     const marked = files
-        .filter((f) => /^\/\/ zalkera-allow-preview-write:[ \t   -   　]*\S/m.test(readFileSync(f, "utf8")))
+        .filter((f) => ALLOW_MARKER.test(readFileSync(f, "utf8")))
         .map((f) =>
             dirname(f)
                 .slice(appDir.length)
@@ -119,7 +132,7 @@ test("면제 목록에 유령이 없다 — 온전한 트리에서만", () => {
             e.isDirectory() ? walk(join(d, e.name)) : e.name.startsWith("route.") ? [join(d, e.name)] : [],
         );
     const marked = walk(appDir)
-        .filter((f) => /^\/\/ zalkera-allow-preview-write:[ \t   -   　]*\S/m.test(readFileSync(f, "utf8")))
+        .filter((f) => ALLOW_MARKER.test(readFileSync(f, "utf8")))
         .map((f) =>
             dirname(f)
                 .slice(appDir.length)
@@ -131,4 +144,20 @@ test("면제 목록에 유령이 없다 — 온전한 트리에서만", () => {
 
 test("메서드 집합이 본문을 만들 수 있는 것들이다", () => {
     assert.deepEqual([...MUTATING_METHODS].sort(), ["DELETE", "PATCH", "POST", "PUT"]);
+});
+
+test("면제 마커의 사유는 보이는 글자여야 한다", () => {
+    // 「사유가 없으면 면제가 안 된다」가 참이려면 **눈에 안 보이는 사유**도 사유가 아니어야 한다.
+    // 종전 판정은 `\\S` 만 봐서 폭 없는 공백 하나로 면제가 섰다.
+    const line = (reason: string) => `// zalkera-allow-preview-write:${reason}\n`;
+    assert.ok(ALLOW_MARKER.test(line(" 캐시라서 고객 데이터가 아니다.")), "정상 사유가 막혔다");
+    for (const [what, reason] of [
+        ["빈 사유", ""],
+        ["공백만", "   "],
+        ["폭 없는 공백만", " \u200b"],
+        ["결합 문자만", " \u034f"],
+        ["바이트 순서 표시만", " \ufeff"],
+    ]) {
+        assert.ok(!ALLOW_MARKER.test(line(reason)), `${what}이 사유로 통과했다`);
+    }
 });

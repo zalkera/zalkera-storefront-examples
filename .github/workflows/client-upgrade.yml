@@ -70,13 +70,20 @@ jobs:
           # ⚠ **`llms.txt` 도 싣는다.** 위 스텝이 설치본으로 그것을 갱신하므로, 여기서 안 실으면
           #   러너가 사라질 때 그 갱신이 버려진다. 그러면 락파일이 가리키는 버전과 트리의 명세가
           #   갈리고, README 의 「`npm ci` 뒤 `node_modules/@zalkera/client/llms.txt` 와 대조하면
-          #   동일합니다」가 거짓이 된다 — 배송 문서 여럿이 AI 에게 `llms.txt` 를 명세로 주라고
-          #   지시하므로, 갈린 명세가 그대로 계약 노릇을 한다.
+          #   동일합니다」가 거짓이 된다 — 팩에 실리는 문서 **4개**가 `llms.txt` 를 가리키므로,
+          #   갈린 명세가 그대로 계약 노릇을 한다.
+          #   재현: git ls-files '*.md' | grep -v '^presets/' | xargs grep -ln 'llms\.txt'
           #   정본 레포에는 `llms.txt` 가 없으므로 있을 때만 더한다.
           git add package-lock.json
           if [ -f llms.txt ]; then git add llms.txt; fi
           git commit -m "chore: regenerate lockfile for @zalkera/client upgrade" || echo "no lockfile change"
-          # ⚠ 브랜치 이름을 `run:` 에 직접 보간하지 않는다 — `${{ }}` 는 bash 파싱 **전에** 텍스트로
-          #   치환되고, 큰따옴표 안이라 `$( )`·백틱이 평가된다. `git check-ref-format` 은 그런 이름을
-          #   통과시킨다. env 로 넘겨 셸이 값으로만 보게 한다.
+          # ⚠ 브랜치 이름을 `run:` 에 직접 보간하지 않는다 — GitHub 식(달러 + 이중 중괄호)은 bash
+          #   파싱 **전에** 텍스트로 치환되고, 큰따옴표 안이라 `$( )`·백틱이 평가된다.
+          #   `git check-ref-format` 은 그런 이름을 통과시킨다. env 로 넘겨 셸이 값으로만 보게 한다.
+          #
+          #   ⚠ 이 주석에 그 식을 **글자 그대로 쓰면 안 된다.** 블록 스칼라 안에서는 `#` 이 YAML
+          #   주석이 아니라 본문이라, GitHub 이 그것을 진짜 식으로 읽는다. 안이 비어 있으면
+          #   「An expression was expected」로 파일 전체가 파싱에 실패하고, 워크플로가 아예
+          #   기동하지 않는다 — 잡의 실패가 아니라 startup failure 라 로그도 안 남는다.
+          #   `scripts/workflow-syntax.test.mjs` 가 이 형상을 막는다.
           git push origin "HEAD:$REF"
