@@ -9,7 +9,7 @@
  */
 import {deepStrictEqual, ok, strictEqual} from "node:assert/strict";
 import {test} from "node:test";
-import {cmpVersion, mergeCodes, packGateDecision} from "./pack-gate.mjs";
+import {clientMismatch, cmpVersion, ledgerShapeError, mergeCodes, packGateDecision} from "./pack-gate.mjs";
 
 const CLEAN = {head: "aaaaaaa", dirty: false, clientSha: "cccccc", allowRewind: false};
 const decide = (over) => packGateDecision({...CLEAN, ...over});
@@ -118,4 +118,21 @@ test("원장은 덮지 않고 잇는다 — 덮으면 나머지 셋의 출처가
     ]);
     deepStrictEqual(mergeCodes({codes: ["skeleton"]}, ["skeleton"]), ["skeleton"], "중복이 늘면 안 된다");
     deepStrictEqual(mergeCodes(undefined, ["skeleton"]), ["skeleton"], "첫 굽기");
+});
+
+test("설치본이 락파일 핀과 다르면 잡는다 — 이 관문이 무력화돼도 아무도 모르던 자리", () => {
+    strictEqual(clientMismatch("0.24.0", "0.24.0"), null);
+    ok(clientMismatch("0.22.4", "0.24.0")?.includes("0.22.4"), "어긋남을 안 잡았다");
+    ok(clientMismatch("0.24.0", null), "핀을 못 읽었는데 통과시켰다");
+    ok(clientMismatch("0.24.0", ""), "빈 핀을 통과시켰다");
+    ok(clientMismatch(undefined, "0.24.0"), "설치본을 못 읽었는데 통과시켰다");
+});
+
+test("손으로 고친 원장의 형태를 잰다", () => {
+    strictEqual(ledgerShapeError(undefined), null, "항목이 없는 것은 깨진 것이 아니다");
+    strictEqual(ledgerShapeError({head: "abc", codes: ["skeleton"]}), null);
+    ok(ledgerShapeError({head: 123, codes: []}), "head 가 숫자인데 통과시켰다");
+    ok(ledgerShapeError({head: "abc", codes: "skeleton"}), "codes 가 문자열인데 통과시켰다");
+    ok(ledgerShapeError({head: "abc", codes: [1]}), "codes 안이 숫자인데 통과시켰다");
+    ok(ledgerShapeError([]), "배열을 항목으로 받았다");
 });

@@ -79,21 +79,43 @@ export function emptyExpressions(src) {
 export function runRanges(src) {
     const lines = src.split("\n");
     const out = [];
-    let indent = -1;
+    // 블록 본문의 범위는 **첫 본문 줄의 들여쓰기**가 정한다 — YAML 이 그렇게 읽는다.
+    //
+    // ⚠ 헤더 줄의 들여쓰기로 재면 안 된다. `- run: |` 에서 그 값은 **대시 열**이라, 같은 스텝의
+    //   뒤따르는 키(`env:`·`if:`·`name:`)가 전부 본문으로 삼켜진다. 그러면 GitHub 보안 문서가
+    //   권하는 처방(`env:` 로 옮기기)과 가장 흔한 조건문(`if: <식>`)이 「셸 주입」으로 보고되고,
+    //   고객은 오류문이 시키는 대로 이미 했는데도 고칠 수가 없다.
+    let headerIndent = -1;
+    let bodyIndent = -1;
+    let pending = false;
     for (let i = 0; i < lines.length; i++) {
         const ln = lines[i];
-        const block = /^(\s*)(?:-\s+)?(?:"run"|'run'|run):\s*[|>][-+]?\d*\s*(?:#.*)?$/.exec(ln);
-        if (block) {
-            indent = block[1].length;
-            continue;
-        }
-        if (indent >= 0) {
+        if (pending || bodyIndent >= 0) {
             if (ln.trim() === "") continue;
-            if (ln.length - ln.trimStart().length > indent) {
+            const col = ln.length - ln.trimStart().length;
+            if (pending) {
+                // 첫 본문 줄. 헤더보다 깊어야 본문이다 — 아니면 블록이 비어 있었다는 뜻이다.
+                if (col > headerIndent) {
+                    bodyIndent = col;
+                    pending = false;
+                    out.push({line: i + 1, text: ln});
+                    continue;
+                }
+                pending = false;
+                bodyIndent = -1;
+            } else if (col >= bodyIndent) {
                 out.push({line: i + 1, text: ln});
                 continue;
+            } else {
+                bodyIndent = -1;
             }
-            indent = -1;
+        }
+        // 지시자와 chomp 는 **어느 순서로도** 온다(`|2-` · `|-2`). 둘 다 받는다.
+        const block = /^(\s*)(?:-\s+)?(?:"run"|'run'|run):\s*[|>](?:[-+]?\d*|\d*[-+]?)\s*(?:#.*)?$/.exec(ln);
+        if (block) {
+            headerIndent = block[1].length;
+            pending = true;
+            continue;
         }
         const inline = /^(\s*)(?:-\s+)?(?:"run"|'run'|run):[^\S\n](.*)$/.exec(ln);
         if (inline && inline[2].trim().length > 0) out.push({line: i + 1, text: inline[2]});
@@ -111,10 +133,20 @@ export function runRanges(src) {
  */
 function taintedEnvNames(src) {
     const names = new Set();
+    // ⚠ **`env:` 매핑 아래만 본다.** 파일 전역에서 「이름: 값」을 주우면 `with: ref: <식>` 같은
+    //   무해한 인자까지 이름을 오염시키고, 그러면 딴 곳의 멀쩡한 `env.ref` 가 걸린다.
+    let envIndent = -1;
     for (const ln of src.split("\n")) {
-        const m = /^\s*(?:-\s+)?([A-Za-z_][A-Za-z0-9_-]*):\s*(.+)$/.exec(ln);
-        if (!m) continue;
-        if (!m[2].includes(EXPR_OPEN)) continue;
+        if (ln.trim() === "") continue;
+        const col = ln.length - ln.trimStart().length;
+        if (envIndent >= 0 && col <= envIndent) envIndent = -1;
+        if (/^\s*(?:-\s+)?env:\s*(?:#.*)?$/.test(ln)) {
+            envIndent = col;
+            continue;
+        }
+        if (envIndent < 0) continue;
+        const m = /^\s*([A-Za-z_][A-Za-z0-9_-]*):\s*(.+)$/.exec(ln);
+        if (!m || !m[2].includes(EXPR_OPEN)) continue;
         if (UNTRUSTED.some((bad) => bad.test(m[2]))) names.add(m[1]);
     }
     return names;

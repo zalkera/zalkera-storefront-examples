@@ -25,12 +25,26 @@ const DIR = join(fileURLToPath(new URL("..", import.meta.url)), ".github", "work
 
 /** 워크플로 파일 목록. 없으면 빈 배열 — 고객이 `.github/` 를 지운 트리에서 거짓 실패를 내지 않는다. */
 function workflowFiles() {
+    // ⚠ **파일이 아닌 것과 못 읽는 것을 건너뛴다.** 이름이 `*.yml` 인 디렉터리(EISDIR)나 읽기 권한이
+    //   없는 파일(EACCES) 하나로 고객 CI 가 죽으면, 이 검사기가 막으려던 것보다 큰 손해가 난다.
+    let entries;
     try {
-        return readdirSync(DIR)
-            .filter((n) => n.endsWith(".yml") || n.endsWith(".yaml"))
-            .sort();
+        entries = readdirSync(DIR, {withFileTypes: true});
     } catch {
         return [];
+    }
+    return entries
+        .filter((e) => e.isFile() && (e.name.endsWith(".yml") || e.name.endsWith(".yaml")))
+        .map((e) => e.name)
+        .sort();
+}
+
+/** 못 읽는 파일은 건너뛴다 — 읽기 실패는 이 검사기가 판정할 성질이 아니다. */
+function readWorkflow(name) {
+    try {
+        return readFileSync(join(DIR, name), "utf8");
+    } catch {
+        return null;
     }
 }
 
@@ -104,7 +118,8 @@ test("트리 — 여기 있는 워크플로에 걸리는 것이 없다", () => {
     // 고객이 워크플로를 지웠든 자기 것으로 갈았든 **없으면 잴 것이 없다.** 위 통제군이 검출기의
     // 판별력을 이미 증명했으므로, 여기서 트리의 모양을 요구하지 않는다.
     for (const name of workflowFiles()) {
-        const src = readFileSync(join(DIR, name), "utf8");
+        const src = readWorkflow(name);
+        if (src === null) continue;
         const empty = emptyExpressions(src);
         ok(
             empty.length === 0,
@@ -118,6 +133,33 @@ test("트리 — 여기 있는 워크플로에 걸리는 것이 없다", () => {
                 `변수로 읽을 것. 자리: ${inj.map((h) => `${h.line}행 ${h.expr}`).join(", ")}`,
         );
     }
+});
+
+test("블록 뒤에 오는 같은 스텝의 키를 본문으로 삼키지 않는다", () => {
+    // 블록의 끝을 **헤더 줄의 들여쓰기**로 재면, `- run: |` 에서 그 값이 대시 열이라 뒤따르는
+    // `env:`·`if:`·`name:` 이 전부 본문이 된다. 그러면 GitHub 이 권하는 처방과 가장 흔한 조건문이
+    // 「셸 주입」으로 보고되고, 고객은 오류문대로 이미 했는데도 고칠 수가 없다.
+    const after = (tail) => `jobs:\n  j:\n    steps:\n      - run: |\n          npm ci\n        ${tail}\n`;
+    strictEqual(runInjections(after(`env:\n          TITLE: ${O} github.event.head_commit.message }}`)).length, 0, "env 를 삼켰다");
+    strictEqual(runInjections(after(`if: ${O} github.ref == 'refs/heads/main' }}`)).length, 0, "if 를 삼켰다");
+    strictEqual(runInjections(after(`name: ${O} github.ref_name }}`)).length, 0, "name 을 삼켰다");
+});
+
+test("지시자와 chomp 는 어느 순서로도 온다", () => {
+    // `|2-` 를 못 읽으면 그 안의 진짜 주입을 통째로 놓친다.
+    for (const head of ["|2-", "|-2", "|2", "|-", ">-"]) {
+        const src = `steps:\n  - run: ${head}\n      echo "${O} github.head_ref }}"\n`;
+        strictEqual(runInjections(src).length, 1, `${head} 를 블록으로 못 읽었다`);
+    }
+});
+
+test("오염 이름은 `env:` 매핑 아래에서만 모은다", () => {
+    // `with: ref: <식>` 은 셸이 아니라 인자다. 그것이 `ref` 를 오염시키면 딴 곳의 멀쩡한
+    // `env.ref` 가 걸린다 — 고객이 고칠 방법이 없는 거짓 실패다.
+    const src =
+        `jobs:\n  j:\n    steps:\n      - uses: actions/checkout@v4\n        with:\n          ref: "${O} github.head_ref }}"\n` +
+        `      - run: echo "${O} env.ref }}"\n`;
+    strictEqual(runInjections(src).length, 0, "with: 의 인자가 이름을 오염시켰다");
 });
 
 test("`run:` 범위 인식이 살아 있다 — 깨지면 위 두 판정이 공허해진다", () => {

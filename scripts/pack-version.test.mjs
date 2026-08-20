@@ -63,7 +63,12 @@ function listing() {
  * 진짜 원장을 갈아 끼우고 `finally` 로 되돌렸는데, 시험이 중단되거나 두 판이 동시에 돌면
  * 갈림 관문의 기록이 사라진 채 남았다. 그러면 다음 굽기에서 관문이 조용히 열린다.
  */
-const LEDGER = join(mkdtempSync(join(tmpdir(), "zalkera-pv-")), "provenance.json");
+const LEDGER_DIR = mkdtempSync(join(tmpdir(), "zalkera-pv-"));
+const LEDGER = join(LEDGER_DIR, "provenance.json");
+// 회수한다 — 시험 한 번에 하나씩 남으면 그것도 손해다.
+process.on("exit", () => {
+    rmSync(LEDGER_DIR, {recursive: true, force: true});
+});
 
 /**
  * **주변 상태에 기대지 않는다.** 단조성 관문은 `dist-presets/` 에 무언가 있어야 서는데, 그 폴더는

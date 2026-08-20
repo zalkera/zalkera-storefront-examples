@@ -93,7 +93,7 @@ import {checkWiringParity} from "./lib/wiring-parity.mjs";
 import {readThemeEnums as readThemeEnumsFrom} from "./lib/themeEnums.mjs";
 import {checkVisitorIp} from "./lib/visitor-ip-parity.mjs";
 import {contentManifest} from "./lib/contentManifest.mjs";
-import {cmpVersion, mergeCodes, packGateDecision} from "./lib/pack-gate.mjs";
+import {clientMismatch, cmpVersion, ledgerShapeError, mergeCodes, packGateDecision} from "./lib/pack-gate.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const PRESETS_DIR = join(ROOT, "presets");
@@ -1228,12 +1228,9 @@ const clientState = (() => {
     } catch {
         // 락파일이 없거나 형태가 다르면 대조할 잣대가 없다 — 그 사실을 아래에서 말한다.
     }
-    if (pinned === null) {
-        console.error("package-lock.json 에서 @zalkera/client 핀을 못 읽었습니다 — 설치본을 대조할 수 없습니다.");
-        process.exit(1);
-    }
-    if (installed !== pinned) {
-        console.error(`설치된 @zalkera/client(${installed})가 락파일 핀(${pinned})과 다릅니다.`);
+    const mismatch = clientMismatch(installed, pinned);
+    if (mismatch) {
+        console.error(mismatch);
         console.error("  zip 의 llms.txt 는 **설치본에서** 실립니다 — 이대로 구우면 낡은 명세가 전 테넌트로 갑니다.");
         console.error("  node_modules 는 gitignore 라 「깨끗한 트리」로 보여도 이 어긋남은 안 보입니다.");
         console.error("");
@@ -1299,8 +1296,9 @@ const priorLedger = (() => {
 const prior = priorLedger[version];
 // 원장을 손으로 고치는 것은 `LEDGER_SPLIT` 안내문이 시키는 정규 절차다. 그래서 형태를 한 번 잰다 —
 // `codes` 가 문자열이면 병합이 글자 단위로 쪼개지고, 안내문을 찍는 `join` 이 그 전에 터진다.
-if (prior && (typeof prior.head !== "string" || !Array.isArray(prior.codes))) {
-    console.error(`원장의 ${version} 항목이 깨졌습니다 — head 는 문자열, codes 는 배열이어야 합니다.`);
+const shapeError = ledgerShapeError(prior);
+if (shapeError) {
+    console.error(`원장의 ${version} 항목이 깨졌습니다 — ${shapeError}`);
     console.error(`  원장: ${LEDGER}`);
     process.exit(1);
 }

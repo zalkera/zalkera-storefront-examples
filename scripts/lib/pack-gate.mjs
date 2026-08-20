@@ -58,3 +58,37 @@ export function packGateDecision({version, localMax, prior, head, dirty, clientS
 export function mergeCodes(prior, targets) {
     return [...new Set([...(prior?.codes ?? []), ...targets])].sort();
 }
+
+/**
+ * 설치본이 락파일 핀과 같은가. 다르면 사유를, 같으면 `null`.
+ *
+ * zip 의 `llms.txt` 는 **설치본에서** 실리는데 `node_modules` 는 gitignore 라 「깨끗한 트리」가
+ * 그 어긋남을 못 본다. 그래서 굽기 시작에서 잰다.
+ *
+ * ⚠ 판정이 `pack-preset.mjs` 안에 있을 때는 **무력화해도 전건 초록**이었다 — 시험이 닿는 자리로
+ *   내린다.
+ */
+export function clientMismatch(installed, pinned) {
+    if (typeof pinned !== "string" || pinned.length === 0) {
+        return "package-lock.json 에서 @zalkera/client 핀을 못 읽었습니다 — 설치본을 대조할 수 없습니다.";
+    }
+    if (typeof installed !== "string" || installed.length === 0) {
+        return "@zalkera/client 설치본의 버전을 못 읽었습니다.";
+    }
+    return installed === pinned ? null : `설치된 @zalkera/client(${installed})가 락파일 핀(${pinned})과 다릅니다.`;
+}
+
+/**
+ * 원장 항목의 형태가 성립하는가. 깨졌으면 사유를, 멀쩡하거나 없으면 `null`.
+ *
+ * 원장을 손으로 고치는 것은 `LEDGER_SPLIT` 안내문이 시키는 정규 절차다. `codes` 가 문자열이면
+ * 병합이 글자 단위로 쪼개지고, 안내문을 찍는 `join` 이 그 전에 터진다.
+ */
+export function ledgerShapeError(prior) {
+    if (prior === undefined || prior === null) return null;
+    if (typeof prior !== "object" || Array.isArray(prior)) return "원장 항목이 객체가 아닙니다.";
+    if (typeof prior.head !== "string") return "원장 항목의 head 가 문자열이 아닙니다.";
+    if (!Array.isArray(prior.codes)) return "원장 항목의 codes 가 배열이 아닙니다.";
+    if (prior.codes.some((c) => typeof c !== "string")) return "원장 항목의 codes 에 문자열이 아닌 것이 있습니다.";
+    return null;
+}

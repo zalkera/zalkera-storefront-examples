@@ -12,7 +12,9 @@ import {fileURLToPath} from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const src = readFileSync(join(ROOT, "src", "lib", "previewGuard.test.ts"), "utf8");
-const m = /const ALLOW_MARKER = (\/.+\/[a-z]*);\n/.exec(src);
+// ⚠ 선언이 **두 줄로 접힐 수 있다**(리터럴이 길어지면 서식기가 접는다). 한 줄만 보면 도구가
+//    조용히 「못 찾았습니다」로 끝나고, 배송 파일이 가리키는 재현 명령이 못 도는 명령이 된다.
+const m = /const ALLOW_MARKER =\s*(\/.+\/[a-z]*);/.exec(src);
 if (!m) {
     console.error("ALLOW_MARKER 리터럴을 못 찾았습니다 — 이름이 바뀌었으면 이 도구도 같이 고치십시오.");
     process.exit(1);
