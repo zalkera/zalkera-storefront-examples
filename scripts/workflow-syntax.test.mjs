@@ -228,6 +228,28 @@ test("오염된 env 이름은 그 묶음 안에서만 산다", () => {
     strictEqual(runInjections(inside).length, 1, "잡아야 할 것을 놓쳤다");
 });
 
+test("스텝의 첫 줄이 대시줄이어도 그 스텝이 묶음이다", () => {
+    // 가장 흔한 작성 순서다 — `- run: …` 을 쓰고 그 아래 `env:` 를 단다. 뒤로 훑기가 대시줄에서
+    // 끊기면 그 run 이 범위 밖으로 밀려 진짜 주입을 통째로 놓친다.
+    const T = `${O} github.event.issue.title }}`;
+    const src = `jobs:\n  j:\n    steps:\n      - run: echo "${O} env.T }}"\n        env:\n          T: ${T}\n`;
+    strictEqual(runInjections(src).length, 1, "한 줄 run 뒤 env 후선언을 놓쳤다");
+});
+
+test("주석은 훑기를 끊지 않는다 — YAML 은 주석 들여쓰기에 뜻을 두지 않는다", () => {
+    // 열 0 주석 한 줄이 훑기를 끊으면, 위 수정 자체가 주석 하나로 무력화된다.
+    const T = `${O} github.event.issue.title }}`;
+    const src = `jobs:\n  j:\n    steps:\n      - run: echo "${O} env.T }}"\n# 주석\n    env:\n      T: ${T}\n`;
+    strictEqual(runInjections(src).length, 1, "주석이 훑기를 끊었다");
+});
+
+test("매핑 안의 주석이 `env:` 를 조기에 끊지 않는다", () => {
+    // 열 0 주석이 매핑을 끊으면 그 아래 오염 이름을 통째로 못 본다.
+    const T = `${O} github.event.issue.title }}`;
+    const src = `jobs:\n  j:\n    env:\n      SAFE: hi\n# 주석\n      T: ${T}\n    steps:\n      - run: echo "${O} env.T }}"\n`;
+    strictEqual(runInjections(src).length, 1, "주석 아래 오염 이름을 놓쳤다");
+});
+
 test("`env:` 와 같은 열의 형제 키는 그 매핑 안이 아니다", () => {
     // 매핑의 끝을 「키 열보다 **깊지 않은** 첫 줄」로 잡아야 한다. `<` 로 두면 같은 열의 형제
     // (`name:`·`if:`)가 env 항목으로 잡혀, 그 이름을 꺼내는 자리가 거짓으로 걸린다.

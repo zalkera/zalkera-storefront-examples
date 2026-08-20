@@ -162,7 +162,7 @@ function taintedRegions(src) {
         // 매핑의 끝: 키 열보다 **깊지 않은** 첫 줄.
         let mapEnd = lines.length;
         for (let j = i + 1; j < lines.length; j++) {
-            if (lines[j].trim() === "") continue;
+            if (lines[j].trim() === "" || lines[j].trim().startsWith("#")) continue;
             const c = lines[j].length - lines[j].trimStart().length;
             if (c <= keyCol) {
                 mapEnd = j;
@@ -173,19 +173,32 @@ function taintedRegions(src) {
         //
         // ⚠ `env:` 줄부터 세면 안 된다. YAML·GitHub 은 선언 **순서와 무관하게** 그 묶음 전체에
         //   값을 먹이므로, `steps:` 뒤에 `env:` 를 둔 잡에서 위쪽 `run:` 을 통째로 놓친다.
-        //   다만 `- env:`(시퀀스 항목)는 그 항목 자체가 묶음이라 그 줄부터다.
+        //   `- env:`(시퀀스 항목)는 그 항목 자체가 묶음이라 그 줄부터다. 매핑 키일 때 위로 훑는
+        //   범위는 **같은 열의 형제까지**이고, 그 앞의 대시줄은 스텝의 첫 줄이므로 함께 든다.
         let scopeFrom = i + 1;
         if (!head[2]) {
             for (let j = i - 1; j >= 0; j--) {
-                if (lines[j].trim() === "") continue;
-                const c = lines[j].length - lines[j].trimStart().length;
-                if (c < keyCol) break;
+                const raw = lines[j];
+                if (raw.trim() === "") continue;
+                // ⚠ **주석은 건너뛴다.** YAML 은 주석의 들여쓰기에 뜻을 두지 않으므로, 열 0 주석
+                //    한 줄이 훑기를 끊으면 그 아래 선언을 통째로 못 본다 — 이 수정 자체가 주석
+                //    하나로 무력화된다.
+                if (raw.trim().startsWith("#")) continue;
+                const c = raw.length - raw.trimStart().length;
+                if (c < keyCol) {
+                    // ⚠ **시퀀스 항목의 대시줄은 그 묶음의 첫 줄이다.** 대시의 열은 키 열보다
+                    //    얕지만 그 줄부터가 한 스텝이다 — 여기서 끊으면 `- run: …` 뒤에 `env:` 를
+                    //    둔 스텝(가장 흔한 작성 순서)의 run 을 범위 밖으로 밀어낸다.
+                    const dash = /^(\s*)-\s+\S/.exec(raw);
+                    if (dash && raw.indexOf("-") + 2 === keyCol) scopeFrom = j + 1;
+                    break;
+                }
                 scopeFrom = j + 1;
             }
         }
         let scopeEnd = lines.length;
         for (let j = mapEnd; j < lines.length; j++) {
-            if (lines[j].trim() === "") continue;
+            if (lines[j].trim() === "" || lines[j].trim().startsWith("#")) continue;
             const c = lines[j].length - lines[j].trimStart().length;
             if (c < keyCol) {
                 scopeEnd = j;
