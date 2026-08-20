@@ -13,9 +13,14 @@
  * 만들면 여기나 [REPO_ONLY_FLOORS] 중 한 곳에 반드시 적는다 — `floor-gate.mjs` 가 표 밖의
  * 스위트를 반려한다.
  *
- * ⚠ **팩 트리에서도 존재를 요구한다.** 팩에 안 실리는 스위트를 여기 적으면 멀쩡한 팩이
- * 「가드 미달」이라는 틀린 사유로 막힌다. 팩에 안 실리는 것은 [REPO_ONLY_FLOORS] 로 간다.
- * 무엇이 실리는지는 `scripts/pack-preset.mjs` 의 `SOURCE_EXCLUDES` 가 정한다.
+ * ⚠ **팩 트리에서 실제로 통과를 내는 스위트만 적는다.** 두 가지로 어긋난다:
+ *   ⑴ 팩에 **안 실리는** 것(`SOURCE_EXCLUDES`) — 파일이 없어 0건.
+ *   ⑵ 팩 트리에서 **스스로 스킵**하는 것 — 파일은 있는데 통과가 0건이다. `skip` 은 통과로
+ *      안 센다(`floor-reporter.mjs`). `docsRev.test.ts` 가 그런 스위트다(정본 판별자로 스킵한다).
+ *      여기 적으면 **모든 팩이 자기 검수에서 죽는다.**
+ *      재현: `docsRev` 를 이 표로 옮기고 `node scripts/pack-preset.mjs --version 9.9.9 skeleton`
+ *      → 「가드 회귀 스위트」 미달로 반려.
+ *   둘 다 [REPO_ONLY_FLOORS] 로 간다.
  */
 export const REQUIRED_FLOORS = {
     "src/lib/crossOrigin.test.ts": 18,
@@ -27,15 +32,14 @@ export const REQUIRED_FLOORS = {
     "src/lib/safeUrl.test.ts": 6,
     "src/lib/safeUrlDrift.test.ts": 4,
     "src/lib/mediaCache.test.ts": 11,
-    "scripts/lib/floors.test.mjs": 23,
+    "scripts/lib/floors.test.mjs": 26,
     "scripts/lib/gateProbe.test.mjs": 14,
     "scripts/lib/junkEntries.test.mjs": 8,
     "scripts/lib/childEnv.test.mjs": 12,
     "scripts/lib/vendorSet.test.mjs": 3,
-    "scripts/workflow-syntax.test.mjs": 32,
+    "scripts/workflow-syntax.test.mjs": 35,
     "scripts/lib/floorGate.test.mjs": 11,
     "scripts/lib/contentRoutes.test.mjs": 6,
-    "src/lib/docsRev.test.ts": 1,
     "src/lib/theme.test.ts": 9,
     "src/lib/preview.test.ts": 4,
 };
@@ -61,6 +65,7 @@ export const REPO_ONLY_FLOORS = {
     "scripts/lib/docEnvNames.test.mjs": 4,
     "scripts/pack-version.test.mjs": 13,
     "src/lib/logoutCart.test.ts": 4,
+    "src/lib/docsRev.test.ts": 1,
 };
 
 /**
@@ -74,13 +79,27 @@ export function isCanonicalRepo(exists) {
 }
 
 /**
- * 하한표의 키로 인정하는 형태. **이 키는 `node` 의 argv 로 들어간다.**
+ * 하한표의 키로 인정하는 형태.
  *
- * `-` 로 시작하는 문자열은 파일이 아니라 플래그로 해석되므로, 형태를 안 잠그면 zip 이
- * `--import=./x.mjs` 를 키로 써서 이 러너를 돌리는 기계에서 코드를 돌릴 수 있다.
- * 점은 `.test.ts` 자리에만 허용한다 — 그래야 `..` 로 트리 밖을 못 가리킨다.
+ * ■ 무엇을 막나
+ *   · **경로 이탈** — 각 조각이 영숫자·밑줄로 시작해야 하므로 `..`·`.hidden` 이 안 된다.
+ *   · **플래그로 읽히는 이름** — 같은 규칙이 `-` 로 시작하는 조각을 막는다. 지금 이 키는
+ *     argv 로 안 들어가지만(러너가 표에서 읽어 파일 존재만 묻는다), 표는 **zip 이 준 값**이라
+ *     새 소비자가 생겼을 때 그 소비자가 안전하다고 가정하지 않는다.
+ *
+ * ■ 이름 안의 점은 받는다
+ *   `foo.bar.test.ts` 는 흔한 이름이다. 거부하면 고객이 **막다른 길**에 갇힌다 — 표에 안 적으면
+ *   「하한표 밖」으로, 적으면 「키 형태 위반」으로 양쪽 다 반려되는데 오류 문면은 「표에 적으라」
+ *   고만 한다.
+ *   재현: 이 정규식에서 `.` 을 빼고 `src/lib/foo.bar.test.ts` 를 만든 트리에 floor-gate 를
+ *   돌리면, 표에 적든 안 적든 rc=1 이다.
+ *
+ * ■ 확장자는 **러너의 글롭과 같아야 한다**
+ *   `floor-gate.mjs` 가 도는 글롭이 이 목록의 부분집합이면, 그 확장자로 등록한 스위트는 파일이
+ *   있는데도 통과 0건이 되어 영구 미달이 된다. 둘을 같이 고친다.
  */
-export const FLOOR_KEY_REGEX = /^(src|scripts)\/[A-Za-z0-9_\-/]+\.test\.(tsx?|mjs)$/;
+export const FLOOR_KEY_REGEX =
+    /^(src|scripts)\/(?:[A-Za-z0-9_][A-Za-z0-9_.\-]*\/)*[A-Za-z0-9_][A-Za-z0-9_.\-]*\.test\.(tsx?|mjs)$/;
 
 /**
  * zip 의 하한표를 요구치와 합친다.

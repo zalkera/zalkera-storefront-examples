@@ -9,11 +9,13 @@
 import {describe, test} from "node:test";
 import assert from "node:assert/strict";
 import {spawnSync} from "node:child_process";
-import {mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync} from "node:fs";
-import {join} from "node:path";
+import {mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, existsSync} from "node:fs";
+import {dirname, join} from "node:path";
 import {tmpdir} from "node:os";
 import {fileURLToPath} from "node:url";
 import {judgeFloors, REQUIRED_FLOORS, REPO_ONLY_FLOORS, FLOOR_KEY_REGEX, isCanonicalRepo} from "./floors.mjs";
+
+const HERE = dirname(fileURLToPath(import.meta.url));
 
 /**
  * 요구 스위트가 전부 있는 트리.
@@ -300,4 +302,46 @@ test("판별자는 둘 다 있어야 참이다 — 폴더 이름 하나로 고�
 test("두 표는 겹치지 않는다 — 겹치면 어느 쪽 하한이 참인지 알 수 없다", () => {
     const both = Object.keys(REQUIRED_FLOORS).filter((f) => f in REPO_ONLY_FLOORS);
     assert.deepEqual(both, []);
+});
+
+test("이름 안의 점을 받는다 — 거부하면 고객이 막다른 길에 갇힌다", () => {
+    // 표에 안 적으면 「하한표 밖」, 적으면 「키 형태 위반」 — 양쪽 다 반려인데 오류 문면은
+    // 「표에 적으라」고만 한다. 시키는 대로 해도 안 풀린다.
+    for (const k of [
+        "src/lib/foo.bar.test.ts",
+        "src/a/b/c.d.test.ts",
+        "src/lib/a.test.tsx",
+        "scripts/lib/a.b.test.mjs",
+    ]) {
+        assert.equal(FLOOR_KEY_REGEX.test(k), true, `${k} 가 거부됐다`);
+    }
+});
+
+test("점을 받아도 경로 이탈·플래그는 여전히 막는다", () => {
+    for (const k of [
+        "../x.test.ts",
+        "src/../etc/x.test.ts",
+        "src/lib/../../x.test.ts",
+        "src/.hidden/x.test.ts",
+        "src/-flag/x.test.ts",
+        "src/lib/..test.ts",
+        "-src/lib/x.test.ts",
+        "src/lib/x.test.js",
+        "etc/x.test.ts",
+    ]) {
+        assert.equal(FLOOR_KEY_REGEX.test(k), false, `${k} 가 통과했다`);
+    }
+});
+
+test("키 형태가 받는 확장자를 러너의 글롭이 전부 돈다", () => {
+    // 글롭이 좁으면 그 확장자로 등록한 스위트는 파일이 있는데도 통과 0건 — 고치는 길이 없는
+    // 영구 미달이다.
+    const gate = readFileSync(join(HERE, "floor-gate.mjs"), "utf8");
+    for (const ext of ["ts", "tsx"]) {
+        assert.ok(
+            gate.includes(`"src/**/*.test.${ext}"`),
+            `키 형태는 .${ext} 를 받는데 러너 글롭에 없다`,
+        );
+    }
+    assert.ok(gate.includes('"scripts/**/*.test.mjs"'), "scripts 글롭이 없다");
 });

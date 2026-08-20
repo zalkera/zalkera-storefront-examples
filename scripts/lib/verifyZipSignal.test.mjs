@@ -15,7 +15,8 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
 import {spawn} from "node:child_process";
-import {existsSync, mkdtempSync, readdirSync, rmSync} from "node:fs";
+import {mkdtempSync, readdirSync, rmSync} from "node:fs";
+import {writeMiniZip} from "./miniZip.mjs";
 import {dirname, join} from "node:path";
 import {tmpdir} from "node:os";
 import {fileURLToPath} from "node:url";
@@ -24,12 +25,29 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const RUNNER = join(HERE, "..", "verify-zip.mjs");
 const ROOT = join(HERE, "..", "..");
 
-/** 이 레포의 아무 팩 하나. 없으면 시험이 잴 것이 없다 — 그때는 대놓고 건너뛴다. */
-function anyPack() {
-    const dir = join(ROOT, "dist-presets");
-    if (!existsSync(dir)) return null;
-    const zip = readdirSync(dir).filter((f) => f.endsWith(".zip")).sort()[0];
-    return zip ? join(dir, zip) : null;
+/**
+ * 잴 대상 zip 을 **짓는다.**
+ *
+ * ⚠ **`dist-presets/*.zip` 을 찾아 쓰면 안 된다.** 그 폴더는 `.gitignore` 대상이라 **신선한
+ *   체크아웃에는 없다** — 찾아서 없으면 스킵하는 구조로 두면 CI 에서 늘 스킵이고, `skip` 은
+ *   통과로 안 세므로 하한 1 을 못 채워 정본 CI 가 영구 적색이 된다. 로컬에서 초록으로 보이는
+ *   것은 앞선 굽기가 남긴 zip 때문이다.
+ *   재현: `mv dist-presets /tmp/x && node scripts/lib/floor-gate.mjs; echo rc=$?; mv /tmp/x dist-presets`
+ *
+ * 이 시험이 재는 것은 「신호를 받으면 작업 트리를 지우는가」뿐이라, 러너가 **풀고 잠시
+ * 일하는** 정도면 충분하다. 그래서 합성 zip 을 쓴다(`miniZip.mjs`) — 잴 대상이 트리 상태에
+ * 안 달리게 한다.
+ */
+function fixturePack(box) {
+    const zip = join(box, "signal-fixture.zip");
+    // 러너가 작업 트리를 만들고 최소한 몇 백 ms 는 일해야 신호를 끼워 넣을 수 있다.
+    // `npm ci` 까지 가는 최소 프로젝트면 그 시간이 넉넉히 난다.
+    writeMiniZip(zip, {
+        "proj/package.json": '{"name":"sig","version":"1.0.0"}\n',
+        "proj/package-lock.json": '{"name":"sig","lockfileVersion":3}\n',
+        "proj/src/lib/x.ts": "export const x = 1;\n",
+    });
+    return zip;
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -37,13 +55,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 /** `TMPDIR` 아래의 작업 트리들. */
 const workDirs = (box) => readdirSync(box).filter((n) => n.startsWith("zalkera-verify-"));
 
-test("신호로 끊으면 작업 트리를 남기지 않는다", async (t) => {
-    const pack = anyPack();
-    if (!pack) {
-        t.skip("dist-presets 에 zip 이 없다 — 잴 대상이 없다");
-        return;
-    }
+test("신호로 끊으면 작업 트리를 남기지 않는다", async () => {
     const box = mkdtempSync(join(tmpdir(), "zalkera-sigbox-"));
+    const pack = fixturePack(box);
     let child = null;
     try {
         child = spawn(process.execPath, [RUNNER, pack], {

@@ -347,13 +347,23 @@ export function runInjections(src) {
  */
 export function unreadableRun(src) {
     const out = [];
+    // ⚠ **`run:` 본문 안은 보지 않는다.** 거기 있는 글자는 YAML 이 아니라 **셸 명령**이다.
+    //    `run: jq '{run: .x}' f.json` 은 흔한 정상 코드인데, 줄만 보면 흐름형 매핑으로 읽힌다.
+    //    그 오탐은 이 시험이 팩에 실려 고객 트리에서 도는 탓에 **고객 배포를 무환불로 막는다** —
+    //    이 레포가 `visitor-ip-parity` 를 배송에서 뺀 근거와 같은 비대칭이다.
+    //    재현: `node --input-type=module -e 'import {unreadableRun} from "./scripts/lib/workflow-syntax.mjs";
+    //          console.log(unreadableRun("jobs:\\n  a:\\n    steps:\\n      - run: jq \\u0027{run: .x}\\u0027 f\\n").length)'` → 0
+    const inRun = new Set(runRanges(src).map((r) => r.line));
     src.split("\n").forEach((ln, i) => {
+        if (inRun.has(i + 1)) return;
         const brace = ln.indexOf("{");
         if (brace < 0) return;
         // `${{ … }}` 의 중괄호는 흐름형이 아니다.
         if (/\$\{\{/.test(ln.slice(0, brace + 1))) return;
         const after = ln.slice(brace);
-        if (/[{,]\s*(?:"run"|'run'|run)\s*:/.test(after)) out.push({line: i + 1, text: ln.trim()});
+        // ⚠ **명시적 키 표기(`{? run : …}`)도 흐름형이다.** pyyaml 이 그것을 run 스텝으로 읽는다.
+        //    안 보면 「못 읽으면 반드시 보인다」는 이 함수의 계약이 그 형태에서 깨진다.
+        if (/[{,]\s*\??\s*(?:"run"|'run'|run)\s*:/.test(after)) out.push({line: i + 1, text: ln.trim()});
     });
     return out;
 }

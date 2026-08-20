@@ -89,6 +89,7 @@ import {fileURLToPath} from "node:url";
 import {createRequire} from "node:module";
 import {deflateRawSync} from "node:zlib";
 import {crc32} from "./preset-canvas.mjs";
+import {REQUIRED_FLOORS} from "./lib/floors.mjs";
 import {checkWiringParity} from "./lib/wiring-parity.mjs";
 import {readThemeEnums as readThemeEnumsFrom} from "./lib/themeEnums.mjs";
 import {checkVisitorIp} from "./lib/visitor-ip-parity.mjs";
@@ -172,6 +173,8 @@ const SOURCE_EXCLUDES = [
     "scripts/lib/verifyZipSignal.test.mjs",
     // 배송 문서(`docs/byo-headless-guide.md`)와 소스의 env 이름 대조 — 우리 문서에 대한 규율이다.
     "scripts/lib/docEnvNames.test.mjs",
+    // 사내 성능 재현 도구. 고객이 부를 표면이 없다 — 형제들(pack-preset·snapshot-preview)과 같은 결.
+    "scripts/lib/workflow-syntax.bench.mjs",
     // 팩 도구(`pack-preset.mjs`)가 시드값을 테마 계약과 대조할 때만 쓰는 판독기와 그 시험.
     // 그 도구가 정본 전용이라 둘 다 같다 — 고객 트리에서 부를 표면이 없다.
     "scripts/lib/themeEnums.mjs",
@@ -875,8 +878,37 @@ function sourceEntries() {
             fail("SOURCE_SYMLINK", `${path}: 소스에 심링크를 둘 수 없습니다 — 대상 내용이 zip 에 실립니다`);
             return [];
         }
+        // ⚠ **하한표는 배송본을 따로 만든다.** 레포의 표는 정본 전용 스위트까지 담는데, 그것들은
+        //    zip 에 안 실린다(`SOURCE_EXCLUDES`). 레포 것을 그대로 실으면 팩 트리에서 그 스위트들이
+        //    「통과 0건」으로 미달해 **모든 팩이 자기 검수에서 죽는다.**
+        //    판정(`floors.mjs`)만 가르고 표를 안 가르면 그 상태가 된다.
+        //    재현: 이 분기를 지우고 `node scripts/pack-preset.mjs --version 9.9.9 skeleton`
+        //          → 「가드 회귀 스위트」 미달 12건으로 반려.
+        if (path === FLOOR_TABLE_PATH) return [{path, bytes: shippedFloorTable()}];
         return [{path, bytes: readFileSync(join(ROOT, path))}];
     });
+}
+
+/** 하한표의 자리. 레포와 zip 에서 같은 경로다 — 내용만 다르다. */
+const FLOOR_TABLE_PATH = "scripts/lib/test-floors.json";
+
+/**
+ * zip 에 실을 하한표. **팩에도 실리는 스위트만** 담는다.
+ *
+ * 레포의 표에서 정본 전용 항목을 빼는 것이 아니라 [REQUIRED_FLOORS] 로 **다시 짓는다** — 빼는
+ * 방식이면 레포 표에 새 항목이 붙었을 때 그것이 어느 쪽인지 여기서 또 판정해야 한다.
+ * 머리말(`_`)은 레포 것을 그대로 옮긴다: 고객이 읽을 설명이 거기 있다.
+ */
+function shippedFloorTable() {
+    let note = "";
+    try {
+        note = JSON.parse(readFileSync(join(ROOT, FLOOR_TABLE_PATH), "utf8"))._ ?? "";
+    } catch (e) {
+        fail("FLOOR_TABLE", `${FLOOR_TABLE_PATH} 를 못 읽었습니다 [${e.code ?? "PARSE"}]`);
+        return Buffer.alloc(0);
+    }
+    // 키 순서·들여쓰기가 고정이라 같은 입력이면 같은 바이트다(팩 결정성 — `packManifest` 와 같은 근거).
+    return Buffer.from(JSON.stringify({_: note, ...REQUIRED_FLOORS}, null, 4) + "\n", "utf8");
 }
 
 

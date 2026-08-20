@@ -421,3 +421,37 @@ test("이 트리의 워크플로에는 못 읽는 `run` 이 없다", () => {
         );
     }
 });
+
+test("`run:` 본문 안의 셸 명령을 흐름형으로 오인하지 않는다", () => {
+    // 거기 있는 글자는 YAML 이 아니라 셸 명령이다. `jq '{run: .x}'` 는 흔한 정상 코드이고,
+    // 이 판정은 팩에 실려 고객 트리에서 돈다 — 오탐은 **고객 배포를 무환불로 막는다.**
+    // ⚠ **전부 유효 YAML 이다.** 무효한 형태로 재면 「검사기가 안 잡는다」가 아니라 「그런 워크플로가
+    //    없다」를 재게 된다. 확인: `python3 -c "import yaml; yaml.safe_load(...)"` 로 run 값이 나온다.
+    for (const src of [
+        `jobs:\n  a:\n    steps:\n      - run: "jq '{run: .x}' f.json"\n`,
+        `jobs:\n  a:\n    steps:\n      - run: |\n          jq '{run: .x}' f.json\n`,
+        `jobs:\n  a:\n    steps:\n      - run: |\n          jq "{run: .x}" f.json\n`,
+        `jobs:\n  a:\n    steps:\n      - run: "sed -e {x,run: y} f"\n`,
+        `jobs:\n  a:\n    steps:\n      - run: |\n          echo '{run: 1}'\n          echo '{,run: 2}'\n`,
+    ]) {
+        deepStrictEqual(unreadableRun(src), [], `오탐: ${src.trim()}`);
+    }
+});
+
+test("명시적 키 흐름형(`{? run : …}`)도 «못 읽음»으로 선다", () => {
+    // `yaml.safe_load` 가 run 스텝으로 읽는다. 안 보면 「못 읽으면 반드시 보인다」는 계약이
+    // 그 형태에서 깨지고, 주입을 그 표기로 숨길 수 있다.
+    const src = 'jobs:\n  a:\n    steps:\n      - {? run : "echo ${{ github.event.x }}"}\n';
+    strictEqual(runInjections(src).length, 0, "줄 단위 판정이 흐름형을 읽은 척했다");
+    strictEqual(unreadableRun(src).length, 1, "명시적 키 표기를 놓쳤다");
+});
+
+test("흐름형이 아닌 중괄호는 그대로 둔다", () => {
+    for (const src of [
+        "jobs:\n  a:\n    steps:\n      - with: {node: 22}\n",
+        "jobs:\n  a:\n    steps:\n      - run: echo ${{ github.sha }}\n",
+        "jobs:\n  a:\n    env: {A: 1}\n    steps:\n      - run: echo hi\n",
+    ]) {
+        deepStrictEqual(unreadableRun(src), [], `오탐: ${src.trim()}`);
+    }
+});

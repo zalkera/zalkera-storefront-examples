@@ -107,7 +107,15 @@ test("`.git` 이 실려 오면 **풀기 전에** 반려한다", () => {
     const {rc, out} = run({...BASE, "proj/.git/config": "[core]\n\tbare = false\n"});
     assert.notEqual(rc, 0, out.slice(-600));
     assert.match(out, /\.git/);
-    assert.match(out, /풀는|푸는|미포함/, `사유가 정크 반려가 아니다: ${out.slice(-400)}`);
+    // ⚠ **조기 반려 고유 문면으로 본다.** 이 러너에는 정크를 보는 자리가 둘 있다 — 엔트리 목록만
+    //   보는 조기 관문과, 푼 **뒤**의 2차 검사. 「미포함」은 둘 다 쓰는 낱말이라 그것으로 재면
+    //   조기 관문을 통째로 무력화해도 이 시험이 초록이 된다.
+    //   재현: `junkEntries.mjs` 의 `JUNK_TOP` 을 비우고 이 스위트를 돌리면 rc=1 로 서야 한다.
+    assert.match(
+        out,
+        /임시공간을 쓰기 전에/,
+        `조기 반려가 아니라 추출 뒤 2차 검사로 잡혔다 — 임시공간을 이미 썼다: ${out.slice(-400)}`,
+    );
 });
 
 test("시크릿 스캔은 `.git` 을 건너뛰지 않는다 — 정크 관문 뒤의 2차선", () => {

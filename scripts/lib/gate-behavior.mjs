@@ -244,5 +244,5 @@ if (falsePositive.length || off.home >= 400) {
     process.exit(1);
 }
 console.log(
-    `관문 행위 검사 통과 — 미리보기에서 ${on.out.length}개 경로 전부 403 PREVIEW_READ_ONLY(읽기 ${on.home}) · 미리보기가 아닌에서 0개 차단(읽기 ${off.home})`,
+    `관문 행위 검사 통과 — 미리보기에서 ${on.out.length}개 경로 전부 403 PREVIEW_READ_ONLY(읽기 ${on.home}) · 일반 빌드에서 0개 차단(읽기 ${off.home})`,
 );

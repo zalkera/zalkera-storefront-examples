@@ -32,6 +32,7 @@ import {existsSync, mkdtempSync, readFileSync, realpathSync, rmSync} from "node:
 import {tmpdir} from "node:os";
 import {dirname, join, relative, resolve} from "node:path";
 import {fileURLToPath} from "node:url";
+import {childEnv} from "./childEnv.mjs";
 import {judgeFloors, REQUIRED_FLOORS} from "./floors.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -62,10 +63,10 @@ if (bad.length) {
     process.exit(1);
 }
 
-// ⚠ **환경을 정규화한다.** `NODE_TEST_CONTEXT` 가 남으면 자식 러너가 다른 모드로 돌고,
-//   `NODE_OPTIONS` 는 자식의 의미를 바꾼다. 값이 아니라 **뜻**이 달라지는 변수들이다.
-const env = {...process.env};
-for (const k of ["NODE_TEST_CONTEXT", "NODE_OPTIONS"]) delete env[k];
+// ⚠ **환경 정규화는 공용 문 하나다**(`childEnv.mjs`). 여기에 목록을 손으로 적으면 그 사본이
+//   갈린다 — 이 레포가 이미 겪은 병이고, `childEnv.mjs` 가 생긴 이유가 그것이다(사본이 넷 중
+//   둘만 지웠고, 빠진 `NEXT_PUBLIC_*_PREVIEW` 는 **미리보기 빌드를 상용인 줄 알고 재게** 한다).
+const env = childEnv();
 
 // ⚠ **리포터를 둘 건다.** 사람이 읽는 출력(`spec`)을 stdout 으로 그대로 흘리고, 통과 수는 파일로
 //   받는다. 하나만 걸면 CI 로그에 시험 결과가 안 남아, 빨개졌을 때 **무엇이 깨졌는지** 알 수 없다.
@@ -83,7 +84,10 @@ const r = spawnSync(
         "--test-reporter-destination=stdout",
         `--test-reporter=${REPORTER}`,
         `--test-reporter-destination=${tally}`,
+        // ⚠ **`FLOOR_KEY_REGEX` 가 받는 확장자와 같아야 한다.** 여기가 좁으면 그 확장자로 등록한
+        //    스위트는 파일이 있는데도 통과 0건이 되어 영구 미달이다 — 고치는 길이 없는 반려다.
         "src/**/*.test.ts",
+        "src/**/*.test.tsx",
         "scripts/**/*.test.mjs",
     ],
     {cwd: root, encoding: "utf8", env, maxBuffer: 64 * 1024 * 1024, stdio: ["ignore", "inherit", "inherit"]},

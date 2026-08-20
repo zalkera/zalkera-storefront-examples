@@ -9,15 +9,14 @@
     "src/lib/safeUrl.test.ts": 6,
     "src/lib/safeUrlDrift.test.ts": 4,
     "src/lib/mediaCache.test.ts": 11,
-    "scripts/lib/floors.test.mjs": 23,
+    "scripts/lib/floors.test.mjs": 26,
     "scripts/lib/gateProbe.test.mjs": 14,
     "scripts/lib/junkEntries.test.mjs": 8,
     "scripts/lib/childEnv.test.mjs": 12,
     "scripts/lib/vendorSet.test.mjs": 3,
-    "scripts/workflow-syntax.test.mjs": 32,
+    "scripts/workflow-syntax.test.mjs": 35,
     "scripts/lib/floorGate.test.mjs": 11,
     "scripts/lib/contentRoutes.test.mjs": 6,
-    "src/lib/docsRev.test.ts": 1,
     "src/lib/theme.test.ts": 9,
     "src/lib/preview.test.ts": 4,
     "scripts/lib/packGate.test.mjs": 6,
@@ -30,5 +29,6 @@
     "scripts/lib/verifyZipJudgments.test.mjs": 9,
     "scripts/lib/docEnvNames.test.mjs": 4,
     "scripts/pack-version.test.mjs": 13,
-    "src/lib/logoutCart.test.ts": 4
+    "src/lib/logoutCart.test.ts": 4,
+    "src/lib/docsRev.test.ts": 1
 }
