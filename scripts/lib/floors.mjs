@@ -21,7 +21,7 @@ export const REQUIRED_FLOORS = {
     "scripts/lib/junkEntries.test.mjs": 8,
     "scripts/lib/childEnv.test.mjs": 7,
     "scripts/lib/vendorSet.test.mjs": 3,
-    "scripts/workflow-syntax.test.mjs": 10,
+    "scripts/workflow-syntax.test.mjs": 12,
 };
 
 /**

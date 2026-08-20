@@ -79,13 +79,17 @@ export function emptyExpressions(src) {
 export function runRanges(src) {
     const lines = src.split("\n");
     const out = [];
-    // 블록 본문의 범위는 **첫 본문 줄의 들여쓰기**가 정한다 — YAML 이 그렇게 읽는다.
+    // 블록 본문의 범위는 **키 열**과 **지시자**가 정한다 — YAML 이 그렇게 읽는다.
     //
-    // ⚠ 헤더 줄의 들여쓰기로 재면 안 된다. `- run: |` 에서 그 값은 **대시 열**이라, 같은 스텝의
-    //   뒤따르는 키(`env:`·`if:`·`name:`)가 전부 본문으로 삼켜진다. 그러면 GitHub 보안 문서가
-    //   권하는 처방(`env:` 로 옮기기)과 가장 흔한 조건문(`if: <식>`)이 「셸 주입」으로 보고되고,
+    // ⚠ 대시 열로 재면 안 된다. `- run: |` 에서 대시 열을 쓰면 같은 스텝의 뒤따르는 키
+    //   (`env:`·`if:`·`name:`)가 전부 본문으로 삼켜진다. 그러면 GitHub 보안 문서가 권하는
+    //   처방(`env:` 로 옮기기)과 가장 흔한 조건문(`if: <식>`)이 「셸 주입」으로 보고되고,
     //   고객은 오류문이 시키는 대로 이미 했는데도 고칠 수가 없다.
-    let headerIndent = -1;
+    //
+    // ⚠ 지시자(`|2`)가 있으면 본문 들여쓰기는 **키 열 + 그 숫자**다. 첫 본문 줄로만 재면, 첫
+    //   줄이 과들여쓰기됐을 때 그보다 얕은 **진짜 본문 줄**을 블록 밖으로 본다 — 그 자리의
+    //   주입을 통째로 놓친다.
+    let keyIndent = -1;
     let bodyIndent = -1;
     let pending = false;
     for (let i = 0; i < lines.length; i++) {
@@ -94,8 +98,8 @@ export function runRanges(src) {
             if (ln.trim() === "") continue;
             const col = ln.length - ln.trimStart().length;
             if (pending) {
-                // 첫 본문 줄. 헤더보다 깊어야 본문이다 — 아니면 블록이 비어 있었다는 뜻이다.
-                if (col > headerIndent) {
+                // 첫 본문 줄. 키 열보다 깊어야 본문이다 — 아니면 블록이 비어 있었다.
+                if (col > keyIndent) {
                     bodyIndent = col;
                     pending = false;
                     out.push({line: i + 1, text: ln});
@@ -111,10 +115,17 @@ export function runRanges(src) {
             }
         }
         // 지시자와 chomp 는 **어느 순서로도** 온다(`|2-` · `|-2`). 둘 다 받는다.
-        const block = /^(\s*)(?:-\s+)?(?:"run"|'run'|run):\s*[|>](?:[-+]?\d*|\d*[-+]?)\s*(?:#.*)?$/.exec(ln);
+        const block = /^(\s*)(-\s+)?(?:"run"|'run'|run):\s*[|>]([-+]?\d*|\d*[-+]?)\s*(?:#.*)?$/.exec(ln);
         if (block) {
-            headerIndent = block[1].length;
-            pending = true;
+            keyIndent = block[1].length + (block[2] ? block[2].length : 0);
+            const digits = /\d+/.exec(block[3] ?? "");
+            if (digits) {
+                bodyIndent = keyIndent + Number(digits[0]);
+                pending = false;
+            } else {
+                bodyIndent = -1;
+                pending = true;
+            }
             continue;
         }
         const inline = /^(\s*)(?:-\s+)?(?:"run"|'run'|run):[^\S\n](.*)$/.exec(ln);
@@ -128,35 +139,60 @@ export function runRanges(src) {
  * 데이터로 보게 하는 정석이다. 여기서 그것을 막으면 우리 처방 자체가 걸리고, 고칠 방법이 없다.
  *
  * 위험한 것은 **다시 꺼내는 쪽**이다. `run:` 안에서 `<식> env.REF }}` 로 꺼내면 그 글자가 셸
- * 소스로 되돌아간다. 그래서 「신뢰 없는 값이 담긴 `env` 이름」을 먼저 모으고, `run:` 안에서
- * 그 이름을 식으로 꺼내는 자리를 잡는다. 셸 변수(`"$REF"`)는 잡지 않는다 — 그쪽이 안전한 길이다.
+ * 소스로 되돌아간다. 그래서 「신뢰 없는 값이 담긴 `env` 이름」을 모으고, `run:` 안에서 그 이름을
+ * 식으로 꺼내는 자리를 잡는다. 셸 변수(`"$REF"`)는 잡지 않는다 — 그쪽이 안전한 길이다.
+ *
+ * ⚠ **이름에는 유효 범위가 있다.** 파일 전체에 뿌리면 잡 A 의 오염 이름이 잡 B 의 무해한 같은
+ *   이름을 걸고, 스텝 A 의 것이 스텝 B 를 건다. 고객이 고칠 수 없는 거짓 실패다.
+ *   범위는 그 `env:` 의 **형제 묶음이 끝날 때까지**다 — 워크플로 수준이면 파일 전체, 잡 수준이면
+ *   그 잡, 스텝 수준이면 그 스텝.
+ *
+ * ⚠ **키 열로 잰다.** `- env:` 에서 대시 열을 쓰면 뒤따르는 형제 키(`with:` 등)를 매핑 안으로
+ *   삼켜, 무해한 인자가 이름을 오염시킨다. `run:` 쪽과 같은 계열의 결함이다.
  */
-function taintedEnvNames(src) {
-    const names = new Set();
-    // ⚠ **`env:` 매핑 아래만 본다.** 파일 전역에서 「이름: 값」을 주우면 `with: ref: <식>` 같은
-    //   무해한 인자까지 이름을 오염시키고, 그러면 딴 곳의 멀쩡한 `env.ref` 가 걸린다.
-    let envIndent = -1;
-    for (const ln of src.split("\n")) {
-        if (ln.trim() === "") continue;
-        const col = ln.length - ln.trimStart().length;
-        if (envIndent >= 0 && col <= envIndent) envIndent = -1;
-        if (/^\s*(?:-\s+)?env:\s*(?:#.*)?$/.test(ln)) {
-            envIndent = col;
-            continue;
+function taintedRegions(src) {
+    const lines = src.split("\n");
+    const regions = [];
+    for (let i = 0; i < lines.length; i++) {
+        const head = /^(\s*)(-\s+)?env:\s*(?:#.*)?$/.exec(lines[i]);
+        if (!head) continue;
+        const keyCol = head[1].length + (head[2] ? head[2].length : 0);
+        // 매핑의 끝: 키 열보다 **깊지 않은** 첫 줄.
+        let mapEnd = lines.length;
+        for (let j = i + 1; j < lines.length; j++) {
+            if (lines[j].trim() === "") continue;
+            const c = lines[j].length - lines[j].trimStart().length;
+            if (c <= keyCol) {
+                mapEnd = j;
+                break;
+            }
         }
-        if (envIndent < 0) continue;
-        const m = /^\s*([A-Za-z_][A-Za-z0-9_-]*):\s*(.+)$/.exec(ln);
-        if (!m || !m[2].includes(EXPR_OPEN)) continue;
-        if (UNTRUSTED.some((bad) => bad.test(m[2]))) names.add(m[1]);
+        // 이름의 유효 범위: 그 `env:` 의 **형제 묶음**이 끝날 때까지.
+        let scopeEnd = lines.length;
+        for (let j = mapEnd; j < lines.length; j++) {
+            if (lines[j].trim() === "") continue;
+            const c = lines[j].length - lines[j].trimStart().length;
+            if (c < keyCol) {
+                scopeEnd = j;
+                break;
+            }
+        }
+        for (let j = i + 1; j < mapEnd; j++) {
+            const entry = /^(\s*)([A-Za-z_][A-Za-z0-9_-]*):\s*(.+)$/.exec(lines[j]);
+            if (!entry) continue;
+            if (!entry[3].includes(EXPR_OPEN)) continue;
+            if (!UNTRUSTED.some((bad) => bad.test(entry[3]))) continue;
+            regions.push({name: entry[2], from: i + 1, to: scopeEnd + 1});
+        }
     }
-    return names;
+    return regions;
 }
 
 /** 사람이 이름을 정할 수 있는 값이 **셸 소스로** 되돌아가는 자리. */
 export function runInjections(src) {
     const found = [];
     const runLines = new Set(runRanges(src).map((r) => r.line));
-    const tainted = taintedEnvNames(src);
+    const tainted = taintedRegions(src);
     const at = lineCounter(src);
     for (const e of expressions(src)) {
         const line = at(e.start);
@@ -167,9 +203,49 @@ export function runInjections(src) {
             continue;
         }
         const viaEnv = /\benv\.([A-Za-z_][A-Za-z0-9_-]*)/.exec(e.body);
-        if (viaEnv && tainted.has(viaEnv[1])) {
+        if (viaEnv && tainted.some((r) => r.name === viaEnv[1] && line >= r.from && line <= r.to)) {
             found.push({line, expr: e.body.trim(), where: "env"});
         }
     }
     return found;
+}
+
+/**
+ * 워크플로 파일 목록. **건너뛴 것을 함께 돌려준다.**
+ *
+ * ⚠ 조용히 건너뛰면 그것이 구멍이다 — 이름이 `*.yml` 인 디렉터리나 읽기 권한 없는 파일이 있으면
+ *   그 자리는 아무도 안 본 채 초록이 된다. 실패시키지는 않되(고객 CI 를 죽일 일이 아니다)
+ *   **무엇을 안 봤는지는 말한다.**
+ *
+ * 심링크는 `isFile()` 이 거짓이라 여기서 빠진다 — 공유 워크플로를 심링크로 두는 트리가 통째로
+ * 미검사가 되지 않게, 그 사실도 `skipped` 로 알린다.
+ */
+export function listWorkflowFiles(dir, fs) {
+    const isYaml = (name) => name.endsWith(".yml") || name.endsWith(".yaml");
+    let entries;
+    try {
+        entries = fs.readdirSync(dir, {withFileTypes: true});
+    } catch {
+        return {files: [], skipped: []};
+    }
+    const files = [];
+    const skipped = [];
+    for (const e of entries) {
+        if (!isYaml(e.name)) continue;
+        if (!e.isFile()) {
+            skipped.push({name: e.name, why: e.isDirectory() ? "디렉터리" : "일반 파일이 아님(심링크 등)"});
+            continue;
+        }
+        files.push(e.name);
+    }
+    return {files: files.sort(), skipped};
+}
+
+/** 읽어 본다. 못 읽으면 `null` — 읽기 실패는 이 검사기가 판정할 성질이 아니다. */
+export function readWorkflow(dir, name, fs) {
+    try {
+        return fs.readFileSync(`${dir}/${name}`, "utf8");
+    } catch (error) {
+        return null;
+    }
 }

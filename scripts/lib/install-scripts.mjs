@@ -14,7 +14,15 @@ import {fileURLToPath} from "node:url";
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const HOOKS = ["preinstall", "install", "postinstall"];
 
-function scan(dir, hits) {
+/**
+ * ⚠ **중첩 `node_modules` 까지 훑는다.** 최상위만 보면 `a/node_modules/b` 에 심긴 스크립트를
+ *   못 본다 — 오늘 트리에 중첩이 0개라 눈에 안 띄었을 뿐, 하나 생기는 순간 근거가 거짓이 된다.
+ *
+ * ⚠ **패키지 수를 센다.** 훅을 세면 한 패키지가 `preinstall`·`postinstall` 을 다 가질 때 2로
+ *   보고돼, 「N개」가 무엇의 수인지 흐려진다.
+ */
+function scan(dir, found, depth = 0) {
+    if (depth > 6) return; // 병적으로 깊은 트리에서 매달리지 않는다.
     let names;
     try {
         names = readdirSync(dir);
@@ -25,21 +33,25 @@ function scan(dir, hits) {
         if (name.startsWith(".")) continue;
         const at = join(dir, name);
         if (name.startsWith("@")) {
-            scan(at, hits);
+            scan(at, found, depth);
             continue;
         }
         const manifest = join(at, "package.json");
-        if (!existsSync(manifest)) continue;
-        try {
-            const scripts = JSON.parse(readFileSync(manifest, "utf8")).scripts ?? {};
-            for (const hook of HOOKS) if (scripts[hook]) hits.push(`${name}: ${hook}`);
-        } catch {
-            // 읽을 수 없는 매니페스트는 셀 수 없다 — 세는 척하지 않는다.
+        if (existsSync(manifest)) {
+            try {
+                const scripts = JSON.parse(readFileSync(manifest, "utf8")).scripts ?? {};
+                const hooks = HOOKS.filter((h) => scripts[h]);
+                if (hooks.length > 0) found.set(at, hooks);
+            } catch {
+                // 읽을 수 없는 매니페스트는 셀 수 없다 — 세는 척하지 않는다.
+            }
         }
+        // 중첩 의존.
+        scan(join(at, "node_modules"), found, depth + 1);
     }
 }
 
-const hits = [];
-scan(join(ROOT, "node_modules"), hits);
-console.log(`설치 스크립트를 가진 의존: ${hits.length}개`);
-for (const h of hits) console.log(`  ${h}`);
+const found = new Map();
+scan(join(ROOT, "node_modules"), found);
+console.log(`설치 스크립트를 가진 의존: ${found.size}개`);
+for (const [at, hooks] of found) console.log(`  ${at.slice(ROOT.length + 1)}: ${hooks.join(", ")}`);

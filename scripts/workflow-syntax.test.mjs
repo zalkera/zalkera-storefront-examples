@@ -14,38 +14,31 @@
  *
  * 재현: `node --experimental-strip-types --test scripts/workflow-syntax.test.mjs`
  */
-import {ok, strictEqual} from "node:assert/strict";
-import {readFileSync, readdirSync} from "node:fs";
+import {deepStrictEqual, ok, strictEqual} from "node:assert/strict";
+import * as fsMod from "node:fs";
+import {mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync} from "node:fs";
+import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {fileURLToPath} from "node:url";
 import {test} from "node:test";
-import {EXPR_OPEN, emptyExpressions, runInjections, runRanges} from "./lib/workflow-syntax.mjs";
+import {
+    EXPR_OPEN,
+    emptyExpressions,
+    listWorkflowFiles,
+    readWorkflow,
+    runInjections,
+    runRanges,
+} from "./lib/workflow-syntax.mjs";
 
 const DIR = join(fileURLToPath(new URL("..", import.meta.url)), ".github", "workflows");
 
-/** 워크플로 파일 목록. 없으면 빈 배열 — 고객이 `.github/` 를 지운 트리에서 거짓 실패를 내지 않는다. */
-function workflowFiles() {
-    // ⚠ **파일이 아닌 것과 못 읽는 것을 건너뛴다.** 이름이 `*.yml` 인 디렉터리(EISDIR)나 읽기 권한이
-    //   없는 파일(EACCES) 하나로 고객 CI 가 죽으면, 이 검사기가 막으려던 것보다 큰 손해가 난다.
-    let entries;
-    try {
-        entries = readdirSync(DIR, {withFileTypes: true});
-    } catch {
-        return [];
+/** 이 트리의 워크플로. 못 본 것이 있으면 큰 소리로 남긴다 — 조용한 건너뛰기가 구멍이다. */
+function scanned() {
+    const {files, skipped} = listWorkflowFiles(DIR, fsMod);
+    for (const s of skipped) {
+        console.error(`[workflow-syntax] 건너뜀: ${s.name} — ${s.why}`);
     }
-    return entries
-        .filter((e) => e.isFile() && (e.name.endsWith(".yml") || e.name.endsWith(".yaml")))
-        .map((e) => e.name)
-        .sort();
-}
-
-/** 못 읽는 파일은 건너뛴다 — 읽기 실패는 이 검사기가 판정할 성질이 아니다. */
-function readWorkflow(name) {
-    try {
-        return readFileSync(join(DIR, name), "utf8");
-    } catch {
-        return null;
-    }
+    return files;
 }
 
 const O = EXPR_OPEN;
@@ -117,8 +110,8 @@ test("음성 통제군 — 정상 워크플로를 막지 않는다. 거짓 실�
 test("트리 — 여기 있는 워크플로에 걸리는 것이 없다", () => {
     // 고객이 워크플로를 지웠든 자기 것으로 갈았든 **없으면 잴 것이 없다.** 위 통제군이 검출기의
     // 판별력을 이미 증명했으므로, 여기서 트리의 모양을 요구하지 않는다.
-    for (const name of workflowFiles()) {
-        const src = readWorkflow(name);
+    for (const name of scanned()) {
+        const src = readWorkflow(DIR, name, fsMod);
         if (src === null) continue;
         const empty = emptyExpressions(src);
         ok(
@@ -160,6 +153,38 @@ test("오염 이름은 `env:` 매핑 아래에서만 모은다", () => {
         `jobs:\n  j:\n    steps:\n      - uses: actions/checkout@v4\n        with:\n          ref: "${O} github.head_ref }}"\n` +
         `      - run: echo "${O} env.ref }}"\n`;
     strictEqual(runInjections(src).length, 0, "with: 의 인자가 이름을 오염시켰다");
+});
+
+test("목록이 못 보는 것을 조용히 넘기지 않는다", () => {
+    // 이 판정이 시험 밖에 있으면 무력화해도 전건 초록이 된다 — 그래서 여기서 문다.
+    // 이름이 `*.yml` 인 디렉터리나 못 읽는 파일이 있으면 그 자리는 아무도 안 본 채 초록이 된다.
+    const root = mkdtempSync(join(tmpdir(), "zalkera-wf-"));
+    try {
+        writeFileSync(join(root, "a.yml"), "name: a\n");
+        writeFileSync(join(root, "b.txt"), "무관");
+        mkdirSync(join(root, "c.yml"));
+        symlinkSync(join(root, "a.yml"), join(root, "d.yml"));
+
+        const {files, skipped} = listWorkflowFiles(root, fsMod);
+        deepStrictEqual(files, ["a.yml"], "일반 파일만 남아야 한다");
+        deepStrictEqual(
+            skipped.map((s) => s.name).sort(),
+            ["c.yml", "d.yml"],
+            "건너뛴 것을 안 알리면 조용한 구멍이다",
+        );
+        for (const s of skipped) ok(s.why.length > 0, `${s.name}: 사유가 없다`);
+
+        strictEqual(readWorkflow(root, "a.yml", fsMod), "name: a\n");
+        strictEqual(readWorkflow(root, "없는파일.yml", fsMod), null, "못 읽으면 null 이어야 한다");
+    } finally {
+        rmSync(root, {recursive: true, force: true});
+    }
+});
+
+test("폴더가 없으면 조용히 빈 목록 — 고객이 .github 를 지운 트리", () => {
+    const {files, skipped} = listWorkflowFiles(join(tmpdir(), "zalkera-없는폴더-xyz"), fsMod);
+    deepStrictEqual(files, []);
+    deepStrictEqual(skipped, []);
 });
 
 test("`run:` 범위 인식이 살아 있다 — 깨지면 위 두 판정이 공허해진다", () => {
