@@ -14,7 +14,7 @@
  *   사람이 「그래도 하겠다」고 할 성질의 것이 아니라 그냥 사고다.
  */
 
-/** semver core 셋을 숫자로 비교한다. 사전순은 `3.0.9 > 3.0.10` 이라 못 쓴다. */
+/** semver core 셋을 숫자로 비교한다. 사전순은 `1.4.9 > 1.4.10` 이라 못 쓴다. */
 export function cmpVersion(a, b) {
     const x = a.split(".").map(Number);
     const y = b.split(".").map(Number);

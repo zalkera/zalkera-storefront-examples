@@ -148,7 +148,7 @@ test("메서드 집합이 본문을 만들 수 있는 것들이다", () => {
 
 test("면제 마커의 사유는 보이는 글자여야 한다", () => {
     // 「사유가 없으면 면제가 안 된다」가 참이려면 **눈에 안 보이는 사유**도 사유가 아니어야 한다.
-    // 종전 판정은 `\\S` 만 봐서 폭 없는 공백 하나로 면제가 섰다.
+    // `\\S` 는 폭 없는 공백·결합 문자를 글자로 세므로, 그것만으로는 이 명제가 거짓이 된다.
     const line = (reason: string) => `// zalkera-allow-preview-write:${reason}\n`;
     assert.ok(ALLOW_MARKER.test(line(" 캐시라서 고객 데이터가 아니다.")), "정상 사유가 막혔다");
     for (const [what, reason] of [

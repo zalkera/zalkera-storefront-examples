@@ -14,48 +14,48 @@ import {cmpVersion, mergeCodes, packGateDecision} from "./pack-gate.mjs";
 const CLEAN = {head: "aaaaaaa", dirty: false, allowRewind: false};
 const decide = (over) => packGateDecision({...CLEAN, ...over});
 
-test("cmpVersion 은 숫자로 본다 — 사전순이면 3.0.9 가 3.0.10 보다 크다", () => {
-    ok(cmpVersion("3.0.10", "3.0.9") > 0, "3.0.10 이 3.0.9 보다 커야 한다");
-    ok(cmpVersion("3.1.0", "3.0.99") > 0);
-    strictEqual(cmpVersion("3.0.43", "3.0.43"), 0);
+test("cmpVersion 은 숫자로 본다 — 사전순이면 1.4.9 가 1.4.10 보다 크다", () => {
+    ok(cmpVersion("1.4.10", "1.4.9") > 0, "1.4.10 이 1.4.9 보다 커야 한다");
+    ok(cmpVersion("1.5.0", "1.4.99") > 0);
+    strictEqual(cmpVersion("1.4.43", "1.4.43"), 0);
 });
 
 test("판정표 — 각 줄이 하나의 자리다", () => {
     const rows = [
         // [설명, 입력, 기대 code, 기대 appendable]
-        ["빈 폴더 첫 굽기", {version: "3.0.44", localMax: null, prior: undefined}, null, false],
-        ["더 높은 번호", {version: "3.0.44", localMax: "3.0.43", prior: undefined}, null, false],
-        ["같은 번호인데 원장에 없다", {version: "3.0.43", localMax: "3.0.43", prior: undefined}, "NOT_HIGHER", false],
-        ["낮은 번호", {version: "3.0.42", localMax: "3.0.43", prior: undefined}, "NOT_HIGHER", false],
+        ["빈 폴더 첫 굽기", {version: "1.4.44", localMax: null, prior: undefined}, null, false],
+        ["더 높은 번호", {version: "1.4.44", localMax: "1.4.43", prior: undefined}, null, false],
+        ["같은 번호인데 원장에 없다", {version: "1.4.43", localMax: "1.4.43", prior: undefined}, "NOT_HIGHER", false],
+        ["낮은 번호", {version: "1.4.42", localMax: "1.4.43", prior: undefined}, "NOT_HIGHER", false],
         [
             "낮은 번호 + --allow-rewind 는 사람 판단",
-            {version: "3.0.42", localMax: "3.0.43", prior: undefined, allowRewind: true},
+            {version: "1.4.42", localMax: "1.4.43", prior: undefined, allowRewind: true},
             null,
             false,
         ],
         [
             "같은 깨끗한 트리에서 세트를 잇는다",
-            {version: "3.0.43", localMax: "3.0.43", prior: {head: "aaaaaaa", dirty: false, codes: ["skeleton"]}},
+            {version: "1.4.43", localMax: "1.4.43", prior: {head: "aaaaaaa", dirty: false, codes: ["skeleton"]}},
             null,
             true,
         ],
         [
             "다른 트리에서 같은 번호",
-            {version: "3.0.43", localMax: "3.0.43", prior: {head: "bbbbbbb", dirty: false, codes: ["skeleton"]}},
+            {version: "1.4.43", localMax: "1.4.43", prior: {head: "bbbbbbb", dirty: false, codes: ["skeleton"]}},
             "LEDGER_SPLIT",
             false,
         ],
         [
             "원장이 더러운 트리에서 나왔다",
-            {version: "3.0.43", localMax: "3.0.43", prior: {head: "aaaaaaa", dirty: true, codes: ["skeleton"]}},
+            {version: "1.4.43", localMax: "1.4.43", prior: {head: "aaaaaaa", dirty: true, codes: ["skeleton"]}},
             "LEDGER_SPLIT",
             false,
         ],
         [
             "지금 트리가 더럽다 — sha 로 판본을 못 짚는다",
             {
-                version: "3.0.43",
-                localMax: "3.0.43",
+                version: "1.4.43",
+                localMax: "1.4.43",
                 prior: {head: "aaaaaaa", dirty: false, codes: ["skeleton"]},
                 dirty: true,
             },
@@ -64,7 +64,7 @@ test("판정표 — 각 줄이 하나의 자리다", () => {
         ],
         [
             "원장에 있는데 옆에 더 높은 판이 있다 — 이어굽기가 아니라 되돌리기다",
-            {version: "3.0.42", localMax: "3.0.43", prior: {head: "aaaaaaa", dirty: false, codes: ["skeleton"]}},
+            {version: "1.4.42", localMax: "1.4.43", prior: {head: "aaaaaaa", dirty: false, codes: ["skeleton"]}},
             "NOT_HIGHER",
             false,
         ],
@@ -81,8 +81,8 @@ test("--allow-rewind 로는 원장을 못 비킨다 — 갈린 판본은 사람�
     // 두 관문이 지키는 것이 다르다. 되돌리기는 사람이 책임질 수 있지만, 한 버전이 두 트리에서
     // 나온 것은 테넌트마다 다른 소스를 받는 사고다.
     const d = decide({
-        version: "3.0.43",
-        localMax: "3.0.43",
+        version: "1.4.43",
+        localMax: "1.4.43",
         prior: {head: "bbbbbbb", dirty: false, codes: ["skeleton"]},
         allowRewind: true,
     });
