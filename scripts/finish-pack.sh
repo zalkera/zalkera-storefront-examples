@@ -18,10 +18,19 @@ cd "$(dirname "$0")/.."
 ROOT="$(pwd)"
 
 echo "── 1. @zalkera/client 최신본 설치"
+# ⚠ **`package.json` 범위를 손으로 올리지 마라.** 그러면 락파일과 갈리고, `npm ci` 는 그
+#    불일치에서 죽는다 — **발행 전이면 그 범위를 만족하는 판이 없어서** 더 확실히 죽는다
+#    (실측: CI 가 `ETARGET No matching version found for @zalkera/client@^0.24.2` 로 실패).
+#    범위는 여기서, **발행된 판을 보고** 올린다.
+LATEST=$(npm view @zalkera/client version 2>/dev/null || true)
+if [ -z "$LATEST" ]; then
+    echo "❌ npm 에서 @zalkera/client 판을 못 읽었습니다 — 네트워크나 발행 상태를 확인하십시오." >&2
+    exit 1
+fi
+echo "   npm latest: $LATEST"
 # ⚠ **맨 `npm install` 로는 안 올라간다.** 락파일에 핀이 있으면 그 핀을 유지한다 —
-#    `package.json` 범위가 `^0.24.0` 이라 0.24.1 을 받아야 할 것 같지만 받지 않는다.
-#    이름을 대고 부르면 그때 범위를 다시 푼다.
-npm install "@zalkera/client@$(node -p "require('./package.json').dependencies['@zalkera/client']")"
+#    범위가 `^0.24.0` 이라 0.24.1 을 받아야 할 것 같지만 받지 않는다. 이름과 판을 대고 부른다.
+npm install "@zalkera/client@^${LATEST}"
 INSTALLED=$(node -p "require('./node_modules/@zalkera/client/package.json').version")
 PINNED=$(node -p "require('./package-lock.json').packages['node_modules/@zalkera/client'].version")
 echo "   설치본 $INSTALLED · 락파일 $PINNED"
@@ -44,9 +53,10 @@ node scripts/lib/floor-gate.mjs
 node scripts/lib/doc-claims.mjs
 node scripts/lib/wiring-parity.mjs
 
-echo "── 3. 락파일 커밋(더러운 트리에서는 팩이 안 구워진다)"
-if [ -n "$(git status --porcelain package-lock.json)" ]; then
-    git add package-lock.json
+echo "── 3. 락파일·범위 커밋(더러운 트리에서는 팩이 안 구워진다)"
+# ⚠ **둘을 같은 커밋에 담는다.** 범위만 올리고 락파일을 안 맞추면 `npm ci` 가 죽는다.
+if [ -n "$(git status --porcelain package.json package-lock.json)" ]; then
+    git add package.json package-lock.json
     git commit -q -m "chore(deps): @zalkera/client ${INSTALLED} — 팩이 이 판의 llms.txt 를 싣는다
 
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
