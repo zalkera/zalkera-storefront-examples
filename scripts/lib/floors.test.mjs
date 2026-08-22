@@ -345,3 +345,47 @@ test("키 형태가 받는 확장자를 러너의 글롭이 전부 돈다", () =
     }
     assert.ok(gate.includes('"scripts/**/*.test.mjs"'), "scripts 글롭이 없다");
 });
+
+/*
+ * 능력별 시험 — 지킬 대상이 없으면 요구하지 않는다.
+ *
+ * `AGENTS.md` 의 능력 삭제표가 쇼핑몰을 지울 때 `src/lib/oauthState.ts` 를 지우라고 하는데,
+ * 그러면 그 시험도 같이 지워야 하고 종전엔 여기서 반려됐다 — 로그인이 없는 사이트가 쓰지도
+ * 않는 파일 둘을 남겨야 통과하는 자리였다.
+ *
+ * 아래 넷이 함께 서야 이 완화가 구멍이 아니다. 특히 ③·④가 없으면 「대상을 지워 가드를 끈다」와
+ * 「시험만 지운다」가 구분되지 않는다.
+ */
+{
+    const SUITE = "src/lib/oauthState.test.ts";
+    const SUBJECT = "src/lib/oauthState.ts";
+    const tree = (drop = []) => (f) => !drop.includes(f);
+
+    test("① 대상이 있으면 그대로 요구한다", () => {
+        const {bad, skipped} = judgeFloors(ok(), tree());
+        assert.equal(bad.length, 0);
+        assert.equal(skipped.length, 0);
+    });
+
+    test("② 대상이 없으면 요구를 걷고 **걷었다고 말한다**", () => {
+        const table = Object.fromEntries(Object.entries(ok()).filter(([k]) => k !== SUITE));
+        const {bad, skipped} = judgeFloors(table, tree([SUBJECT, SUITE]));
+        assert.equal(bad.length, 0, bad.join(" · "));
+        assert.deepEqual(
+            skipped.map((s) => s.suite),
+            [SUITE],
+        );
+    });
+
+    test("③ 대상은 두고 시험만 지우면 반려한다 — 완화가 여기까지 오면 안 된다", () => {
+        const {bad, skipped} = judgeFloors(ok(), tree([SUITE]));
+        assert.equal(skipped.length, 0);
+        assert.ok(bad.some((b) => b.includes(SUITE)), bad.join(" · "));
+    });
+
+    test("④ 능력과 무관한 가드는 완화되지 않는다", () => {
+        // safeUrl 은 중립 배선이라 대상이 늘 있다 — 대상 매핑 자체가 없어야 한다.
+        const {bad} = judgeFloors(ok(), tree(["src/lib/safeUrl.test.ts", "src/lib/safeUrl.ts"]));
+        assert.ok(bad.some((b) => b.includes("safeUrl.test.ts")), bad.join(" · "));
+    });
+}

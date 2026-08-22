@@ -56,7 +56,11 @@ try {
     process.exit(e.code === "ENOENT" ? 1 : 2);
 }
 
-const {bad, effective} = judgeFloors(declared, (f) => existsSync(join(root, f)));
+const {bad, effective, skipped} = judgeFloors(declared, (f) => existsSync(join(root, f)));
+// ⚠ **건너뛴 자리는 반드시 찍는다.** 조용히 넘어가면 「대상을 지워 가드를 끈다」가 무비용이 된다.
+for (const {suite, subject} of skipped) {
+    console.log(`ℹ 가드 회귀 스위트 — ${suite} 는 요구하지 않습니다: ${subject} 가 이 트리에 없습니다.`);
+}
 if (bad.length) {
     console.error("❌ 가드 회귀 스위트 — 하한표가 판정을 통과하지 못했습니다:");
     for (const b of bad) console.error(`   · ${b}`);

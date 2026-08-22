@@ -103,17 +103,48 @@ export const FLOOR_KEY_REGEX =
     /^(src|scripts)\/(?:[A-Za-z0-9_][A-Za-z0-9_.\-]*\/)*[A-Za-z0-9_][A-Za-z0-9_.\-]*\.test\.(tsx?|mjs)$/;
 
 /**
+ * **능력별 시험 — 그 가드가 지킬 대상이 트리에 있을 때만 요구한다.**
+ *
+ * 요구 목록은 「가드가 옳은가」를 잠그는 자리다. 그런데 그중 하나는 **능력에 딸린** 가드다 —
+ * `AGENTS.md` 의 능력 삭제표가 쇼핑몰을 지울 때 `src/lib/{oauth,oauthState}.ts` 를 지우라고 하는데,
+ * 그러면 그 시험도 같이 지워야 하고 여기서 반려됐다. 로그인 화면이 없는 사이트가 **쓰지도 않는
+ * 파일 둘을 남겨야** 통과하는 자리였다.
+ *   재현: 트리에서 `src/lib/oauthState.{ts,test.ts}` 를 지우고 `node scripts/lib/floor-gate.mjs; echo rc=$?`
+ *   → 고치기 전 rc=1(가드 미달) · 고친 뒤 rc=0 + 건너뜀 한 줄
+ *
+ * 지킬 대상이 없으면 지킬 약속도 없다. 그러니 **대상이 있을 때만** 요구한다.
+ *
+ * ⚠ **건너뛰면 반드시 말한다.** 조용히 넘어가면 그것이 곧 게이트 스위치가 된다.
+ * ⚠ **판정은 경로다 — 심볼이 아니다.** 이 표 전체가 경로 키 모델이라 조건도 같은 모델로 둔다.
+ *   따라서 **본체를 다른 이름으로 옮기면 이 요구가 사라진다.** 그 형상은 이 표가 원래 못 잡는다
+ *   (경로가 바뀌면 시험 키도 안 맞는다). 심볼로 재는 그물은 검사기 `X3` 가 따로 들고 있다 —
+ *   `consumeOAuthState` 정의를 소스 어디에서든 찾아, 못 찾으면 경고한다.
+ */
+const FLOOR_SUBJECT = Object.freeze({
+    "src/lib/oauthState.test.ts": "src/lib/oauthState.ts",
+});
+
+/**
  * zip 의 하한표를 요구치와 합친다.
  *
  * @param floors  zip 에서 읽은 표(`null` 이면 못 읽은 것)
  * @param exists  스위트 파일이 트리에 있는지 묻는 함수 `(relPath) => boolean`
- * @returns `{bad, effective}` — `bad` 가 비어 있지 않으면 반려다.
+ * @returns `{bad, effective, skipped}` — `bad` 가 비어 있지 않으면 반려. `skipped` 는 대상 부재로
+ *          요구를 걷은 스위트(호출부가 **출력해야 한다**).
  */
 export function judgeFloors(floors, exists) {
     const bad = [];
     // 정본 저장소면 팩에 안 실리는 것까지 요구한다. 팩 트리에서는 요구하지 않는다 — 거기 없는
     // 파일을 요구하면 멀쩡한 팩이 「가드 미달」이라는 틀린 사유로 막힌다.
     const required = isCanonicalRepo(exists) ? {...REQUIRED_FLOORS, ...REPO_ONLY_FLOORS} : {...REQUIRED_FLOORS};
+    // 지킬 대상이 없는 가드는 요구에서 걷는다(위 [FLOOR_SUBJECT]). 걷은 자리는 호출부가 찍는다.
+    const skipped = [];
+    for (const [suite, subject] of Object.entries(FLOOR_SUBJECT)) {
+        if (suite in required && !exists(subject)) {
+            delete required[suite];
+            skipped.push({suite, subject});
+        }
+    }
     const effective = {...required};
 
     // ⚠ **`null`·`0`·`false`·`""` 도 «표가 없음»이다.** falsy 를 `?? {}` 로 흘려보내면 아래
@@ -126,6 +157,7 @@ export function judgeFloors(floors, exists) {
         return {
             bad: [`하한표가 객체가 아닙니다(${what}) — 요구 ${Object.keys(required).length}개를 잴 수 없습니다`],
             effective: {},
+            skipped,
         };
     }
 
@@ -160,5 +192,5 @@ export function judgeFloors(floors, exists) {
         bad.push(`하한표 항목이 ${listed}개입니다 — 비었거나 지워졌습니다(요구 ${want}개)`);
     }
 
-    return {bad, effective};
+    return {bad, effective, skipped};
 }
