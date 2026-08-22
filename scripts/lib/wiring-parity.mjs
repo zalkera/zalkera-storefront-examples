@@ -75,6 +75,8 @@ export const WIRING_FILES = [
     "src/lib/crossOrigin.test.ts",
     "src/lib/oauthState.test.ts",
     "src/lib/safeUrl.test.ts", // 오픈 리다이렉트 — 잠금이 0건이던 자리라 세 번째 결함이 배송됐다
+    "src/lib/oauthPath.test.ts", // safeNextPath — 로그인 능력에 딸린 소독기(갈라 낸 자리)
+    "src/lib/urlEscapes.fixture.ts", // 위 둘이 나눠 쓰는 입력 목록 — 베끼면 한쪽만 늘어난다
     "src/lib/safeUrlDrift.test.ts", // 팩 로컬 소독기와 @zalkera/client 사본의 안전성 판정이 갈리는지
     "src/lib/previewGuard.test.ts",
     // ⚠ 콘텐츠 조회 3종. `content.ts` 가 `pages[slug]` 로 바로 읽으면 `__proto__` 가

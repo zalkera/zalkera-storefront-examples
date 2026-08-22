@@ -35,30 +35,31 @@
 
 ### 어떻게 고치나
 
-**시작 소스 팩(`skeleton` 3.2.1)에서 `scripts/` 를 통째로, 그리고 아래 시험을 되살린다.**
+**시작 소스 팩(`skeleton`)에서 아래를 되살린다.**
 
 ```
-scripts/                          ← 통째로 (하한표·라이브러리·시험)
-src/lib/safeUrl.test.ts
+scripts/                            ← 통째로 (하한표·라이브러리·시험)
+src/lib/safeUrl.test.ts             ← 저장형 XSS·오픈 리다이렉트 소독기
+src/lib/urlEscapes.fixture.ts       ← 위 시험이 쓰는 입력 목록
 src/lib/reservedSegments.test.ts
-src/lib/oauth.ts                  ← 아래 ⚠
 ```
 
-시험 파일만 되살리면 안 된다 — 그 시험들이 `scripts/lib/childEnv.mjs` 같은 라이브러리 모듈을
-쓰는데 그것도 같이 지워져 있었다(실행하면 `ERR_MODULE_NOT_FOUND`).
+**시험 파일만 되살리면 안 된다.** 그 시험들이 `scripts/lib/childEnv.mjs` 같은 라이브러리 모듈을
+쓰는데 그것도 같이 지워져 있었다 — 실행하면 `ERR_MODULE_NOT_FOUND` 로 죽는다.
 
-⚠ **`src/lib/oauth.ts` 는 로그인이 없어도 남긴다.** `safeUrl.test.ts` 가 그 파일의 `safeNextPath`
-를 함께 재기 때문이다. 중립 가드(저장형 XSS) 시험이 능력 모듈에 묶여 있는 형태이고,
-**그건 우리 쪽 배치 문제라 우리가 가를 예정**이다. 갈리면 이 줄은 없어진다.
-
-**`oauthState.test.ts` 는 되살리지 않아도 된다.** 그 시험은 `src/lib/oauthState.ts` 를 import
-하는데 그쪽은 쇼핑몰·로그인을 지우면서 본체를 같이 지웠고, 그건 `AGENTS.md` 가 허용하는
-삭제다. 종전 게이트가 그 시험을 조건 없이 요구했는데 **우리가 고쳤다** — 지킬 대상이 없으면
-요구하지 않고, 건너뛴 사실을 이렇게 찍는다.
+**로그인 관련 시험은 되살리지 않아도 된다.** `oauthState.test.ts`·`oauthPath.test.ts` 는 각각
+`src/lib/oauthState.ts`·`src/lib/oauth.ts` 를 쓰는데, 그쪽은 쇼핑몰·로그인을 지우면서 본체를
+같이 지웠고 그건 `AGENTS.md` 가 허용하는 삭제다. 지킬 대상이 없으면 요구하지 않고, 건너뛴
+사실을 이렇게 찍는다.
 
 ```
 ℹ 가드 회귀 스위트 — src/lib/oauthState.test.ts 는 요구하지 않습니다: src/lib/oauthState.ts 가 이 트리에 없습니다.
+ℹ 가드 회귀 스위트 — src/lib/oauthPath.test.ts 는 요구하지 않습니다: src/lib/oauth.ts 가 이 트리에 없습니다.
 ```
+
+⚠ **팩 판을 확인하라.** 위 배치는 **3.2.2 이상**의 팩이다. `3.2.1` 밖에 없다면 그 판의
+`safeUrl.test.ts` 는 `src/lib/oauth.ts` 를 함께 쓰므로 **그 파일도 남겨야** 한다
+(`urlEscapes.fixture.ts` 는 그 판에 없다). 3.2.2 를 받는 쪽이 깔끔하다.
 
 확인:
 

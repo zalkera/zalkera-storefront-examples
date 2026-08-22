@@ -29,7 +29,8 @@ export const REQUIRED_FLOORS = {
     "src/lib/content.test.ts": 3,
     "src/lib/reservedSegments.test.ts": 4,
     "src/lib/previewGuard.test.ts": 8,
-    "src/lib/safeUrl.test.ts": 6,
+    "src/lib/safeUrl.test.ts": 5,
+    "src/lib/oauthPath.test.ts": 2,
     "src/lib/safeUrlDrift.test.ts": 4,
     "src/lib/mediaCache.test.ts": 11,
     "scripts/lib/floors.test.mjs": 26,
@@ -122,6 +123,7 @@ export const FLOOR_KEY_REGEX =
  */
 const FLOOR_SUBJECT = Object.freeze({
     "src/lib/oauthState.test.ts": "src/lib/oauthState.ts",
+    "src/lib/oauthPath.test.ts": "src/lib/oauth.ts",
 });
 
 /**
