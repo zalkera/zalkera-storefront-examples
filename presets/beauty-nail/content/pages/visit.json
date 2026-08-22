@@ -4,8 +4,8 @@
     {
       "type": "TEXT_MEDIA",
       "config": {
-        "title": "오시는 길 · 운영 시간",
-        "body": "주소를 여기에 적어 주세요. (예: 서울시 ○○구 ○○로 00, 3층)\n\n화–토 11:00 – 20:00\n일·월 휴무\n마지막 예약은 마감 2시간 전까지 받습니다.\n\n건물 주차장 1시간 무료입니다.",
+        "title": "처음 오시는 분께",
+        "body": "처음이시면 상담부터 시작합니다. 손 상태와 원하시는 분위기를 보고,\n그날 할 수 있는 것과 다음에 하는 편이 나은 것을 나눠 말씀드립니다.\n\n시간·주소·주차 안내는 아래에 있습니다.",
         "asset": "/images/salon.png",
         "mediaSide": "right"
       }
@@ -26,6 +26,83 @@
           {
             "question": "아이를 데려가도 되나요?",
             "answer": "공간이 좁아 보호자 동반이 어렵습니다. 미리 말씀해 주시면 시간을 조정해 드립니다."
+          }
+        ]
+      }
+    },
+    {
+      "type": "FACILITY_GALLERY",
+      "config": {
+        "eyebrow": "Facility",
+        "title": "공간 둘러보기",
+        "items": [
+          {
+            "asset": "/images/facility-01.png",
+            "caption": "상담 공간"
+          },
+          {
+            "asset": "/images/facility-02.png",
+            "caption": "케어 룸"
+          },
+          {
+            "asset": "/images/facility-03.png",
+            "caption": "대기 공간"
+          }
+        ]
+      }
+    },
+    {
+      "type": "BUSINESS_HOURS",
+      "config": {
+        "eyebrow": "Hours",
+        "title": "영업시간",
+        "rows": [
+          {
+            "days": "화~금",
+            "time": "11:00 – 20:00"
+          },
+          {
+            "days": "토",
+            "time": "11:00 – 18:00"
+          },
+          {
+            "days": "일·월",
+            "time": "휴무",
+            "closed": true
+          }
+        ],
+        "note": "점심 14:00 – 15:00 · 마지막 예약은 마감 2시간 전까지 받습니다.\n공휴일은 공지에서 안내드립니다."
+      }
+    },
+    {
+      "type": "DIRECTIONS",
+      "config": {
+        "eyebrow": "Location",
+        "title": "오시는 길",
+        "address": "서울특별시 어딘가로 12",
+        "detail": "OO빌딩 3층",
+        "links": [
+          {
+            "label": "네이버 지도",
+            "href": "https://map.naver.com/"
+          },
+          {
+            "label": "카카오맵",
+            "href": "https://map.kakao.com/"
+          }
+        ],
+        "items": [
+          {
+            "label": "주차",
+            "body": "건물 지하 1~2층 · 2시간 무료"
+          },
+          {
+            "label": "지하철",
+            "body": "OO역 3번 출구에서 도보 4분"
+          },
+          {
+            "label": "버스",
+            "body": "OO정류장 하차 · 간선 100·200"
           }
         ]
       }

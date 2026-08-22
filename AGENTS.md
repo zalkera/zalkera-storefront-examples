@@ -20,7 +20,7 @@
 |---|---|---|
 | 페이지의 문구(제목·본문·버튼 라벨·FAQ 문답·후기 인용·통계 수치) | `content/pages/<slug>.json` — 해당 섹션의 `config` | 홈은 `home.json` 이다(루트가 집어 온다) |
 | 섹션 순서("후기를 특징 소개 위로") | 같은 파일 `sections` **배열 재배열** | `sortOrder` 키는 없다 — 배열이 곧 순서다 |
-| 섹션 추가·삭제 | 같은 파일 `sections` 에 `{"type": …, "config": {…}}` 삽입·제거 | `type` 은 어휘 10종에서만(§섹션 렌더) |
+| 섹션 추가·삭제 | 같은 파일 `sections` 에 `{"type": …, "config": {…}}` 삽입·제거 | `type` 은 계약 어휘에서만(§섹션 렌더) |
 | 섹션 이미지 교체 | 같은 파일의 `asset`/`*Asset` 값 = `"/images/hero.png"` | 값은 **레포 루트 절대 경로만**. 실물 파일은 레포 루트 `public/` 아래(템플릿 기본에는 `public/` 이 없고 팩이 프리셋 이미지를 거기로 병합한다) |
 | **상품 진열**("여기에 상품 목록 보여줘") | `src/components/ProductRail.tsx` — 또는 그것을 조합하는 `src/app/page.tsx` | **콘텐츠 파일이 아니다.** 상품·갈래의 정본 값은 업무 DB 에 살고 화면은 비추기만 하므로, 조회는 선언이 아니라 **소스의 직접 호출**이다(§경계 규칙). 섹션 config 에 `product`·`products`·`categorySlug` 를 적으면 팩이 막는다 |
 | 그 페이지의 SEO 제목·설명 | 같은 파일의 `seo` | 없으면 페이지 제목·사이트 기본값으로 강하한다 |
@@ -28,7 +28,7 @@
 | 헤더·푸터 메뉴 | `content/nav.json` | 배열 순서가 노출 순서. `href` 는 로더가 소독한다 |
 | 섹션의 마크업·레이아웃·클래스 | `src/components/sections/` 의 해당 `*Section.tsx` | 문구가 아니라 **모양**을 바꿀 때만 |
 | 헤더·푸터의 마크업 | `src/components/SiteHeader.tsx` · `src/components/SiteFooter.tsx` | |
-| 계약 밖 새 화면(자유 영역) | `src/app/<경로>/page.tsx` | 어휘 10종은 보장의 **바닥이지 천장이 아니다** |
+| 계약 밖 새 화면(자유 영역) | `src/app/<경로>/page.tsx` | 계약 어휘는 보장의 **바닥이지 천장이 아니다** |
 
 **소스에 없는 것 — 여기서 찾지 마라.** 아래는 DB 에 살고 콘솔·`@zalkera/client` 가 다룬다. 소스는 그것을 **가리킬 뿐**이다.
 
@@ -278,12 +278,16 @@ shadcn 소스는 자기 변수층(`--card`·`--muted-foreground` …)을 전제�
   `SECTION_CONTRACT` 는 그것을 npm 으로 실어 나르는 **운반체**다. 그 KDoc 은 설치본
   `node_modules/@zalkera/client/dist/index.d.ts` 에서 읽는다 — 패키지는 소스(`sections.ts`)를 배송하지
   않으므로 여기서 그 파일을 찾지 마라(선언 파일이 KDoc 을 그대로 싣고 온다).
-  계약은 `contractRev` 로 자란다 — 현재 **rev 7**(`SECTION_CONTRACT_REV`). 오른 자국은 이렇다:
+  계약은 `contractRev` 로 자란다 — 현재 **rev 8**(`SECTION_CONTRACT_REV`). 오른 자국은 이렇다:
   rev 2·3·5 는 조회형 섹션(`SERVICE_MENU`·`BOOKING_CTA`)의 산출과 필수 참조를 조이던 세대이고,
   rev 4 는 참조 방언(`dialects`)과 콘텐츠 파일(`contentFile`)을 1급으로 올렸다.
   rev 6 = 그 조회형 섹션 둘을 **어휘에서 삭제**(진열은 소스가 직접 호출한다) ·
   rev 7 = **DB 방언 소거**(그 거처인 `page_section` 계열이 퇴역했다).
-  **rev 6 = 그 조회형 둘을 어휘에서 삭제 — 12종 → 10종.**
+  rev 8 = **방문 정보 단 신설** — `FACILITY_GALLERY`·`BUSINESS_HOURS`·`DIRECTIONS`.
+  내점형 업장이 어휘만으로 조립된다. 셋 다 `jsonLd: null` — 주소·영업시간의 구조화
+  데이터 거처는 섹션이 아니라 `site_config` 에서 나오는 홈의 조직 노드다.
+  ⚠ `DIRECTIONS.links[].href` 는 **https 웹 지도 주소**를 적는다. 지도 앱 딥링크
+  (`kakaomap://` 류)는 소독 경로에서 조용히 막힌다.
 
   **경계 규칙**: *값이 콘텐츠 파일에 사는 저작물 = 선언 섹션 / 값이 업무 DB 에 살고 화면이
   비추기만 하는 조회 = 소스가 `@zalkera/client` 를 직접 호출.* rev 3·5 가 "조회형 섹션은 참조를 반드시
@@ -303,7 +307,7 @@ shadcn 소스는 자기 변수층(`--card`·`--muted-foreground` …)을 전제�
   보장이 걸려 있고, 콘솔 폼·시드·렌더러가 같은 키를 읽어 데이터를 주고받는다. 키를 지어내면 콘솔이 넣은
   값이 렌더러에 안 읽히고 그 보장도 함께 죽는다.
 - **자유 영역 — 그 밖의 컴포넌트·라우트를 새로 만드는 것은 정상 경로다.** Next.js 라우트도 컴포넌트도 수에
-  제한이 없고, 어휘 10종은 보장의 **바닥이지 천장이 아니다**. **진열이 그 실물이다** — `ProductRail` 은
+  제한이 없고, 계약 어휘는 보장의 **바닥이지 천장이 아니다**. **진열이 그 실물이다** — `ProductRail` 은
   계약 표면이 아니라 자유 영역의 컴포넌트이고, 그래서 마음대로 뜯어고칠 수 있다. 경계 판정은 하나다 — **여기에 보장이 걸려
   있나.** 걸린 표면이면 계약을 그대로 따르고, 아니면 자유롭게 짜라.
 - `config` 파싱은 **`@zalkera/client` 헬퍼로만**(`readConfig`·`asString`·`asObjectArray`·`asHandle`·

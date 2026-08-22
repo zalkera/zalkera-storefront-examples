@@ -55,6 +55,7 @@ export const REQUIRED_FLOORS = {
  */
 export const REPO_ONLY_FLOORS = {
     "scripts/lib/packGate.test.mjs": 6,
+    "scripts/lib/rendererCoverage.test.mjs": 2,
     "scripts/lib/packManifest.test.mjs": 7,
     "scripts/lib/themeEnums.test.mjs": 16,
     "scripts/lib/validateSeverity.test.mjs": 3,

@@ -75,6 +75,11 @@ const THEMES = {
         arts: [
             ["hero.png", 1200, 800, "petal"],
             ["salon.png", 1000, 750, "bloom"],
+            // 방문 정보 단(어휘 rev 8)의 `FACILITY_GALLERY` 자리표시자. 공간을 보여 주는 칸이라
+            // 실물 사진이 들어갈 자리지만, 팩은 사진을 싣지 않으므로 같은 팔레트의 추상으로 채운다.
+            ["facility-01.png", 1200, 900, "shelf"],
+            ["facility-02.png", 1200, 900, "bands"],
+            ["facility-03.png", 1200, 900, "bloom"],
             // 전/후 짝. 같은 variant 가 같은 배치를 만들고 stage 만 다르다 — 짝이 "같은 손"으로 보여야 한다.
             ["care-01-before.png", 600, 600, "swatch", {variant: 0, stage: 0}],
             ["care-01-after.png", 600, 600, "swatch", {variant: 0, stage: 1}],
