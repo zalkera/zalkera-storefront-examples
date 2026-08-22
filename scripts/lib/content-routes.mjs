@@ -332,10 +332,14 @@ function declaredSegments(src) {
             else if (c === quote) mode = "code";
         }
     }
-    const at = out.search(/\bRESERVED_SEGMENTS\b/);
-    if (at < 0) return null;
-    const open = out.indexOf("[", at);
-    if (open < 0) return null;
+    // ⚠ **첫 `[` 를 집지 마라.** `indexOf("[", at)` 는 **아무 대괄호나** 문다 — 타입의 인덱스 접근
+    //   (`ReadonlySet<(typeof ALL)[number]>`)이나 뒤에 오는 무관한 배열을 읽어 **조용히 다른 집합**을
+    //   내놓는다. 그 답으로 판정하면 「가려지는데 목록에 없습니다: <실재 라우트 전부>」라는 거짓
+    //   사유가 나간다 — 이 함수가 없애려던 바로 그 결함이다.
+    //   그래서 **선언에 앵커한다**: 이름 → `=` → (선택) `new Set(` → `[`.
+    const decl = /\bRESERVED_SEGMENTS\b[^=\n]*=\s*(?:new\s+Set\s*\(\s*)?\[/.exec(out);
+    if (decl === null) return null;
+    const open = decl.index + decl[0].length - 1;
     let depth = 0;
     let end = -1;
     for (let i = open; i < out.length; i++) {
@@ -346,5 +350,14 @@ function declaredSegments(src) {
         }
     }
     if (end < 0) return null;
-    return new Set([...out.slice(open + 1, end).matchAll(/["'`]([^"'`]*)["'`]/g)].map((m) => m[1]).filter(Boolean));
+
+    const body = out.slice(open + 1, end);
+    // ⚠ **문자열 리터럴 말고 다른 것이 있으면 못 읽은 것이다.** `[...BASE, "c"]` 는 BASE 를 못 보고
+    //   `{c}` 만 내며, 그 부분 답이 곧 거짓 반려가 된다. 답을 반만 아는 것보다 «모른다»가 낫다.
+    if (!/^(?:\s*(["'`])[^"'`]*\1\s*,?)*\s*$/.test(body)) return null;
+    // ⚠ **뒤에 뭔가 붙으면 그 배열이 최종값이 아니다** — `["a"].concat(["b"])` 는 `{a}` 로 읽힌다.
+    const after = out.slice(end + 1).match(/^\s*(.)/);
+    if (after !== null && (after[1] === "." || after[1] === "[")) return null;
+
+    return new Set([...body.matchAll(/["'`]([^"'`]*)["'`]/g)].map((m) => m[1]).filter(Boolean));
 }

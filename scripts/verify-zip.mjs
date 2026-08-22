@@ -673,7 +673,10 @@ try {
                         .filter(Boolean)
                         .join(" / ");
                     record("최상위 구성", false, why);
-                    console.error("   배송할 것이면 이 목록에 더하고, 아니면 `SOURCE_EXCLUDES` 에 넣으십시오.");
+                    console.error(
+                        "   배송할 것이면 이 파일의 `REQUIRED_TOP` 에 더하고, 아니면 " +
+                            "`scripts/pack-preset.mjs` 의 `SOURCE_EXCLUDES` 에 넣으십시오.",
+                    );
                     console.error("   전 테넌트로 복제되고 회수가 안 되는 자리라 한 번 명시하고 지나갑니다.");
                     failed = true;
                 } else {

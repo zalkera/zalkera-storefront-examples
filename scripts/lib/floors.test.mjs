@@ -377,6 +377,18 @@ test("키 형태가 받는 확장자를 러너의 글롭이 전부 돈다", () =
         );
     });
 
+    test("②-b 표가 그 키를 들고 있어도 «잴 목록»에서 뺀다 — 완화가 절반만 걸리면 안 된다", () => {
+        // 팩이 싣는 표는 19줄 전부를 든다. 요구에서만 걷으면 그 표가 effective 로 되돌려 놓고
+        // 러너가 통과 0건을 재어 「하한 미달」로 반려한다 — 대상이 없는 트리가 막히는 자리다.
+        const {bad, effective, skipped} = judgeFloors(ok(), tree([SUBJECT, SUITE]));
+        assert.equal(bad.length, 0, bad.join(" · "));
+        assert.deepEqual(
+            skipped.map((s) => s.suite),
+            [SUITE],
+        );
+        assert.ok(!(SUITE in effective), `걷어냈는데 잴 목록에 남아 있다: ${Object.keys(effective).join(" · ")}`);
+    });
+
     test("③ 대상은 두고 시험만 지우면 반려한다 — 완화가 여기까지 오면 안 된다", () => {
         const {bad, skipped} = judgeFloors(ok(), tree([SUITE]));
         assert.equal(skipped.length, 0);

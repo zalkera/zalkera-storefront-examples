@@ -144,3 +144,32 @@ test("목록 상수를 못 찾으면 «통과»가 아니라 «못 읽음»이�
     assert.equal(rc, 2, out.slice(-500));
     assert.match(out, /RESERVED_SEGMENTS 를 못 읽었습니다/);
 });
+
+/*
+ * 목록을 **반만 읽었으면 「읽었다」가 아니다.**
+ *
+ * 첫 판은 이름 뒤 **첫 대괄호**를 물었다. 그래서 타입의 인덱스 접근이나 뒤에 오는 무관한 배열을
+ * 읽어 **조용히 다른 집합**을 내놓았고, 그 답으로 판정하니 실재 라우트 전부가 「목록에 없습니다」로
+ * 반려됐다 — 이 파서가 없애려던 바로 그 결함이다. 부분 답보다 «모른다»가 낫다.
+ */
+for (const [name, listRaw] of [
+    ["파생 상수", 'const ALL = ["contact"];\nexport const RESERVED_SEGMENTS: ReadonlySet<(typeof ALL)[number]> = new Set(ALL);\n'],
+    ["뒤에 무관 배열", "export const RESERVED_SEGMENTS = new Set(NAMES);\nconst OTHER = [\"zzz\"];\n"],
+    ["스프레드", 'export const RESERVED_SEGMENTS = new Set([...BASE, "contact"]);\n'],
+]) {
+    test(`${name} 은 «못 읽음»으로 선다 — 반만 읽고 반려하지 않는다`, () => {
+        const {rc, out} = run(tree({routes: {"/contact/page": "/contact"}, listRaw}));
+        assert.equal(rc, 2, out.slice(-500));
+        assert.match(out, /RESERVED_SEGMENTS 를 못 읽었습니다/);
+    });
+}
+
+test("선언 앞 문자열이 이름을 담고 있어도 진짜 선언을 읽는다", () => {
+    const {rc, out} = run(
+        tree({
+            routes: {"/contact/page": "/contact"},
+            listRaw: 'const S = "RESERVED_SEGMENTS[0]";\nexport const RESERVED_SEGMENTS = new Set(["contact"]);\n',
+        }),
+    );
+    assert.equal(rc, 0, out.slice(-500));
+});

@@ -25,6 +25,13 @@ import {ESCAPES, INTERNAL} from "./urlEscapes.fixture.ts";
  *   중립 가드 시험이 통째로 못 돈다**(`ERR_MODULE_NOT_FOUND`).
  */
 
+test("말뭉치가 비면 위 시험들이 공허해진다 — 크기를 못 박는다", () => {
+    // `urlEscapes.fixture.ts` 를 비우면 아래 전부가 «0건을 돌고 초록»이 된다. 하한표는 통과
+    // **개수**만 세므로 그 형태를 못 잡는다 — 형제 `safeUrlDrift.test.ts` 와 같은 처방이다.
+    assert.ok(ESCAPES.length >= 8, `이탈 말뭉치가 줄었다: ${ESCAPES.length}`);
+    assert.ok(INTERNAL.length >= 6, `정상 경로 말뭉치가 줄었다: ${INTERNAL.length}`);
+});
+
 test("이탈 형태는 전부 거부된다 — internalPath", () => {
     for (const e of ESCAPES) assert.equal(internalPath(e), null, `통과하면 안 된다: ${e}`);
 });

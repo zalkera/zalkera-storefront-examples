@@ -29,18 +29,18 @@ export const REQUIRED_FLOORS = {
     "src/lib/content.test.ts": 3,
     "src/lib/reservedSegments.test.ts": 4,
     "src/lib/previewGuard.test.ts": 8,
-    "src/lib/safeUrl.test.ts": 5,
+    "src/lib/safeUrl.test.ts": 6,
     "src/lib/oauthPath.test.ts": 2,
     "src/lib/safeUrlDrift.test.ts": 4,
     "src/lib/mediaCache.test.ts": 11,
-    "scripts/lib/floors.test.mjs": 26,
+    "scripts/lib/floors.test.mjs": 31,
     "scripts/lib/gateProbe.test.mjs": 14,
     "scripts/lib/junkEntries.test.mjs": 8,
     "scripts/lib/childEnv.test.mjs": 12,
     "scripts/lib/vendorSet.test.mjs": 3,
     "scripts/workflow-syntax.test.mjs": 35,
     "scripts/lib/floorGate.test.mjs": 11,
-    "scripts/lib/contentRoutes.test.mjs": 6,
+    "scripts/lib/contentRoutes.test.mjs": 12,
     "src/lib/theme.test.ts": 9,
     "src/lib/preview.test.ts": 4,
 };
@@ -118,8 +118,12 @@ export const FLOOR_KEY_REGEX =
  * ⚠ **건너뛰면 반드시 말한다.** 조용히 넘어가면 그것이 곧 게이트 스위치가 된다.
  * ⚠ **판정은 경로다 — 심볼이 아니다.** 이 표 전체가 경로 키 모델이라 조건도 같은 모델로 둔다.
  *   따라서 **본체를 다른 이름으로 옮기면 이 요구가 사라진다.** 그 형상은 이 표가 원래 못 잡는다
- *   (경로가 바뀌면 시험 키도 안 맞는다). 심볼로 재는 그물은 검사기 `X3` 가 따로 들고 있다 —
- *   `consumeOAuthState` 정의를 소스 어디에서든 찾아, 못 찾으면 경고한다.
+ *   (경로가 바뀌면 시험 키도 안 맞는다).
+ *
+ *   ⚠ **그 자리를 받아 주는 그물이 없다.** 검사기 `X3` 는 `consumeOAuthState` 만 재는데 그 심볼은
+ *     `src/lib/session.ts` 에 살고, 여기 두 대상(`oauthState.ts`·`oauth.ts`)의 수출물
+ *     (`matchesOAuthState`·`safeNextPath`)은 아예 안 본다. 즉 **개명 이탈은 무방비다.**
+ *     막으려면 심볼 탐침을 따로 세워야 한다 — 지금은 그 사실을 적어 두는 것이 우리가 하는 전부다.
  */
 const FLOOR_SUBJECT = Object.freeze({
     "src/lib/oauthState.test.ts": "src/lib/oauthState.ts",
