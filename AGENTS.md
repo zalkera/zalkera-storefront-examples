@@ -278,11 +278,14 @@ shadcn 소스는 자기 변수층(`--card`·`--muted-foreground` …)을 전제�
   `SECTION_CONTRACT` 는 그것을 npm 으로 실어 나르는 **운반체**다. 그 KDoc 은 설치본
   `node_modules/@zalkera/client/dist/index.d.ts` 에서 읽는다 — 패키지는 소스(`sections.ts`)를 배송하지
   않으므로 여기서 그 파일을 찾지 마라(선언 파일이 KDoc 을 그대로 싣고 온다).
-  계약은 `contractRev` 로 자란다 — 현재 **rev 7**(`SECTION_CONTRACT_REV`). 오른 자국은 이렇다:
+  계약은 `contractRev` 로 자란다 — 현재 **rev 8**(`SECTION_CONTRACT_REV`). 오른 자국은 이렇다:
   rev 2·3·5 는 조회형 섹션(`SERVICE_MENU`·`BOOKING_CTA`)의 산출과 필수 참조를 조이던 세대이고,
   rev 4 는 참조 방언(`dialects`)과 콘텐츠 파일(`contentFile`)을 1급으로 올렸다.
   rev 6 = 그 조회형 섹션 둘을 **어휘에서 삭제**(진열은 소스가 직접 호출한다) ·
   rev 7 = **DB 방언 소거**(그 거처인 `page_section` 계열이 퇴역했다).
+  rev 8 = **방문 정보 단 신설** — `FACILITY_GALLERY`·`BUSINESS_HOURS`·`DIRECTIONS`.
+  내점형 업장이 어휘만으로 조립된다. 셋 다 `jsonLd: null` — 주소·영업시간의 구조화
+  데이터 거처는 섹션이 아니라 `site_config` 에서 나오는 홈의 조직 노드다.
   **rev 6 = 그 조회형 둘을 어휘에서 삭제.**
 
   **경계 규칙**: *값이 콘텐츠 파일에 사는 저작물 = 선언 섹션 / 값이 업무 DB 에 살고 화면이

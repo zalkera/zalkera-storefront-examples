@@ -31,6 +31,87 @@
       }
     },
     {
+      "type": "FACILITY_GALLERY",
+      "config": {
+        "eyebrow": "Facility",
+        "title": "공간 둘러보기",
+        "items": [
+          {
+            "asset": "/images/facility-01.png",
+            "caption": "상담 공간"
+          },
+          {
+            "asset": "/images/facility-02.png",
+            "caption": "케어 룸"
+          },
+          {
+            "asset": "/images/facility-03.png",
+            "caption": "대기 공간"
+          }
+        ]
+      }
+    },
+    {
+      "type": "BUSINESS_HOURS",
+      "config": {
+        "eyebrow": "Hours",
+        "title": "영업시간",
+        "rows": [
+          {
+            "days": "화~금",
+            "time": "11:00 – 20:00"
+          },
+          {
+            "days": "토",
+            "time": "11:00 – 18:00"
+          },
+          {
+            "days": "일·월",
+            "time": "휴무",
+            "closed": true
+          },
+          {
+            "days": "점심",
+            "time": "14:00 – 15:00"
+          }
+        ],
+        "note": "공휴일은 공지에서 안내드립니다."
+      }
+    },
+    {
+      "type": "DIRECTIONS",
+      "config": {
+        "eyebrow": "Location",
+        "title": "오시는 길",
+        "address": "서울특별시 어딘가로 12",
+        "detail": "OO빌딩 3층",
+        "links": [
+          {
+            "label": "네이버 지도",
+            "href": "https://map.naver.com/"
+          },
+          {
+            "label": "카카오맵",
+            "href": "https://map.kakao.com/"
+          }
+        ],
+        "items": [
+          {
+            "label": "주차",
+            "body": "건물 지하 1~2층 · 2시간 무료"
+          },
+          {
+            "label": "지하철",
+            "body": "OO역 3번 출구에서 도보 4분"
+          },
+          {
+            "label": "버스",
+            "body": "OO정류장 하차 · 간선 100·200"
+          }
+        ]
+      }
+    },
+    {
       "type": "LEAD_CTA",
       "config": {
         "title": "예약 문의 남기기",
