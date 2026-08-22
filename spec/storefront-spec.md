@@ -9,11 +9,11 @@
 
 문서는 낡는다. 그래서 이 문서는 **판정하지 않는다.** 판정은 기계가 한다.
 
-| 층 | 정본 | 읽는 법 |
-|---|---|---|
-| 계약 본문 | `@zalkera/client` 의 `llms.txt` | `node_modules/@zalkera/client/llms.txt` |
-| 섹션 어휘 | `SECTION_CONTRACT` (같은 패키지) | 아래 §5 의 조회 명령 |
-| 집행 | `validate-storefront.mjs` | `npx zalkera-validate . --gate` |
+| 층        | 정본                             | 읽는 법                                 |
+| --------- | -------------------------------- | --------------------------------------- |
+| 계약 본문 | `@zalkera/client` 의 `llms.txt`  | `node_modules/@zalkera/client/llms.txt` |
+| 섹션 어휘 | `SECTION_CONTRACT` (같은 패키지) | 아래 §5 의 조회 명령                    |
+| 집행      | `validate-storefront.mjs`        | `npx zalkera-validate . --gate`         |
 
 이 문서가 기계와 어긋나면 **기계가 옳다.** 여기 적힌 규칙마다 검사기의 규칙 ID(`[S2]`·`[N4]` …)를
 같이 적어 둔 이유가 그것이다 — 규칙을 의심할 때 무엇을 돌려 확인할지 알려 주기 위해서다.
@@ -34,9 +34,9 @@
 ## 2. 스택 요건
 
 - **Next.js App Router** · React · TypeScript. 서버 컴포넌트 우선.
-- **Tailwind CSS v4** + `@theme` 토큰. (Pages Router 도 돌지만 테마 주입 축 `[S8-b]` 이 성립하지 않는다 —
+- **Tailwind CSS v4** + `@theme` 토큰. (Pages Router 도 돌지만 테마 주입 축 `[S8]` 이 성립하지 않는다 —
   App Router 를 쓸 것.)
-- 도메인 데이터는 **`@zalkera/client`** 로만 조회한다. 백엔드를 직접 `fetch` 하지 마라.
+- 도메인 데이터는 **`@zalkera/client`** 로 조회한다. 백엔드를 직접 `fetch` 하지 마라.
 
 ## 3. 레포 형상 — 최소 필수
 
@@ -46,23 +46,30 @@ package-lock.json     같이 커밋한다 — 없으면 npm ci 가 안 돈다
 next.config.ts        output: "standalone"  (§12)
 src/app/layout.tsx    전역 CSS import + 테마 주입 배선 (§7)
 src/app/page.tsx      홈
-src/app/globals.css   유일한 CSS. @theme 토큰 정의 (§6)
-src/app/sitemap.ts    · src/app/robots.ts
+src/app/globals.css   스타일 진입점. @theme 토큰 정의 (§6)
+src/app/sitemap.ts    · src/app/robots.ts   (기계가 요구하진 않는다 — AEO 검사가 본다)
 content/index.ts      콘텐츠 매니페스트 — 정적 import (§5)
 content/pages/*.json  페이지별 섹션 배열 (§5)
 public/               콘텐츠가 가리키는 이미지 실물 (§5)
 AGENTS.md             레포 루트 (§13)
+tsconfig.json         resolveJsonModule: true (§5)
+postcss.config.mjs    @tailwindcss/postcss (아래 경고)
+src/components/sections/SectionRenderer.tsx   ← 경로가 고정이다 (§5)
 ```
 
+⚠ **Tailwind 배선이 빠져도 검사기는 초록이다.** S 규칙군은 클래스 **이름**만 읽고 CSS 파이프라인은
+안 본다. `postcss.config.mjs` 의 `@tailwindcss/postcss` 나 `globals.css` 첫 줄의
+`@import "tailwindcss";` 가 없으면 **rc=0 인 채로 스타일 없는 사이트가 나간다.** 화면으로 확인해라.
+
 ⚠ **`public/` 을 빼먹지 마라.** 콘텐츠의 `asset` 값이 가리키는 실물이 없으면 `[N5]` 에러이고,
-고치지 않고 개시하면 **깨진 이미지**가 나간다. 실제 업로드에서 가장 흔한 결함이다.
+고치지 않고 개시하면 **깨진 이미지**가 나간다. 업로드 검수에서 실제로 나온 결함이다.
 
 ## 4. 선언 — `package.json`
 
 ```json
 {
-  "zalkera": {"styling": "tailwind-tokens", "content": "source"},
-  "dependencies": {"@zalkera/client": "^<발행판>"}
+    "zalkera": {"styling": "tailwind-tokens", "content": "source"},
+    "dependencies": {"@zalkera/client": "^<발행판>"}
 }
 ```
 
@@ -82,10 +89,8 @@ AGENTS.md             레포 루트 (§13)
 ```jsonc
 // content/pages/home.json
 {
-  "seo": {"title": "…", "description": "…"},
-  "sections": [
-    {"type": "HERO", "config": {"title": "…", "asset": "/images/hero.png"}}
-  ]
+    "seo": {"title": "…", "description": "…"},
+    "sections": [{"type": "HERO", "config": {"title": "…", "asset": "/images/hero.png"}}],
 }
 ```
 
@@ -93,6 +98,22 @@ AGENTS.md             레포 루트 (§13)
 - `config` 는 **객체**다. JSON 문자열을 넣지 마라.
 - `content/index.ts` 가 모든 페이지를 **정적 import** 한다. 런타임 `fs` 읽기로 바꾸지 마라 —
   HMR 과 `next build` 트레이싱을 함께 잃는다. 매니페스트와 파일이 어긋나면 `[N3]`.
+
+    ⚠ **경로 별칭을 쓰지 마라 — 지정자가 정확히 `./pages/<slug>.json` 이어야 한다.**
+    검사기가 매니페스트를 그 형태로만 읽는다. `@/content/pages/home.json` 처럼 별칭으로 쓰면
+    **한 장도 못 읽어** 모든 페이지가 「매니페스트가 import 하지 않는다」(`[N3]`)로 반려된다 —
+    분명히 import 했는데 안 했다는 메시지가 나오는 자리다.
+
+    ```ts
+    // content/index.ts
+    import home from "./pages/home.json";
+    import about from "./pages/about.json";
+    export const pages = {home, about};
+    export const pageSlugs = () => Object.keys(pages);
+    ```
+
+    `tsconfig.json` 에 `"resolveJsonModule": true` 가 있어야 이 import 가 선다.
+
 - **이미지 참조**: `"asset": "/images/hero.png"` — 레포 `public/` 루트 절대 경로만.
   `//` 시작 금지 · `\` 금지 · `..` 구간 금지. 실물이 없으면 `[N5]`.
 - **id 형 키 금지**: `assetId`·`productId` 같은 키를 소스에 쓰지 마라(`[N5]`). 숫자 id 는 테넌트에
@@ -101,7 +122,10 @@ AGENTS.md             레포 루트 (§13)
 ### 섹션 어휘 — `type` 을 지어내지 마라
 
 `type` 값은 계약 어휘에만 있는 것을 쓴다. **없는 이름을 쓰면 렌더러가 조용히 건너뛰어
-화면에 아무것도 안 나온다** — 예외도 안 나므로 눈으로 찾아야 한다. 검사기가 `[N4]` 로 잡는다.
+화면에 아무것도 안 나온다** — 예외도 안 나므로 눈으로 찾아야 한다.
+
+재현: 콘텐츠의 `type` 을 계약에 없는 이름으로 바꾸고 `npx zalkera-validate . --gate; echo rc=$?`
+→ `❌ [N4] … 계약에 없는 섹션 타입` · rc=1
 
 살아 있는 목록은 조회한다(이 문서에 옮겨 적으면 낡는다):
 
@@ -112,7 +136,13 @@ node -p "require('@zalkera/client').SECTION_CONTRACT.map(s=>s.type).join('\n')"
 **어휘에 없는 화면이 필요하면 섹션이 아니라 자유 영역으로 만들어라** — 컴포넌트를 새로 쓰고
 페이지에서 직접 부르면 된다. 어휘를 늘리려 하지 마라.
 
-- 렌더러(`SectionRenderer`)의 `switch` 는 **콘텐츠가 실제로 쓰는 모든 `type`** 에 `case` 가 있어야 한다(`[C2]`).
+`SECTION_CONTRACT` 는 `type` 만 나른다. **각 타입의 `config` 키는 `llms.txt` 에 있다** —
+검사기가 그 키를 재지는 않지만, 콘솔 폼·렌더러가 같은 키로 값을 주고받으므로 키를 지어내면
+콘솔이 넣은 값이 화면에 안 읽힌다.
+
+- 렌더러의 `switch` 는 **콘텐츠가 실제로 쓰는 모든 `type`** 에 `case` 가 있어야 한다(`[C2]`).
+  ⚠ **파일 경로가 고정이다 — `src/components/sections/SectionRenderer.tsx`.** 다른 자리에 두면
+  검사가 **조용히 건너뛴다**(오류가 아니라 무검사다). 보장이 걸린 검사가 안 도는 형상이다.
 - `default:` 는 **조용히 null** 이다. 여기서 throw 하거나 에러를 내지 마라 — 섹션 하나가 페이지를
   죽이지 않는 것이 계약이다.
 - `config` 파싱은 `@zalkera/client` 헬퍼로만(`readConfig`·`asString`·`asObjectArray`·`assetPath` …).
@@ -120,12 +150,19 @@ node -p "require('@zalkera/client').SECTION_CONTRACT.map(s=>s.type).join('\n')"
 
 ### 진열(상품·갈래)은 섹션이 아니다
 
-상품·가격·재고·갈래는 업무 DB 에 살고 화면은 비추기만 한다. 그래서 **선언이 아니라 소스의 직접 호출**이다 —
-`listProducts()`·`listProductCategories()` 를 컴포넌트에서 부른다. 섹션 `config` 에 `product`·`products`·
+상품·가격·재고·갈래는 업무 DB 에 살고 화면은 비추기만 한다. 그래서 **선언이 아니라 소스의 직접 호출**이다.
+조회는 **클라이언트 인스턴스의 메서드**다 — 모듈에서 바로 꺼내 쓰는 함수가 아니다:
+
+```ts
+const client = createZalkeraClient({...});   // 서버 전용 싱글턴
+const products = await client.listProducts({...});
+```
+
+섹션 `config` 에 `product`·`products`·
 `categorySlug` 를 적지 마라.
 
-- **0건이면 `return null`.** 빈 진열대는 방문자에게 거짓이고, "상품을 등록하면 여기 표시됩니다" 같은
-  안내도 넣지 마라 — 그 문장의 독자는 사장이고 사장의 표면은 콘솔이다.
+- **0건이면 `return null`.** 빈 진열대와 "상품을 등록하면 여기 표시됩니다" 류의 안내를 방문자
+  화면에 내지 마라. 목록 JSON-LD 도 0건이면 내지 않는다(빈 `ItemList` 는 내는 것보다 안 내는 것이 맞다).
 
 ## 6. 색·스타일 계약 — `[S1]`~`[S6]`
 
@@ -136,7 +173,8 @@ node -p "require('@zalkera/client').SECTION_CONTRACT.map(s=>s.type).join('\n')"
 - **리터럴 색 금지**(`[S4]`): `bg-[#3b82f6]` 같은 임의값 금지. 피할 수 없으면 `bg-[color:var(--color-primary)]`.
 - **JSX 인라인 `style={{…}}` 금지**(`[S2]`). CSS 변수 주입(`style={{"--x": v}}`)은 면제다.
   정당한 동적 스타일이면 마커로 억제한다(아래).
-- **CSS 는 한 장**(`[S5]`): `src/app/globals.css` 하나만 둔다.
+- **CSS 는 한 장**(`[S5]`): 진입점 하나만 둔다. 자리는 어디든 좋고 root layout 이 싣기만 하면 된다.
+  ⚠ `[S5]` 는 **선언 모드에서도 경고**다 — rc 를 올리지 않는다.
 - **남의 토큰 어휘 금지**(`[S6]`): shadcn 을 발췌해 오면 `bg-card`·`text-muted-foreground` 같은 클래스가
   따라온다. 그 클래스는 우리 `@theme` 에 없어서 **Tailwind 가 아예 생성하지 않고 색이 조용히 사라진다.**
   자기 토큰으로 바꿔 쓴 뒤 커밋한다.
@@ -148,10 +186,15 @@ node -p "require('@zalkera/client').SECTION_CONTRACT.map(s=>s.type).join('\n')"
 // zalkera-allow-inline-style: 스크롤 위치로 계산하는 높이라 클래스로 표현 불가
 ```
 
-- **진짜 `//` 주석이어야 한다.** 문자열 리터럴 안의 같은 글자는 면제되지 않는다.
+- **`//` 앵커가 있어야 한다.** 앵커 없는 맨몸 글자는 안 먹는다.
+  (반대로 `//` 가 붙어 있으면 문자열 안이라도 먹는 규칙이 있다 — 면제를 숨기지 마라.)
 - **사유가 필수이고 같은 줄에 있어야 한다.** 사유가 없거나 다음 줄에 있으면 안 먹는다.
 - 인정되는 이름: `dynamic` · `inline-style` · `cross-origin` · `custom-theme-inject`.
-- **면제는 출구가 아니라 기록이다** — 검사기가 면제 목록을 항상 출력한다(조용히 늘지 않게).
+- **`cross-origin` 마커는 파일 상단 — 첫 `export` 앞에만 듣는다.** 아래에 두면 무시된다.
+  `dynamic` 은 **원인 파일**에 단다(페이지가 아니라 그 API 를 부르는 파일).
+- **면제는 출구가 아니라 기록이다.** 다만 **목록으로 찍히는 것은 교차출처 면제뿐**이다 —
+  `dynamic`·`custom-theme-inject` 는 보통 경고 줄로 나오고, `inline-style` 억제는 아무것도 안 찍는다.
+  마커를 달았다고 남이 알아본다고 여기지 마라.
 
 ## 7. 테마 주입 배선 — `[S8]` · 지우지 마라
 
@@ -168,20 +211,24 @@ return <html style={style}>…</html>;
 **이 두 조각이 "말로 색 바꾸기"의 전부다.** 하나라도 없으면 콘솔에서 색을 바꿔도 **성공 보고만 나오고
 화면은 그대로**인 거짓성공이 된다 — 사용자는 무엇이 고장났는지 알 길이 없다.
 
-- `globals.css` 에 `@theme` 과 `--color-primary:` 정의가 있어야 한다(`[S8-a]`).
-- root layout 에 `parseThemeColors(` **호출**과 `<html … style=>` 이 있어야 한다(`[S8-b]`).
-  주석이 아니라 **코드**에서 찾는다.
+둘 다 있어야 하고, 어느 쪽이 빠져도 출력에는 `[S8]` 로 찍힌다.
+
+- 스타일 진입점에 `@theme` 과 `--color-primary:` 정의가 있을 것.
+- root layout 에 `parseThemeColors(` **호출**과 `<html … style=>` 이 있을 것.
+  주석이 아니라 **코드**에서 찾는다. (Pages Router 에는 이 자리가 없어 뒤쪽 축이 성립하지 않는다.)
 - 자기 헬퍼로 직접 배선했으면 `// zalkera-allow-custom-theme-inject: <이유>` 로 사유를 남긴다.
   **마커는 검사를 면제할 뿐 동작을 보장하지 않는다** — 반영은 사람이 한 번 확인해야 한다.
 
-## 8. 데이터 조회 · 시크릿 — `[E1]`~`[E3]` · `[W1]`
+## 8. 데이터 조회 · 시크릿 — `[E1]`~`[E3]`
 
-이 축은 **선언과 무관하게 항상 재고, 게이트에서 error 다.**
+`[E1]`~`[E3]` 은 **선언과 무관하게 재고, 게이트에서 error 다.**
+(`[W1]` — 클라이언트 싱글턴을 못 찾음 — 은 어느 모드에서도 경고다.)
 
 - 서버 전용 클라이언트 싱글턴을 하나 만들어 서버에서만 쓴다(`createZalkeraClient`).
 - **`"use client"` 파일에서 `@zalkera/client` 나 그 싱글턴을 값으로 import 하지 마라**(`[E1]`·`[E2]`).
   타입만 필요하면 `import type` 을 쓴다. baseUrl·토큰이 브라우저 번들로 새는 경계다.
-- **시크릿을 `NEXT_PUBLIC_*` 에 담지 마라**(`[E3]`). Next 가 계약상 브라우저 번들에 굽는다 —
+- **시크릿을 `NEXT_PUBLIC_*` 에 담지 마라.** (`[E3]` 이 이름으로 잡는 것은 그중
+  `SECRET`·`PRIVATE_KEY`·`STOREFRONT_KEY` 를 담은 이름이다 — 안 잡힌다고 안전한 것이 아니다.) Next 가 계약상 브라우저 번들에 굽는다 —
   "샐 수 있다"가 아니라 **이미 샌 것**으로 판정한다.
 - 스토어프론트 키(`oqsk_…`)를 소스나 `.env` 에 박지 마라(`[E3]`).
 
@@ -207,6 +254,30 @@ export async function POST(req: Request) {
     …
 }
 ```
+
+⚠ **`assertSameOrigin` 은 `@zalkera/client` 가 주지 않는다 — 직접 쓴다.** 검사기는 그 **이름의 호출**이
+본문 첫 구문에 있는지만 본다. `consumeOAuthState`(`[X3]`)도 마찬가지다.
+
+판정 규칙은 이것이다. 네 줄이 각각 사고의 기록이라 임의로 완화하지 마라.
+
+```
+통과 ⇔ Origin 존재 ∧ Origin ≠ "null"
+       ∧ Origin.host == (x-forwarded-host ?? host)
+       ∧ (Sec-Fetch-Site 가 있으면 그 값이 "same-origin")
+```
+
+- **`Origin` 부재를 통과시키지 마라.** "없으면 통과"는 흔한 완화지만 그 구멍으로 폼 제출이 다시
+  들어온다. 서버-대-서버 호출자는 자기 자격증명을 들고 오므로 이 가드가 필요 없다 —
+  면제가 필요하면 그 라우트에 마커로 명시한다.
+- **`Sec-Fetch-Site` 를 단독 판정에 쓰지 마라.** `!== "cross-site"` 관용구는 플랫폼 존이
+  `{tenant}.{zone}` 이라 테넌트끼리 `same-site` 여서 테넌트-대-테넌트 위조를 연 채로 남는다.
+  **있으면 `same-origin` 일 때만**이라는 보조 신호로만 쓴다(안 보내는 브라우저가 있어 부재는 통과).
+- **스킴을 비교하지 마라.** 오케스트레이터가 `x-forwarded-proto: "http"` 를 넣는데 공개 스킴은
+  https 다. 비교하면 전 사이트가 즉시 죽는다. **호스트만 본다.**
+- **env 화이트리스트를 쓰지 마라.** 커스텀 도메인·미리보기 호스트 조합에서 드리프트해 장애가 된다.
+  **요청이 실제로 도달한 호스트와 비교**하는 자기참조가 정석이다.
+
+구현·시험 본보기는 예제 레포의 `src/lib/crossOrigin.ts`(판정)와 `src/lib/http.ts`(응답)에 있다.
 
 막는 것은 남의 사이트의 자동제출 `<form>` 이 브라우저를 `POST https://이사이트/api/...` 로 직접
 보내는 경로다. 그 경로에서는 우리 번들이 **한 줄도 실행되지 않으므로** `sessionStorage` 로는 못 막는다.
@@ -239,7 +310,7 @@ const access = {accessToken, phone, context: {clientIp: visitorIp(await headers(
 
 - **값은 반드시 `visitorIp()` 로 뽑아라**(`[I1]`). `x-forwarded-for` 첫 홉을 직접 쓰면
   **방문자가 위조할 수 있다** — 선언이 있는 척하면서 값이 거짓이면 없느니만 못하다.
-- 대상 9종: `getOrder`·`getShipment`·`cancelOrder`·`startPayment`·`confirmPayment`·`completeOrder`·
+- 대상: `getOrder`·`getShipment`·`cancelOrder`·`startPayment`·`confirmPayment`·`completeOrder`·
   `submitInquiry`·`submitLead`·`recordPostView`(`[I2]`).
 - 안 하면 그 사이트 방문자가 한 IP 로 뭉쳐 **남의 오입력이 내 429 가 된다**(문의는 60초 3건).
   조회수는 429 가 아니라 **게시글마다 하루 한 건**으로 접혀 집계가 조용히 죽는다.
@@ -251,6 +322,9 @@ const access = {accessToken, phone, context: {clientIp: visitorIp(await headers(
 
 - `next.config.ts` 의 **`output: "standalone"`** 한 줄. 지우면 `next build` 는 성공하고
   **서빙 게이트만 반려**한다 — 빌드가 그린이라 눈에 안 띄는 종류의 고장이다.
+- ⚠ **`[O1]` 은 `--gate` 에서도 경고다.** 설정 파일의 글자만 읽어서는 빌드가 실제로 무엇을 낼지
+  증명할 수 없기 때문이다. **`zalkera-validate` 가 초록이어도 이 자리는 반려될 수 있다** —
+  판정은 산출물을 읽는 쪽에서 난다.
 - `output: "export"`·`distDir` 변경도 같은 결과다.
 - **런타임 파일시스템은 읽기 전용이다.** 아티팩트가 `:ro` 로 마운트된다. 런타임에 파일을 쓰는 코드
   (업로드 저장·로그 파일·생성 캐시)를 두지 마라 — 빌드는 통과하고 **서빙 중에 죽는다.**
@@ -259,7 +333,7 @@ const access = {accessToken, phone, context: {clientIp: visitorIp(await headers(
 
 ## 13. 문서 좌표 — `[D1]`
 
-레포 루트에 **`AGENTS.md`** 를 둔다. codegen 이 가장 먼저 읽는 문서다.
+레포 루트에 **`AGENTS.md`** 를 둔다. codegen 이 탐색 전에 읽는 문서다.
 
 - 그 문서가 **없는 파일을 백틱으로 가리키면 `[D1]` 에러**다. 죽은 좌표는 곧 탐색 낭비다.
 - 파일을 지웠으면 `AGENTS.md` 의 그 좌표도 같이 지운다.
@@ -273,20 +347,26 @@ npm run build                      # 빌드가 .next/standalone 을 내는지
 npx zalkera-validate . --gate      # ← 이것이 게이트가 돌리는 그 검사기다
 ```
 
-검사기는 `@zalkera/client` 안에 실려 온다 — 따로 받을 것이 없다. 게이트도 **레포에 설치된 그 사본**을
-부른다(`node_modules/@zalkera/client/bin/validate-storefront.mjs`). 그러니 위 명령이 초록이면
-게이트도 같은 판정을 낸다.
+검사기는 `@zalkera/client` 안에 실려 온다 — 따로 받을 것이 없다. 서빙 게이트가 쓰는 것도 레포에
+설치된 그 사본이다(`node_modules/@zalkera/client/bin/validate-storefront.mjs`).
+
+⚠ **로컬 초록은 필요조건이지 충분조건이 아니다.** 두 가지가 남는다.
+
+- **설치본의 판이 곧 잣대다.** 락파일이 핀한 그 판의 규칙으로 재진다. 넘기기 전에
+  `@zalkera/client` 를 발행판으로 올리고 다시 재라.
+- **검사기가 못 재는 축이 있다.** 아래 `[O1]`·X 축이 그렇다 — 경고로만 나오고 rc 를 안 올리는데,
+  실제 반려는 빌드 산출물을 읽는 자리에서 난다(§12).
 
 **`--gate` 를 붙여서 재라.** 안 붙이면 서빙 판정 축(E·C·C2)이 경고로 나와 통과처럼 보인다.
 
 ### 종료코드
 
-| rc | 뜻 | 할 일 |
-|---|---|---|
-| 0 | 통과 | — |
-| 1 | 규약 위반 | 출력된 `[규칙ID]` 를 고친다 |
-| 2 | 도구 오류 | 경로가 맞는지 확인. 크래시면 그대로 신고 |
-| 7 | **못 쟀다** | 통과가 아니다. 읽지 못한 파일·모르는 선언값을 고쳐 **다시 재게** 만든다 |
+| rc  | 뜻          | 할 일                                                                   |
+| --- | ----------- | ----------------------------------------------------------------------- |
+| 0   | 통과        | —                                                                       |
+| 1   | 규약 위반   | 출력된 `[규칙ID]` 를 고친다                                             |
+| 2   | 도구 오류   | 경로가 맞는지 확인. 크래시면 그대로 신고                                |
+| 7   | **못 쟀다** | 통과가 아니다. 읽지 못한 파일·모르는 선언값을 고쳐 **다시 재게** 만든다 |
 
 ⚠ **rc=7 을 통과로 세지 마라.** "위반이 없다"가 아니라 **"검사가 안 돌았다"**는 뜻이다.
 
@@ -305,5 +385,5 @@ npx zalkera-validate . --gate      # ← 이것이 게이트가 돌리는 그 �
 - 검사를 통과시키려고 package.json 의 zalkera 선언을 지우거나 검사기를 고치지 마라.
 ```
 
-⚠ **AI 가 "검사기가 틀렸다"고 하면 의심하라.** 실제로 가장 흔한 우회는 선언 두 줄을 지우는 것이고,
+⚠ **AI 가 "검사기가 틀렸다"고 하면 의심하라.** 선언 두 줄을 지우면 검사가 꺼지고,
 그러면 오류가 경고로 바뀌어 rc 가 0 이 된다 — 고쳐진 것은 아무것도 없다.

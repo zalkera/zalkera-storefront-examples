@@ -6,8 +6,12 @@
 
 ```bash
 unzip -q fin-ticket-1.0.0.zip -d ft && cd ft
+npm ci                                              # package-lock.json 을 넣은 뒤(아래 구조 결함 ①)
 npx --package @zalkera/client zalkera-validate . --gate
 ```
+
+⚠ 검사기는 **레포에 설치된 `@zalkera/client`** 안에 있다. 그 판이 곧 잣대이므로 발행판으로
+올려 두고 재라.
 
 결과: **rc=1 · 오류 5건 · 경고 0건.** 규범은 `spec/storefront-spec.md` 이고, 판정하는 것은 그 검사기다.
 
@@ -15,10 +19,10 @@ npx --package @zalkera/client zalkera-validate . --gate
 
 ### ① `[S2]` JSX 인라인 `style={{…}}` — 2곳
 
-| 파일 | 줄 |
-|---|---|
-| `src/components/sections/HeroSection.tsx` | 28 · 32 · 36 · 60 |
-| `src/components/sections/FaqAccordion.tsx` | 40 |
+| 파일                                       | 줄                |
+| ------------------------------------------ | ----------------- |
+| `src/components/sections/HeroSection.tsx`  | 28 · 32 · 36 · 60 |
+| `src/components/sections/FaqAccordion.tsx` | 40                |
 
 브랜드색·간격을 인라인 style 로 주면 콘솔의 "말로 색 바꾸기"가 그 자리를 못 덮는다.
 
@@ -38,8 +42,7 @@ npx --package @zalkera/client zalkera-validate . --gate
 
 **렌더러가 조용히 건너뛴다** — 예외가 안 나므로 화면에서 그 블록만 사라지고 아무 로그도 안 남는다.
 
-이 소스가 쓰는 7종 중 `PROCESS_STEPS` 하나만 계약 밖이다. 나머지 6종
-(`HERO`·`FEATURE_GRID`·`TEXT_MEDIA`·`STATS_BAND`·`FAQ_LIST`·`LEAD_CTA`)은 정상이다.
+이 소스가 쓰는 타입 중 `PROCESS_STEPS` 하나가 계약 밖이다. 나머지는 계약 안에 있다.
 
 **고치는 법 — 둘 중 하나.**
 
@@ -55,9 +58,9 @@ node -p "require('@zalkera/client').SECTION_CONTRACT.map(s=>s.type).join('\n')"
 
 ### ③ `[N5]` 콘텐츠가 가리키는 이미지 실물 부재 — 2건
 
-| 참조 | 적힌 곳 |
-|---|---|
-| `/images/hero.png` | `content/pages/home.json` `sections[0]` |
+| 참조                | 적힌 곳                                  |
+| ------------------- | ---------------------------------------- |
+| `/images/hero.png`  | `content/pages/home.json` `sections[0]`  |
 | `/images/about.png` | `content/pages/about.json` `sections[0]` |
 
 **zip 에 `public/` 디렉터리가 아예 없다.** 이대로 개시하면 두 자리 모두 **깨진 이미지**가 나간다.
@@ -67,14 +70,14 @@ node -p "require('@zalkera/client').SECTION_CONTRACT.map(s=>s.type).join('\n')"
 
 ## 구조 결함 — 검사기가 안 잡지만 고쳐야 하는 것
 
-검사기가 통과시켜도 실무에서 걸린다.
+검사기의 규칙군에는 없지만 인수 조건이다.
 
-| 빠진 것 | 왜 필요한가 |
-|---|---|
-| **`package-lock.json`** | 없으면 `npm ci` 가 안 돈다. 빌드 재현성이 없어 우리 쪽 빌드와 그쪽 빌드가 다른 의존을 받는다. `package.json` 과 **같은 커밋**에 넣는다 |
-| **`AGENTS.md`** (레포 루트) | codegen 이 가장 먼저 읽는 문서다. 없으면 이 소스를 AI 로 유지보수할 때 매번 전체 탐색을 한다 |
-| **`README.md`** | 받는 사람이 무엇을 어떻게 돌리는지 알 자리 |
-| **`seed.json` 이 두 곳에 있다** | 루트와 `.zalkera/` 양쪽에 있다. 정본은 `.zalkera/seed.json` 하나다 — 루트 사본을 지운다 |
+| 빠진 것                           | 왜 필요한가                                                                                                                            |
+| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| ① **`package-lock.json`**         | 없으면 `npm ci` 가 안 돈다. 빌드 재현성이 없어 우리 쪽 빌드와 그쪽 빌드가 다른 의존을 받는다. `package.json` 과 **같은 커밋**에 넣는다 |
+| ② **`AGENTS.md`** (레포 루트)     | codegen 이 가장 먼저 읽는 문서다. 없으면 이 소스를 AI 로 유지보수할 때 매번 전체 탐색을 한다                                           |
+| ③ **`README.md`**                 | 받는 사람이 무엇을 어떻게 돌리는지 알 자리                                                                                             |
+| ④ **`seed.json` 이 두 곳에 있다** | 루트와 `.zalkera/` 양쪽에 있다. 정본은 `.zalkera/seed.json` 하나다 — 루트 사본을 지운다                                                |
 
 ## 이미 맞게 되어 있는 것 — 건드리지 마라
 
@@ -83,7 +86,8 @@ node -p "require('@zalkera/client').SECTION_CONTRACT.map(s=>s.type).join('\n')"
 - `package.json` 의 `"zalkera": {"styling": "tailwind-tokens", "content": "source"}` 선언 — **있다.**
 - `next.config.ts` 의 `output: "standalone"` — **있다.**
 - 변이 라우트의 교차출처 가드, 그리고 `app/api/revalidate/route.ts` 의 면제 마커
-  (사유: 시크릿 헤더가 없으면 401) — **형식이 맞다.**
+  (사유: 시크릿 헤더가 없으면 401) — **형식이 맞다.** 그 마커는 파일 상단(첫 `export` 앞)에
+  있어야 듣는다 — 아래로 옮기지 마라.
 - 콘텐츠가 `content/pages/*.json` 에 있고 매니페스트와 어긋나지 않는다.
 
 ⚠ **검사를 통과시키려고 `package.json` 의 `zalkera` 선언을 지우지 마라.** 지우면 위 `[S2]`·`[N4]`·`[N5]`
