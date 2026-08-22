@@ -162,6 +162,10 @@ const SOURCE_EXCLUDES = [
     // 존재 이유가 거짓인 채로 배송되면 유지보수 에이전트가 죽은 장치를 살아 있는 것으로 읽는다.
     // 배송물에서 이것을 import 하는 코드는 0건이고(실측), 크롤러 정본은 `@zalkera/client` 에 있다.
     "scripts/lib/site-crawl.mjs",
+    // ⚠ **렌더러 덮개 대조도 같은 성격이다** — 루트 + 프리셋 넷의 `SectionRenderer` 를 나란히 잰다.
+    // 고객 zip 에는 `presets/` 가 없어 `readdirSync` 가 ENOENT 로 죽고, 그 트리의 가드 회귀
+    // 스위트가 그 실패를 **자기 결함으로** 읽는다(실측: 팩 4벌이 자기 검수에서 전부 반려).
+    "scripts/lib/rendererCoverage.test.mjs",
     "scripts/lib/wiring-parity.mjs",
     // ⚠ **그 픽스처도 함께 뺀다.** 본체만 빼고 시험을 실으면 고객 트리에서 단독 실행 시
     // `ERR_MODULE_NOT_FOUND` 로 죽는다 — 형제 `visitor-ip-parity` 가 그렇게 한 번 나갔다.
