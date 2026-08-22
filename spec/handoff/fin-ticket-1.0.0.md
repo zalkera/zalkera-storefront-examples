@@ -90,9 +90,12 @@ node -p "require('@zalkera/client').SECTION_CONTRACT.map(s=>s.type).join('\n')"
   있어야 듣는다 — 아래로 옮기지 마라.
 - 콘텐츠가 `content/pages/*.json` 에 있고 매니페스트와 어긋나지 않는다.
 
-⚠ **검사를 통과시키려고 `package.json` 의 `zalkera` 선언을 지우지 마라.** 지우면 위 `[S2]`·`[N4]`·`[N5]`
-다섯 건이 **경고로 바뀌어 rc 가 0** 이 되지만 고쳐진 것은 아무것도 없다. 개시하면 이미지는 그대로
-깨지고 섹션은 그대로 사라진다.
+⚠ **검사를 통과시키려고 `package.json` 의 `zalkera` 선언을 지우지 마라.** 지워도 통과가 아니다 —
+관문이 `[EDECL]` 로 **rc=7(못 잼)** 을 낸다. 오류 다섯 건이 경고로 내려가 보이지만 고쳐진 것은
+아무것도 없고, 개시하면 이미지는 그대로 깨지고 섹션은 그대로 사라진다.
+
+재현: `zalkera` 두 줄을 지우고 `npx --package @zalkera/client zalkera-validate . --gate; echo rc=$?`
+→ `[EDECL]` · rc=7
 
 ## 완료 판정
 

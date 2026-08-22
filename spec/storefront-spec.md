@@ -51,15 +51,20 @@ src/app/sitemap.ts    · src/app/robots.ts   (기계가 요구하진 않는다 �
 content/index.ts      콘텐츠 매니페스트 — 정적 import (§5)
 content/pages/*.json  페이지별 섹션 배열 (§5)
 public/               콘텐츠가 가리키는 이미지 실물 (§5)
+content/nav.json      헤더·푸터 메뉴 (배열 순서가 노출 순서)
 AGENTS.md             레포 루트 (§13)
 tsconfig.json         resolveJsonModule: true (§5)
 postcss.config.mjs    @tailwindcss/postcss (아래 경고)
+.zalkera/ASSETS-LICENSE.md   동봉 이미지가 있으면 **필수** (아래 경고)
 src/components/sections/SectionRenderer.tsx   ← 경로가 고정이다 (§5)
 ```
 
 ⚠ **Tailwind 배선이 빠져도 검사기는 초록이다.** S 규칙군은 클래스 **이름**만 읽고 CSS 파이프라인은
 안 본다. `postcss.config.mjs` 의 `@tailwindcss/postcss` 나 `globals.css` 첫 줄의
 `@import "tailwindcss";` 가 없으면 **rc=0 인 채로 스타일 없는 사이트가 나간다.** 화면으로 확인해라.
+
+⚠ **이미지를 실으면 `.zalkera/ASSETS-LICENSE.md` 를 같이 실어라.** 납품 검수는 이미지가 든 zip 에
+그 파일이 없으면 반려한다. 파일별 출처와 라이선스를 적는다.
 
 ⚠ **`public/` 을 빼먹지 마라.** 콘텐츠의 `asset` 값이 가리키는 실물이 없으면 `[N5]` 에러이고,
 고치지 않고 개시하면 **깨진 이미지**가 나간다. 업로드 검수에서 실제로 나온 결함이다.
@@ -69,17 +74,44 @@ src/components/sections/SectionRenderer.tsx   ← 경로가 고정이다 (§5)
 ```json
 {
     "zalkera": {"styling": "tailwind-tokens", "content": "source"},
-    "dependencies": {"@zalkera/client": "^<발행판>"}
+    "dependencies": {
+        "@zalkera/client": "^<발행판>",
+        "next": "^15",
+        "react": "^19",
+        "react-dom": "^19"
+    },
+    "devDependencies": {
+        "typescript": "^5",
+        "tailwindcss": "^4",
+        "@tailwindcss/postcss": "^4"
+    }
 }
 ```
+
+판은 조회해서 쓴다: `npm view @zalkera/client version`.
+
+⚠ **`tailwindcss` 를 빠뜨리면 S 규칙군이 통째로 안 돈다**(모드가 `none`). 검사기가 조용해지는 것이지
+규약이 없어지는 것이 아니다 — 아래 선언 부재 판정도 그 축에서는 안 선다.
 
 이 두 줄이 §6·§5 규약을 **이 레포에 한해** 계약으로 만든다(검사기가 이걸 읽어 위반을 error 로 격상).
 
 - 값에 오타가 나면 규칙군이 **통째로 안 돈다.** 검사기가 `[S0]`/`[N0]` 으로 그 사실을 말하고
   게이트에서는 rc=7(못 잼)로 세운다 — rc=0(통과)이 아니다.
-- **선언을 지워 경고로 낮추지 마라.** 그건 규약을 지킨 것이 아니라 검사를 끈 것이다.
-  그리고 지워도 아래 축들은 **그대로 error 로 남는다**: 시크릿 노출(`E1`~`E3`) · 렌더 모드(`C1` 계열) ·
-  섹션 렌더러 누락(`C2`). 선언 제거로 통과를 만들 수 없다.
+- **선언을 지워 경고로 낮추지 마라 — 관문이 막는다.**
+  재현: `tailwindcss` 를 문 레포에서 `zalkera.styling` 한 줄을 지우고
+  `npx zalkera-validate . --gate; echo rc=$?` → `[EDECL]` · rc=7
+  (`tailwindcss` 가 없으면 스타일축 모드가 `none` 이라 이 축은 아예 안 선다 — 콘텐츠축은 무관하게 선다.)
+
+  선언이 없는데 **코드가 우리 계약을 쓰고 있으면** 관문은 통과를 주지 않는다. 어느 잣대를 댈지
+  정하지 못했다는 뜻이고, 처방은 선언 한 줄이다. 축마다 증거가 다르다.
+
+  | 빠진 선언 | 관문이 보는 증거 | 결과 |
+  |---|---|---|
+  | `content` | `content/pages/*.json` 이 `SECTION_CONTRACT` 의 `type` 을 쓴다 | rc=7 |
+  | `styling` | root layout 이 `parseThemeColors(...)` 를 부른다 **∧ `tailwindcss` 가 deps 에 있다** | rc=7 |
+
+- 지워도 아래 축들은 **그대로 error 로 남는다**: 시크릿 노출(`E1`~`E3`) · 렌더 모드(`C1` 계열) ·
+  섹션 렌더러 누락(`C2`). 어느 쪽으로도 선언 제거로 통과를 만들 수 없다.
 
 ## 5. 콘텐츠 계약 — `[N1]`~`[N5]`
 
@@ -136,7 +168,8 @@ node -p "require('@zalkera/client').SECTION_CONTRACT.map(s=>s.type).join('\n')"
 **어휘에 없는 화면이 필요하면 섹션이 아니라 자유 영역으로 만들어라** — 컴포넌트를 새로 쓰고
 페이지에서 직접 부르면 된다. 어휘를 늘리려 하지 마라.
 
-`SECTION_CONTRACT` 는 `type` 만 나른다. **각 타입의 `config` 키는 `llms.txt` 에 있다** —
+`SECTION_CONTRACT` 는 `type` 외에 `vertical`·`jsonLd`·`requiredRefs` 를 나른다.
+`requiredRefs` 는 검사기가 `[N5]` 로 잰다. **각 타입의 `config` 키는 `llms.txt` 에 있다** —
 검사기가 그 키를 재지는 않지만, 콘솔 폼·렌더러가 같은 키로 값을 주고받으므로 키를 지어내면
 콘솔이 넣은 값이 화면에 안 읽힌다.
 
@@ -161,8 +194,7 @@ const products = await client.listProducts({...});
 섹션 `config` 에 `product`·`products`·
 `categorySlug` 를 적지 마라.
 
-- **0건이면 `return null`.** 빈 진열대와 "상품을 등록하면 여기 표시됩니다" 류의 안내를 방문자
-  화면에 내지 마라. 목록 JSON-LD 도 0건이면 내지 않는다(빈 `ItemList` 는 내는 것보다 안 내는 것이 맞다).
+- **0건이면 `return null`.** 목록 JSON-LD 도 0건이면 내지 않는다 — 빈 `ItemList` 는 산출하지 않는다.
 
 ## 6. 색·스타일 계약 — `[S1]`~`[S6]`
 
@@ -204,9 +236,21 @@ root layout 이 테넌트 색을 읽어 `<html>` 의 inline style 로 주입한�
 ```tsx
 // src/app/layout.tsx
 import {parseThemeColors} from "@zalkera/client";
-const style = parseThemeColors(config);
-return <html style={style}>…</html>;
+
+const config = await client.getSiteConfig({tags: ["site-config"]});
+const {cssVars} = parseThemeColors(config?.themeColors);
+return (
+    <html lang="ko" style={cssVars}>
+        …
+    </html>
+);
 ```
+
+⚠ **인자와 반환을 그대로 지켜라.** `parseThemeColors(raw: string | null | undefined)` 는 **설정 객체가
+아니라 `themeColors` 문자열**을 받고, `{cssVars}` 를 돌려준다. `parseThemeColors(config)` 로 넘기거나
+반환값을 통째로 `style` 에 얹으면 React 가 아무것도 적용하지 않는다 — 그리고 **`[S8]` 은 호출이
+있는지만 보므로 그 상태로 rc=0 이 난다.** 화면은 콘솔에서 색을 바꿔도 안 움직인다.
+살아 있는 서명은 `node_modules/@zalkera/client/dist/index.d.ts` 에서 확인한다.
 
 **이 두 조각이 "말로 색 바꾸기"의 전부다.** 하나라도 없으면 콘솔에서 색을 바꿔도 **성공 보고만 나오고
 화면은 그대로**인 거짓성공이 된다 — 사용자는 무엇이 고장났는지 알 길이 없다.
@@ -218,6 +262,10 @@ return <html style={style}>…</html>;
   주석이 아니라 **코드**에서 찾는다. (Pages Router 에는 이 자리가 없어 뒤쪽 축이 성립하지 않는다.)
 - 자기 헬퍼로 직접 배선했으면 `// zalkera-allow-custom-theme-inject: <이유>` 로 사유를 남긴다.
   **마커는 검사를 면제할 뿐 동작을 보장하지 않는다** — 반영은 사람이 한 번 확인해야 한다.
+
+⚠ **`parseThemeColors(...)` 호출은 스타일 계약을 자처하는 신호이기도 하다.** `tailwindcss` 를 문
+레포가 이걸 부르면서 `zalkera.styling` 을 선언하지 않으면 관문이 rc=7 을 낸다(§4). 우리 토큰 계약을 따르는 것이
+아니면 이 배선을 쓰지 마라 — 색은 자기 방식으로 넣으면 된다.
 
 ## 8. 데이터 조회 · 시크릿 — `[E1]`~`[E3]`
 
@@ -312,6 +360,7 @@ const access = {accessToken, phone, context: {clientIp: visitorIp(await headers(
   **방문자가 위조할 수 있다** — 선언이 있는 척하면서 값이 거짓이면 없느니만 못하다.
 - 대상: `getOrder`·`getShipment`·`cancelOrder`·`startPayment`·`confirmPayment`·`completeOrder`·
   `submitInquiry`·`submitLead`·`recordPostView`(`[I2]`).
+- ⚠ **`[I1]`·`[I2]` 는 어느 모드에서도 경고다** — 기계가 막지 않는다. 지키는 것은 사람이다.
 - 안 하면 그 사이트 방문자가 한 IP 로 뭉쳐 **남의 오입력이 내 429 가 된다**(문의는 60초 3건).
   조회수는 429 가 아니라 **게시글마다 하루 한 건**으로 접혀 집계가 조용히 죽는다.
 
@@ -383,7 +432,8 @@ npx zalkera-validate . --gate      # ← 이것이 게이트가 돌리는 그 �
 - 끝내기 전에 `npx zalkera-validate . --gate` 를 돌려 rc=0 을 확인하고,
   rc 가 0 이 아니면 출력된 규칙 ID 를 고친 뒤 다시 돌려라.
 - 검사를 통과시키려고 package.json 의 zalkera 선언을 지우거나 검사기를 고치지 마라.
+  선언을 지우면 관문이 rc=7 로 막는다 — 오류가 사라진 것처럼 보여도 통과가 아니다.
 ```
 
-⚠ **AI 가 "검사기가 틀렸다"고 하면 의심하라.** 선언 두 줄을 지우면 검사가 꺼지고,
-그러면 오류가 경고로 바뀌어 rc 가 0 이 된다 — 고쳐진 것은 아무것도 없다.
+⚠ **AI 가 "검사기가 틀렸다"고 하면 의심하라.** 선언을 지우는 것이 가장 짧은 길처럼 보이는데,
+그 길은 고쳐진 것 없이 오류만 사라지게 한다. 관문은 그 형상을 rc=7 로 되돌려준다(§4).
