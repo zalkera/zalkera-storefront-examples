@@ -121,9 +121,14 @@ if (!existsSync(pagesDir)) {
                 .map((url) => /^\/([^/]+)$/.exec(String(url))?.[1])
                 .filter((name) => name && !name.startsWith("_") && !name.startsWith("[") && !name.includes(".")),
         );
-        const declared = new Set(
-            [...readFileSync(listSrc, "utf8").matchAll(/^\s*"([^"]+)",/gm)].map((m) => m[1]),
-        );
+        const declared = declaredSegments(readFileSync(listSrc, "utf8"));
+        // ⚠ **못 읽었으면 통과가 아니다.** 빈 집합을 그냥 쓰면 실재 라우트가 전부 「목록에 없다」로
+        //    반려되어 사유가 거짓이 된다(종전 형태가 정확히 그랬다 — 아래 [declaredSegments]).
+        if (declared === null) {
+            console.error(`❌ sitemap 제외 목록 — ${listSrc} 에서 RESERVED_SEGMENTS 를 못 읽었습니다(통과가 아닙니다).`);
+            console.error("   `export const RESERVED_SEGMENTS = new Set([...])` 형태여야 읽습니다.");
+            process.exit(2);
+        }
         const missing = [...real].filter((name) => !declared.has(name)).sort();
         if (missing.length) {
             console.error(`❌ sitemap 제외 목록 — 가려지는데 목록에 없습니다: ${missing.join(" ")}`);
@@ -289,3 +294,57 @@ if (bad.length) {
 }
 
 console.log(`✅ 콘텐츠 페이지 라우트 — ${slugs.length}개 전부 ${CONTENT_ROUTE} 가 만들고 404 가 아닙니다.`);
+
+/**
+ * `RESERVED_SEGMENTS` 가 담은 이름들. 못 읽으면 `null` — **빈 집합과 다르다**(위 호출부 참조).
+ *
+ * ⚠ **줄 단위 정규식으로 되돌리지 마라.** 종전은 `^\s*"([^"]+)",` 였고 두 가지로 틀렸다.
+ *
+ *   ⑴ **서식에 걸렸다.** 한 줄로 적은 `new Set(["contact", "policies"])` 를 **한 개도 못 읽고**
+ *      두 이름을 「목록에 없습니다」로 반려했다 — 정상 코드를 막는 오탐이고, 사유마저 거짓이다.
+ *      재현: 그 파일을 항목마다 줄바꿈으로 바꾸고 `node scripts/lib/content-routes.mjs; echo rc=$?`
+ *      → 같은 트리가 rc=1 에서 rc=0 으로 바뀐다.
+ *   ⑵ **범위가 없었다.** 파일 전체를 훑어서 주석이나 다른 상수의 문자열도 목록으로 셌다.
+ *
+ * 그래서 판정을 **구조**로 한다 — `RESERVED_SEGMENTS` 뒤 첫 `[` 부터 짝이 맞는 `]` 까지만 읽는다.
+ * 주석 제거는 **문자열 안의 `//` 에 속지 않게** 상태를 들고 훑는다(`"https://…"` 가 있으면
+ * 단순 치환은 그 줄의 나머지를 지운다).
+ */
+function declaredSegments(src) {
+    let out = "";
+    let mode = "code"; // code | line | block | str
+    let quote = "";
+    for (let i = 0; i < src.length; i++) {
+        const c = src[i];
+        const n = src[i + 1];
+        if (mode === "code") {
+            if (c === "/" && n === "/") (mode = "line"), i++;
+            else if (c === "/" && n === "*") (mode = "block"), i++;
+            else if (c === '"' || c === "'" || c === "`") (mode = "str"), (quote = c), (out += c);
+            else out += c;
+        } else if (mode === "line") {
+            if (c === "\n") (mode = "code"), (out += c);
+        } else if (mode === "block") {
+            if (c === "*" && n === "/") (mode = "code"), i++;
+        } else {
+            out += c;
+            if (c === "\\") (out += n ?? ""), i++;
+            else if (c === quote) mode = "code";
+        }
+    }
+    const at = out.search(/\bRESERVED_SEGMENTS\b/);
+    if (at < 0) return null;
+    const open = out.indexOf("[", at);
+    if (open < 0) return null;
+    let depth = 0;
+    let end = -1;
+    for (let i = open; i < out.length; i++) {
+        if (out[i] === "[") depth++;
+        else if (out[i] === "]" && --depth === 0) {
+            end = i;
+            break;
+        }
+    }
+    if (end < 0) return null;
+    return new Set([...out.slice(open + 1, end).matchAll(/["'`]([^"'`]*)["'`]/g)].map((m) => m[1]).filter(Boolean));
+}
