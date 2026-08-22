@@ -286,7 +286,8 @@ shadcn 소스는 자기 변수층(`--card`·`--muted-foreground` …)을 전제�
   rev 8 = **방문 정보 단 신설** — `FACILITY_GALLERY`·`BUSINESS_HOURS`·`DIRECTIONS`.
   내점형 업장이 어휘만으로 조립된다. 셋 다 `jsonLd: null` — 주소·영업시간의 구조화
   데이터 거처는 섹션이 아니라 `site_config` 에서 나오는 홈의 조직 노드다.
-  **rev 6 = 그 조회형 둘을 어휘에서 삭제.**
+  ⚠ `DIRECTIONS.links[].href` 는 **https 웹 지도 주소**를 적는다. 지도 앱 딥링크
+  (`kakaomap://` 류)는 소독 경로에서 조용히 막힌다.
 
   **경계 규칙**: *값이 콘텐츠 파일에 사는 저작물 = 선언 섹션 / 값이 업무 DB 에 살고 화면이
   비추기만 하는 조회 = 소스가 `@zalkera/client` 를 직접 호출.* rev 3·5 가 "조회형 섹션은 참조를 반드시
