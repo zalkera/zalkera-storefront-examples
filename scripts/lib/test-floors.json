@@ -30,5 +30,6 @@
     "scripts/lib/docEnvNames.test.mjs": 4,
     "scripts/pack-version.test.mjs": 13,
     "src/lib/logoutCart.test.ts": 4,
-    "src/lib/docsRev.test.ts": 1
+    "src/lib/docsRev.test.ts": 1,
+    "scripts/lib/rendererCoverage.test.mjs": 2
 }
