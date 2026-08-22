@@ -16,7 +16,7 @@
     "scripts/lib/vendorSet.test.mjs": 3,
     "scripts/workflow-syntax.test.mjs": 35,
     "scripts/lib/floorGate.test.mjs": 11,
-    "scripts/lib/contentRoutes.test.mjs": 6,
+    "scripts/lib/contentRoutes.test.mjs": 8,
     "src/lib/theme.test.ts": 9,
     "src/lib/preview.test.ts": 4,
     "scripts/lib/packGate.test.mjs": 6,

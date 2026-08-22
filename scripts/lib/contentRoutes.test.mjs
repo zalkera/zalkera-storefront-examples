@@ -30,6 +30,7 @@ process.on("exit", () => {
  * - `noBuild` — 빌드 산출물을 안 만든다.
  * - `routes` — 빌드가 아는 라우트(경로 → URL).
  * - `reserved` — 목록에 적힌 이름들.
+ * - `listRaw` — 목록 파일의 **원문**을 그대로 쓴다(서식 변형 시험용).
  */
 function tree(patch = {}) {
     const root = mkdtempSync(join(tmpdir(), "zalkera-croutes-"));
@@ -42,7 +43,8 @@ function tree(patch = {}) {
         const names = patch.reserved ?? ["cart"];
         writeFileSync(
             join(root, "src", "lib", "reservedSegments.ts"),
-            `export const RESERVED = [\n${names.map((n) => `    "${n}",`).join("\n")}\n];\n`,
+            patch.listRaw ??
+                `export const RESERVED_SEGMENTS = new Set([\n${names.map((n) => `    "${n}",`).join("\n")}\n]);\n`,
         );
     }
     if (!patch.noBuild) {
@@ -112,4 +114,33 @@ test("동적·내부 라우트는 목록에 없어도 통과한다 — 오탐은
         }),
     );
     assert.equal(rc, 0, out.slice(-500));
+});
+
+/*
+ * 목록을 **구조로** 읽는가 — 서식으로 읽으면 정상 코드를 반려한다.
+ *
+ * 종전 파서는 `^\s*"([^"]+)",` 라 항목이 한 줄에 하나씩 있어야 읽었다. 납품 zip 하나가 그 목록을
+ * 한 줄로 적었고(`new Set(["contact", "policies"])`), 검사기는 **한 개도 못 읽고** 두 이름을
+ * 「목록에 없습니다」로 반려했다 — 정상 코드를 막고 사유까지 거짓이었다.
+ */
+test("한 줄로 적은 목록도 읽는다 — 서식이 판정을 바꾸지 않는다", () => {
+    const {rc, out} = run(
+        tree({
+            routes: {"/contact/page": "/contact", "/policies/page": "/policies"},
+            listRaw: 'export const RESERVED_SEGMENTS: ReadonlySet<string> = new Set(["contact", "policies"]);\n',
+        }),
+    );
+    assert.equal(rc, 0, out.slice(-500));
+});
+
+test("목록 상수를 못 찾으면 «통과»가 아니라 «못 읽음»이다", () => {
+    // 빈 집합으로 흘려보내면 실재 라우트가 전부 「목록에 없다」로 반려되어 사유가 거짓이 된다.
+    const {rc, out} = run(
+        tree({
+            routes: {"/contact/page": "/contact"},
+            listRaw: 'export const SOMETHING_ELSE = new Set(["contact"]);\n',
+        }),
+    );
+    assert.equal(rc, 2, out.slice(-500));
+    assert.match(out, /RESERVED_SEGMENTS 를 못 읽었습니다/);
 });
