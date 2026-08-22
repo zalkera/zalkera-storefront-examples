@@ -622,6 +622,65 @@ try {
                 }
             }
 
+            // ⚠ **배송 목록은 «빼는 것»을 적는 거부 목록이다.** `pack-preset.mjs` 는 `git ls-files` 에서
+            //   `SOURCE_EXCLUDES` 를 뺀 나머지를 싣는다 — 즉 **커밋하면 배송이 기본값**이고, 새 최상위
+            //   이름을 만든 사람에게 아무도 묻지 않는다. 실제로 `spec/`(특정 납품건의 결함 보고서를
+            //   든 디렉터리)이 그렇게 전 테넌트로 나갔다. 거부 목록은 **모르는 것을 못 막는다.**
+            //
+            //   그래서 여기서 **결과를 다른 잣대로 다시 잰다.** 굽기 규칙에서 파생시키면 항상 일치해
+            //   아무것도 못 잡으므로, 이 표는 일부러 손으로 든다 — 새 이름이 생기면 「배송한다/뺀다」를
+            //   사람이 한 번 명시하게 만드는 것이 이 검사의 전부다.
+            //
+            //   ⚠ **이 검사는 파일 «내용»을 안 본다.** 허용된 이름 안에 무엇을 넣든 통과한다.
+            //     조용한 추가를 시끄럽게 만들 뿐이고, 그것이 이 사고의 본질이었다.
+            //   ⚠ **`--pack` 에서만 잰다.** 고객 zip 의 트리 구성은 고객 것이다(전제 A).
+            //   재현: `mkdir <트리>/새디렉터리 && touch <트리>/새디렉터리/x` 후 재압축해 `--pack`
+            if (packMode) {
+                const REQUIRED_TOP = [
+                    ".env.example",
+                    ".github/",
+                    ".gitignore",
+                    ".prettierignore",
+                    ".prettierrc.json",
+                    ".zalkera/",
+                    "AGENTS.md",
+                    "CUSTOMIZE.md",
+                    "README.md",
+                    "content/",
+                    "docs/",
+                    "llms.txt",
+                    "next.config.ts",
+                    "package-lock.json",
+                    "package.json",
+                    "postcss.config.mjs",
+                    "scripts/",
+                    "src/",
+                    "tsconfig.json",
+                ];
+                // 이미지를 안 싣는 팩(skeleton)이 있어 `public/` 은 있어도 없어도 된다.
+                const OPTIONAL_TOP = ["public/"];
+                const allowed = new Set([...REQUIRED_TOP, ...OPTIONAL_TOP]);
+                const seen = new Set(
+                    readdirSync(root, {withFileTypes: true}).map((e) => (e.isDirectory() ? `${e.name}/` : e.name)),
+                );
+                const unexpected = [...seen].filter((n) => !allowed.has(n)).sort();
+                const missing = REQUIRED_TOP.filter((n) => !seen.has(n));
+                if (unexpected.length || missing.length) {
+                    const why = [
+                        unexpected.length ? `허용 목록에 없습니다: ${unexpected.join(" · ")}` : "",
+                        missing.length ? `있어야 하는데 없습니다: ${missing.join(" · ")}` : "",
+                    ]
+                        .filter(Boolean)
+                        .join(" / ");
+                    record("최상위 구성", false, why);
+                    console.error("   배송할 것이면 이 목록에 더하고, 아니면 `SOURCE_EXCLUDES` 에 넣으십시오.");
+                    console.error("   전 테넌트로 복제되고 회수가 안 되는 자리라 한 번 명시하고 지나갑니다.");
+                    failed = true;
+                } else {
+                    record("최상위 구성", true, `${seen.size}개 전부 허용 목록 안`);
+                }
+            }
+
             const dead = [];
             const readDocs = [];
             for (const doc of DOC_TARGETS) {

@@ -49,13 +49,13 @@ function verdict(out, name) {
     return {ok: line.trim().startsWith("✅"), line: line.trim()};
 }
 
-function run(entries, {wrap = true} = {}) {
+function run(entries, {wrap = true, pack = false} = {}) {
     const box = mkdtempSync(join(tmpdir(), "zalkera-vzj-"));
     made.push(box);
     const zip = join(box, "case.zip");
     const shaped = wrap ? entries : Object.fromEntries(Object.entries(entries).map(([k, v]) => [k.replace(/^proj\//, ""), v]));
     writeMiniZip(zip, shaped);
-    const r = spawnSync(process.execPath, [RUNNER, zip], {
+    const r = spawnSync(process.execPath, [RUNNER, zip, ...(pack ? ["--pack"] : [])], {
         encoding: "utf8",
         env: {...process.env, TMPDIR: box},
     });
@@ -152,3 +152,70 @@ test("`node_modules` 가 실려 오면 조기에 반려한다", () => {
     assert.notEqual(rc, 0, out.slice(-600));
     assert.match(out, /node_modules/);
 });
+
+/*
+ * 최상위 구성 — 거부 목록이 못 막는 자리를 여기서 막는다.
+ *
+ * `pack-preset.mjs` 는 `git ls-files` − `SOURCE_EXCLUDES` 를 싣는다. 즉 **커밋하면 배송이
+ * 기본값**이라, 새 최상위 이름을 만든 사람에게 아무도 묻지 않는다. 실제로 `spec/` 이 그렇게
+ * 전 테넌트로 나갔고, 그 디렉터리는 특정 납품건의 결함 보고서를 들고 있었다.
+ *
+ * 넷이 함께 서야 한다. ③이 없으면 「무엇이든 반려」와 구분되지 않고, ④가 없으면 고객 zip 까지
+ * 우리 구성을 강요하는 판을 못 잡는다.
+ */
+{
+    // 팩이 실제로 싣는 최상위 이름 전부. 하나라도 빠지면 「있어야 하는데 없습니다」가 뜬다.
+    const FULL = Object.fromEntries(
+        [
+            ".env.example",
+            ".gitignore",
+            ".prettierignore",
+            ".prettierrc.json",
+            "AGENTS.md",
+            "CUSTOMIZE.md",
+            "README.md",
+            "llms.txt",
+            "next.config.ts",
+            "package.json",
+            "package-lock.json",
+            "postcss.config.mjs",
+            "tsconfig.json",
+            ".github/w.yml",
+            ".zalkera/pack.json",
+            "content/index.ts",
+            "docs/g.md",
+            "scripts/s.mjs",
+            "src/lib/cfg.ts",
+        ].map((f) => [`proj/${f}`, f.endsWith(".json") ? "{}\n" : "x\n"]),
+    );
+
+    test("최상위 구성 — 허용 목록에 없는 이름을 반려한다", () => {
+        const {out} = run({...FULL, "proj/spec/handoff/other.md": "x\n"}, {pack: true});
+        const v = verdict(out, "최상위 구성");
+        assert.ok(v, `판정 줄이 없다: ${out.slice(-600)}`);
+        assert.equal(v.ok, false, v.line);
+        assert.match(v.line, /spec\//);
+    });
+
+    test("최상위 구성 — 있어야 하는 이름이 빠지면 반려한다", () => {
+        const {"proj/llms.txt": _drop, ...rest} = FULL;
+        const {out} = run(rest, {pack: true});
+        const v = verdict(out, "최상위 구성");
+        assert.ok(v, `판정 줄이 없다: ${out.slice(-600)}`);
+        assert.equal(v.ok, false, v.line);
+        assert.match(v.line, /llms\.txt/);
+    });
+
+    test("양성 통제군 — 목록대로면 통과한다(무엇이든 반려가 아니다)", () => {
+        const {out} = run(FULL, {pack: true});
+        const v = verdict(out, "최상위 구성");
+        assert.ok(v, `판정 줄이 없다: ${out.slice(-600)}`);
+        assert.equal(v.ok, true, v.line);
+    });
+
+    test("고객 zip(--pack 아님)에는 이 검사를 들이대지 않는다", () => {
+        // 납품 zip 의 트리 구성은 납품사 것이다 — 우리 팩의 형상을 강요할 자리가 아니다.
+        const {out} = run({...FULL, "proj/spec/handoff/other.md": "x\n"});
+        assert.equal(verdict(out, "최상위 구성"), null, out.slice(-600));
+    });
+}
