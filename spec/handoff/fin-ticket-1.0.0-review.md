@@ -20,12 +20,10 @@
 
 ## 고칠 것 — 가드 회귀 시험
 
-**`npx zalkera-validate --gate` 만으로는 안 보이는 축이다.** 납품 검수(`verify-zip`)가 여기서 반려한다.
+재현: `node scripts/verify-zip.mjs <납품.zip>`
+→ `❌ 가드 회귀 스위트 — 하한표를 못 읽었습니다 — scripts/lib/test-floors.json [ENOENT]`
 
-```bash
-node scripts/verify-zip.mjs <납품.zip>
-# ❌ 가드 회귀 스위트 — 하한표를 못 읽었습니다 — scripts/lib/test-floors.json [ENOENT]
-```
+`npx zalkera-validate --gate` 만 돌리면 이 축이 안 보인다.
 
 지금 트리에는 요구 19개 중 **8개만** 있고 하한표(`scripts/lib/test-floors.json`)도 없다.
 
@@ -37,34 +35,38 @@ node scripts/verify-zip.mjs <납품.zip>
 
 ### 어떻게 고치나
 
-**시작 소스 팩(`skeleton` 3.2.1)에서 아래를 그대로 되살린다.**
+**시작 소스 팩(`skeleton` 3.2.1)에서 `scripts/` 를 통째로, 그리고 아래 시험을 되살린다.**
 
 ```
-scripts/lib/test-floors.json          ← 하한표
-
+scripts/                          ← 통째로 (하한표·라이브러리·시험)
 src/lib/safeUrl.test.ts
 src/lib/reservedSegments.test.ts
-src/lib/oauthState.test.ts            ← 아래 ⚠ 참고
-scripts/lib/floors.test.mjs
-scripts/lib/floorGate.test.mjs
-scripts/lib/gateProbe.test.mjs
-scripts/lib/junkEntries.test.mjs
-scripts/lib/childEnv.test.mjs
-scripts/lib/vendorSet.test.mjs
-scripts/lib/contentRoutes.test.mjs
-scripts/workflow-syntax.test.mjs
+src/lib/oauth.ts                  ← 아래 ⚠
 ```
 
-⚠ **`oauthState.test.ts` 는 `src/lib/oauthState.ts` 를 import 한다.** 그 본체를 지우셨다면 시험만
-되살릴 수 없으므로 **본체도 같이 되살려야** 한다(로그인 화면이 없어도 그 파일 하나는 남는다).
-지금 인수 게이트가 그 시험을 조건 없이 요구하기 때문이고, **이 요구가 과한지는 우리 쪽에서
-검토 중**이다. 결론이 바뀌면 다시 알린다.
+시험 파일만 되살리면 안 된다 — 그 시험들이 `scripts/lib/childEnv.mjs` 같은 라이브러리 모듈을
+쓰는데 그것도 같이 지워져 있었다(실행하면 `ERR_MODULE_NOT_FOUND`).
+
+⚠ **`src/lib/oauth.ts` 는 로그인이 없어도 남긴다.** `safeUrl.test.ts` 가 그 파일의 `safeNextPath`
+를 함께 재기 때문이다. 중립 가드(저장형 XSS) 시험이 능력 모듈에 묶여 있는 형태이고,
+**그건 우리 쪽 배치 문제라 우리가 가를 예정**이다. 갈리면 이 줄은 없어진다.
+
+**`oauthState.test.ts` 는 되살리지 않아도 된다.** 그 시험은 `src/lib/oauthState.ts` 를 import
+하는데 그쪽은 쇼핑몰·로그인을 지우면서 본체를 같이 지웠고, 그건 `AGENTS.md` 가 허용하는
+삭제다. 종전 게이트가 그 시험을 조건 없이 요구했는데 **우리가 고쳤다** — 지킬 대상이 없으면
+요구하지 않고, 건너뛴 사실을 이렇게 찍는다.
+
+```
+ℹ 가드 회귀 스위트 — src/lib/oauthState.test.ts 는 요구하지 않습니다: src/lib/oauthState.ts 가 이 트리에 없습니다.
+```
 
 확인:
 
 ```bash
 node scripts/lib/floor-gate.mjs; echo rc=$?     # rc=0 이어야 한다
 ```
+
+위 순서대로 복구하면 실제로 통과하는 것을 확인했다 — 그쪽 트리에서 재현해 `rc=0` 을 봤다.
 
 ## 고치지 마십시오 — `reservedSegments.ts`
 

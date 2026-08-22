@@ -135,7 +135,11 @@ if (counted.size === 0) {
 //
 //   대상은 «통과를 낸 파일»이다. 통과 0건짜리 빈 스위트는 이 그물 밖이다 — 그것은 애초에
 //   가드가 아니고, 트리를 따로 훑으면 러너의 글롭 의미를 두 벌로 흉내 내게 된다.
-const unlisted = [...counted.keys()].filter((f) => !(f in effective));
+// ⚠ **걷어낸 스위트는 «표 밖»이 아니다.** 지킬 대상이 없어 요구에서 뺀 것이고(위 ℹ 줄),
+//    트리에는 파일이 남아 있어 러너가 세고 온다. 그것을 「모르는 스위트」로 세면 완화가
+//    곧 반려가 된다 — 의도적 면제와 미지를 갈라야 한다.
+const skippedSuites = new Set(skipped.map((s) => s.suite));
+const unlisted = [...counted.keys()].filter((f) => !(f in effective) && !skippedSuites.has(f));
 if (unlisted.length) {
     console.error("❌ 가드 회귀 스위트 — 하한표 밖의 스위트가 있습니다:");
     for (const f of unlisted.sort()) console.error(`   · ${f}`);

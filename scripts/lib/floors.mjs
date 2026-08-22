@@ -179,6 +179,12 @@ export function judgeFloors(floors, exists) {
         effective[f] = Math.max(effective[f] ?? 0, min);
     }
 
+    // ⚠ **표가 다시 얹는 것까지 걷는다.** 요구에서만 빼면 하한표(팩이 싣는 19줄)가 그 키를
+    //   `effective` 로 되돌려 놓고, 러너가 통과 0건을 재어 「하한 미달」로 반려한다 — 완화가
+    //   절반만 걸린 상태다(실측으로 밟았다).
+    //   재현: 대상 없는 트리에서 `node scripts/lib/floor-gate.mjs` → `통과 0건(하한 11)`
+    for (const {suite} of skipped) delete effective[suite];
+
     // 요구 스위트 파일이 없으면 반려.
     for (const f of Object.keys(required)) {
         if (!exists(f)) bad.push(`${f} 가 없습니다 — 가드를 재는 자리입니다`);
