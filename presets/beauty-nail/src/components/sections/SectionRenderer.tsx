@@ -1,4 +1,7 @@
 import type {ContentSection} from "@/lib/content";
+import {FacilityGallerySection} from "./FacilityGallerySection";
+import {BusinessHoursSection} from "./BusinessHoursSection";
+import {DirectionsSection} from "./DirectionsSection";
 import {BeforeAfterGallerySection} from "./BeforeAfterGallerySection";
 import {DoctorIntroSection} from "./DoctorIntroSection";
 import {FaqListSection} from "./FaqListSection";
@@ -39,6 +42,12 @@ export function SectionRenderer({section}: {section: ContentSection}) {
             return <StatsBandSection config={section.config} />;
         case "TESTIMONIALS":
             return <TestimonialsSection config={section.config} />;
+        case "FACILITY_GALLERY":
+            return <FacilityGallerySection config={section.config} />;
+        case "BUSINESS_HOURS":
+            return <BusinessHoursSection config={section.config} />;
+        case "DIRECTIONS":
+            return <DirectionsSection config={section.config} />;
         case "FAQ_LIST":
             return <FaqListSection config={section.config} />;
         case "LEAD_CTA":

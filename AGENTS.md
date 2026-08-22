@@ -278,11 +278,11 @@ shadcn 소스는 자기 변수층(`--card`·`--muted-foreground` …)을 전제�
   `SECTION_CONTRACT` 는 그것을 npm 으로 실어 나르는 **운반체**다. 그 KDoc 은 설치본
   `node_modules/@zalkera/client/dist/index.d.ts` 에서 읽는다 — 패키지는 소스(`sections.ts`)를 배송하지
   않으므로 여기서 그 파일을 찾지 마라(선언 파일이 KDoc 을 그대로 싣고 온다).
-  계약은 `contractRev` 로 자란다 — 현재 **rev 7**(`SECTION_CONTRACT_REV`). 오른 자국은 이렇다:
+  계약은 `contractRev` 로 자란다 — 현재 **rev 8**(`SECTION_CONTRACT_REV`). 오른 자국은 이렇다:
   rev 2·3·5 는 조회형 섹션(`SERVICE_MENU`·`BOOKING_CTA`)의 산출과 필수 참조를 조이던 세대이고,
   rev 4 는 참조 방언(`dialects`)과 콘텐츠 파일(`contentFile`)을 1급으로 올렸다.
   rev 6 = 그 조회형 섹션 둘을 **어휘에서 삭제**(진열은 소스가 직접 호출한다) ·
-  rev 7 = **DB 방언 소거**(그 거처인 `page_section` 계열이 퇴역했다).
+  rev 8 = **DB 방언 소거**(그 거처인 `page_section` 계열이 퇴역했다).
   **rev 6 = 그 조회형 둘을 어휘에서 삭제 — 12종 → 10종.**
 
   **경계 규칙**: *값이 콘텐츠 파일에 사는 저작물 = 선언 섹션 / 값이 업무 DB 에 살고 화면이
@@ -292,7 +292,7 @@ shadcn 소스는 자기 변수층(`--card`·`--muted-foreground` …)을 전제�
   **자연어로 다양한 디자인을 만든다**는 방향과 반대였다. 따름정리로 **배송물은 상품 handle 이든 갈래
   slug 든 업무 축의 고유명사를 어디에도 박지 않는다**(`리빙`·`시술`은 사장이 정할 이름이다).
   자기 소스가 자기 카탈로그를 tsx 안에서 가리키는 것은 정당하다 — 금지되는 것은 배송물의 선언이다.
-- **표기는 하나다 — 거처가 하나만 남았기 때문이다(rev 7).** 종전에는 방언이 둘이었다: DB
+- **표기는 하나다 — 거처가 하나만 남았기 때문이다(rev 8).** 종전에는 방언이 둘이었다: DB
   (`page_section.config`)가 자기가 발급한 숫자 id 를, 소스가 사람이 읽는 참조를 썼다. **그 DB 거처가
   퇴역했다**. 남은 표기는 소스 것 하나다.
   ⚠ 그래도 **옮겨 적기는 계속 필요하다.** 아래 §어휘 표(그리고 `SECTION_CONTRACT`)의 `config` 선언은
