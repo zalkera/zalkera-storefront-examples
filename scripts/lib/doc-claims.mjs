@@ -72,7 +72,7 @@ const CLAIM = /실측|재 ?봤|재 ?보니|측정했|세어 ?보니/;
 const CMD = /`[^`\n]*(npm |npx |node |grep |sed |awk |curl |find |unzip |sha256sum |diff |cmp |ls |cat |python3 )[^`\n]*`|^\s*\$ |^\s*```/;
 
 /** 이 검사가 보는 자리 — 배송되는 문서와 소스 주석. */
-const ROOTS = ["src", "scripts", ".github"];
+const ROOTS = ["src", "scripts", ".github", "spec"];
 const FILES = ["AGENTS.md", "README.md", "CUSTOMIZE.md", ".prettierignore", ".env.example"];
 const EXT = /\.(md|ts|tsx|mjs|cjs|js|yml|yaml|css|example)$|prettierignore$/;
 const SKIP = /(node_modules|\.next|\.git|dist-presets|dist-preview|presets)$/;
