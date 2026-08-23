@@ -74,11 +74,54 @@ test("이름이 평범한 파일에 박힌 라이브 키를 잡는다 — 이름
     const {out} = run({
         ...BASE,
         // 실제 값이 아니라 **모양**만 맞춘 것이다. 검사기가 보는 것도 모양이다.
-        "proj/src/lib/cfg.ts": 'export const k = "AKIA' + "IOSFODNN7EXAMPLE" + '";\n',
+        //
+        // ⚠ **AWS 가 자기 문서에 쓰는 자리표시자(`AKIA…EXAMPLE`)를 표본으로 쓰지 않는다.**
+        //   그것은 검사기가 일부러 통과시키는 값이라(비-비밀임이 공표돼 있다), 표본으로 쓰면
+        //   이 시험이 재는 것이 「라이브 키를 잡는가」가 아니라 「예외가 없는가」가 된다.
+        "proj/src/lib/cfg.ts": 'export const k = "AKIA' + "2E0A8F3B244C9986" + '";\n',
     });
     const v = verdict(out, "시크릿");
     assert.ok(v && !v.ok, `놓쳤다: ${v?.line ?? out.slice(-600)}`);
     assert.match(v.line + out, /cfg\.ts/);
+});
+
+test("AWS 문서의 자리표시자는 통과시킨다 — 비-비밀임이 공표된 값이다", () => {
+    // 위 시험과 짝이다. 이것이 없으면 「AKIA 면 무엇이든 반려」 구현으로도 위가 초록이 된다.
+    const v = verdict(run({...BASE, "proj/src/lib/cfg.ts": 'export const k = "AKIA' + "IOSFODNN7EXAMPLE" + '";\n'}).out, "시크릿");
+    assert.ok(v && v.ok, `자리표시자를 반려했다: ${v?.line}`);
+});
+
+test("대소문자가 달라도 `.env` 는 잡는다 — `.Env.Local` 이 양쪽 그물을 다 빠졌다", () => {
+    // 이름축 정규식에 `/i` 가 없어 이름으로도 안 걸리고, 확장자 그물에도 안 들어 **무검사**였다.
+    const v = verdict(run({...BASE, "proj/.Env.Local": "ZALKERA_STOREFRONT_KEY=oqsk_live\n"}).out, "시크릿");
+    assert.ok(v && !v.ok, `놓쳤다: ${v?.line}`);
+});
+
+test("`.envrc`·`.env~`·`config.env` 도 잡는다 — 접두에 점을 하나 더 요구하면 샌다", () => {
+    // `.envrc` 는 direnv(`export AWS_SECRET_ACCESS_KEY=…` 가 관례), `.env~` 는 편집기 백업
+    // (= `.env` 의 바이트 사본), `config.env` 는 compose `env_file` 관례다.
+    for (const name of [".envrc", ".env~", "config.env"]) {
+        const v = verdict(run({...BASE, [`proj/${name}`]: "K=oqsk_live\n"}).out, "시크릿");
+        assert.ok(v && !v.ok, `${name} 을 놓쳤다: ${v?.line}`);
+    }
+});
+
+test("채워 넣은 `.env.example` 은 이름으로 허용돼도 **내용으로** 걸린다", () => {
+    // 허용과 미검사는 다른 말이다 — 허용한 것일수록 내용을 봐야 한다.
+    const v = verdict(run({...BASE, "proj/.env.example": "ZALKERA_STOREFRONT_KEY=oqsk_live1234\n"}).out, "시크릿");
+    assert.ok(v && !v.ok, `놓쳤다: ${v?.line}`);
+});
+
+test("로컬 자리표시자 DB URL 은 통과시킨다 — 닿을 수 없는 자리의 열쇠는 못 쓴다", () => {
+    // `postgres://user:pass@localhost/db` 는 Node·Compose 서식의 가장 흔한 한 줄이다.
+    // 이것을 반려하면 대행사가 이유를 알기 어려운 반려를 받는다.
+    const v = verdict(run({...BASE, "proj/.env.example": "DB=postgres://user:pass@localhost:5432/db\n"}).out, "시크릿");
+    assert.ok(v && v.ok, `정상 서식을 반려했다: ${v?.line}`);
+});
+
+test("원격 호스트의 자격증명 URL 은 잡는다 — 위 시험의 짝이다", () => {
+    const v = verdict(run({...BASE, "proj/.env.example": "DB=postgres://real:S3cr3tPw@db.acme.co/app\n"}).out, "시크릿");
+    assert.ok(v && !v.ok, `놓쳤다: ${v?.line}`);
 });
 
 test("개인키 블록도 잡는다", () => {
