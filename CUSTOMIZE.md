@@ -312,10 +312,29 @@ zip 을 다시 쌀 때:
 - `package.json` 이 zip 의 **루트**(또는 폴더 하나로 감싼 그 안)에 오게 하십시오.
 - `package-lock.json` 을 함께 넣으십시오. 없으면 재현 가능한 빌드가 안 됩니다.
 - `.env`·`*.pem`·`*.key` 가 섞이지 않았는지 확인하십시오(`verify-zip.mjs` 가 봅니다).
+- **`.env.example` 은 값을 비운 채로 넣으십시오.** 값이 빈 서식이라 통과시키는 것입니다.
+  값은 `.env.local` 에 두십시오 — 그 파일은 애초에 zip 에 안 들어갑니다.
+
+  ⚠ **검사기를 믿고 채워 넣지 마십시오.** 검사기가 잡는 것은 **알려진 형식**뿐입니다
+  (`oqsk_`·AWS·개인키·결제 라이브 키·GitHub·Slack·Google·npm 토큰). `ZALKERA_REVALIDATE_SECRET`
+  처럼 **임의의 랜덤 문자열**을 넣는 자리는 형식이 없어 **못 잡습니다**(실측). 즉 채워 넣은
+  서식이 초록으로 통과할 수 있습니다.
+
+  넣기 전에 **눈으로 한 번 여십시오.** 값이 남아 있으면 지우고 넣으십시오 —
+  git 을 쓰신다면 `git checkout .env.example` 한 줄이면 원래 서식으로 돌아갑니다.
 
 ```bash
 # 예 — 저장소 루트에서
 zip -r ../내사이트.zip . -x 'node_modules/*' '.next/*' '.git/*' '.env*'
+
+# ⚠ 서식은 **다시 넣습니다.** 위 `.env*` 는 `.env.example` 까지 zip 에서 빼기 때문입니다
+#    (디스크의 파일이 지워지는 것은 아닙니다). README 의 첫 명령 `cp .env.example .env.local` 이
+#    그 파일을 쓰므로, 빠지면 받으신 분이 첫 줄에서 막힙니다.
+zip ../내사이트.zip .env.example
+
+# 들어갔는지 **눈으로 확인하십시오** — 위 한 줄을 빠뜨려도 아래 검수는 초록입니다.
+unzip -l ../내사이트.zip | grep '\.env\.example'
+
 node scripts/verify-zip.mjs ../내사이트.zip
 ```
 
