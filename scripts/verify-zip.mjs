@@ -112,7 +112,9 @@ const record = (name, ok, detail = "") => {
  * 시크릿 스캔 — 소스가 **고객에게 전달**되므로(소스 소유 원칙) 실제 환경파일이 섞이면 안 된다.
  * git 이력은 되돌릴 수 없어서 사후 수습이 불가능하다. `.env.example` 류는 값이 없어 허용.
  */
-const ENV_KEEP = /\.(example|sample|template)$/;
+// ⚠ **대소문자를 무시한다** — 위 이름축과 짝이다. 형제 도구는 소문자로 내려 판정하므로,
+//   여기만 구분하면 `.Env.Example` 이 「저기선 실리는데 여기선 반려되는」 파일이 된다.
+const ENV_KEEP = /\.(example|sample|template)$/i;
 
 /**
  * **내용 축.** 이름만 보면 평범한 `src/lib/cfg.ts` 에 박힌 라이브 키를 이름 검사로는 못 잡는다 — AWS 키·
@@ -136,13 +138,54 @@ const SECRET_CONTENT = [
     // 우리 고유 형식. 검사기 `[E3]` 도 이걸 알지만 그쪽은 `src/` 만 훑는다 — `public/` 은 Next 가
     // 그대로 공개 서빙하는 자리라 여기서 봐야 한다 (`public/config.js` 의 키가 무검출이었다).
     ["잘커라 스토어프론트 키", /\boqsk_[0-9A-Za-z_-]{8,}/],
-    ["URL 내장 자격증명", /\b[a-z][a-z0-9+.\-]*:\/\/[^\s/:@]+:[^\s/@]{3,}@/],
 ];
-const SECRET_TEXTUAL = /\.(m?[jt]sx?|cjs|json|md|txt|ya?ml|sh|html?|css|toml|ini|conf|env)$/i;
+/**
+ * 내용을 훑을 텍스트 파일.
+ *
+ * ⚠ **`example`·`sample`·`template` 이 여기 있어야 한다.** 이름 축이 `ENV_KEEP` 으로 서식을
+ *   허용하는데 이 그물이 그 확장자를 안 잡으면, `.env.example` 은 **이름으로도 내용으로도 안
+ *   보는 통로**가 된다 — 채워 넣은 서식이 `✅ 시크릿 0` 으로 통과한다(실측).
+ *   허용과 미검사는 다른 말이다. 허용한 것일수록 내용을 봐야 한다.
+ */
+/**
+ * 자격증명이 박힌 URL. **호스트까지 본다** — 그래서 위 표에 두지 않는다.
+ *
+ * ⚠ 형상만 보면 `postgres://user:pass@localhost:5432/db` 가 걸린다. Node·Docker Compose
+ *   서식의 가장 흔한 한 줄이고 `user`·`pass` 는 글자 그대로 자리표시자다. 닿을 수 없는 자리의
+ *   열쇠는 남이 못 쓰므로 비밀로 보지 않는다 — 형제 도구가 같은 판정을 쓴다(두 자가 갈리면
+ *   「저기선 통과하는데 여기선 반려되는」 납품이 생긴다).
+ *   재현: `.env.example` 에 그 한 줄만 넣어 팩을 만들고 이 러너를 돌린다.
+ */
+const URL_CREDENTIAL = /\b[a-z][a-z0-9+.\-]*:\/\/[^\s/:@]+:[^\s/@]{3,}@([^\s/?#]+)/g;
+const UNREACHABLE_HOST =
+    /^(?:localhost|0\.0\.0\.0|::1|127\.\d+\.\d+\.\d+|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(?:1[6-9]|2\d|3[01])\.\d+\.\d+)$/i;
+/** RFC 2606·6761 이 문서·내부용으로 못 박은 접미. */
+const UNREACHABLE_SUFFIX = /\.(?:local|localhost|internal|test|invalid)$/i;
+
+function reachableHost(raw) {
+    const host = raw.replace(/:\d+$/, "").replace(/^\[|\]$/g, "");
+    if (UNREACHABLE_HOST.test(host) || UNREACHABLE_SUFFIX.test(host)) return false;
+    // 점이 없으면 단일 라벨 — compose 서비스 이름·내부 별칭이다. 공개 호스트에는 점이 있다.
+    return host.includes(".");
+}
+
+/** AWS 가 자기 문서에서 쓰는 자리표시자. GitHub 의 스캐너도 비-비밀로 안다. */
+const AWS_DOC_PLACEHOLDER = /\bAKIA[0-9A-Z]{9}EXAMPLE\b/;
+
+const SECRET_TEXTUAL = /\.(m?[jt]sx?|cjs|json|md|txt|ya?ml|sh|html?|css|toml|ini|conf|env|example|sample|template)$/i;
 /** 확장자가 없는데 자격증명이 앉는 이름들. `.git/config` 이 이 그물 밖이라 통과한 전례가 있다. */
 const SECRET_EXTENSIONLESS =
     /^(config|credentials|\.git-credentials|\.netrc|_netrc|\.npmrc|\.pgpass|authorized_keys|known_hosts|id_rsa|id_dsa|id_ecdsa|id_ed25519)$/i;
-const SECRET_CONTENT_MAX = 2 * 1024 * 1024;
+/**
+ * 내용을 훑을 최대 크기.
+ *
+ * ⚠ 넘으면 **반려된다**(`unread`) — 조용히 건너뛰면 「0건」이 미측정을 덮기 때문이다. 그래서 이
+ *   값이 낮으면 시크릿과 무관한 큰 데이터 파일(상품 카탈로그·번역 사전) 하나로 납품 전체가
+ *   막히고, 납품사에게 줄 수 있는 조치가 「파일을 쪼개라」뿐이다. 이 그물을 지나는 것은 텍스트
+ *   확장자뿐이라(이미지·폰트는 애초에 안 온다) 넉넉히 잡아도 스캔 비용이 싸다.
+ *   재현: 8MB 짜리 `content/catalog.json` 을 담아 이 러너를 돌린다.
+ */
+const SECRET_CONTENT_MAX = 8 * 1024 * 1024;
 
 /**
  * 못 읽은 자리. 납품 zip 안에 권한 없는 디렉터리나 깨진 항목이 있으면 여기 쌓인다.
@@ -164,6 +207,35 @@ function readDirSafe(d, what) {
     }
 }
 
+/**
+ * **바이트를 글자로 읽는다 — 못 읽으면 `null`.**
+ *
+ * ⚠ `readFileSync(path, "utf8")` 하나로 때우면 **UTF-16 으로 저장한 파일이 스캔을 통째로
+ *   지나간다.** ASCII 가 바이트 사이에 `00` 을 끼고 앉아 어떤 패턴에도 안 걸린다.
+ *   Windows PowerShell 5.1 의 `Out-File`·`>` 기본값이 UTF-16LE 라 드문 길이 아니다.
+ *
+ * BOM 이 있으면 그대로 읽고, 없는데 `00` 이 섞였으면 글자가 아니다 — 그때는 읽었다고 하지
+ * 않는다. 부르는 쪽이 `unread` 에 적어 「검사하지 않았다」로 판정에 문다.
+ */
+function decodeText(buf) {
+    // ⚠ **UTF-32 를 먼저 배제한다.** UTF-32LE 의 BOM 은 `FF FE 00 00` 이라 **앞 두 바이트가
+    //    UTF-16LE 와 같다.** 아래 분기가 그것을 삼키면 4바이트 코드유닛을 2바이트로 잘라 읽어
+    //    글자 사이마다 `U+0000` 이 끼고, 인접 문자를 보는 패턴이 전부 빗나간다. 그러면서
+    //    문자열을 돌려주므로 「못 읽었다」로도 안 잡힌다 — **잘못 읽고 0건으로 통과**한다
+    //    (심의 실증: 실제 zip 이 빌드까지 완주하고 rc=0 으로 지났다).
+    //    UTF-32BE(`00 00 FE FF`)는 `00` 검사에 걸려 이미 안전하지만 나란히 적어 둔다.
+    if (buf.length >= 4 && buf[0] === 0xff && buf[1] === 0xfe && buf[2] === 0x00 && buf[3] === 0x00) return null;
+    if (buf.length >= 4 && buf[0] === 0x00 && buf[1] === 0x00 && buf[2] === 0xfe && buf[3] === 0xff) return null;
+    if (buf.length >= 2 && buf[0] === 0xff && buf[1] === 0xfe) return buf.subarray(2).toString("utf16le");
+    if (buf.length >= 2 && buf[0] === 0xfe && buf[1] === 0xff) {
+        const swapped = Buffer.from(buf.subarray(2));
+        swapped.swap16();
+        return swapped.toString("utf16le");
+    }
+    if (buf.includes(0x00)) return null;
+    return buf.toString("utf8");
+}
+
 function scanSecrets(dir) {
     const hits = [];
     const walk = (d, rel = "") => {
@@ -179,7 +251,18 @@ function scanSecrets(dir) {
                 walk(join(d, e.name), r);
                 continue;
             }
-            if (/(^|\/)\.env(\.|$)/.test(`/${r}`) && !ENV_KEEP.test(e.name)) hits.push(r);
+            // ⚠ **대소문자를 무시한다.** `.Env.Local` 은 이름축 정규식(대소문자 구분)과 내용축
+            //   확장자 그물 **양쪽을 다 빠져** `✅ 시크릿 0` 으로 통과했다. 형제 도구가 같은 자리를
+            //   실측 유출로 이미 고쳤다(`zalkera-devtools` 의 `isSecretFile` 은 소문자로 내려 판정한다).
+            //   재현: `.Env.Local` 에 스토어프론트 키를 넣어 팩을 만들고 이 러너를 돌린다.
+            // ⚠ **접두는 `.env` 다, `.env.` 가 아니다.** 점을 하나 더 요구하면 `.envrc`(direnv —
+            //   `export AWS_SECRET_ACCESS_KEY=…` 가 관례)와 `.env~`(편집기 백업 — `.env` 의 바이트
+            //   사본)가 **이름축·내용축 양쪽을 다 빠진다.** `config.env`(compose `env_file` 관례)도
+            //   접두만으로는 안 걸려 접미로 함께 본다. 형제 도구가 이 셋을 실측 유출로 넓힌 자리다.
+            //   경로 전체를 보는 이유는 `.env.example/notes.txt` 처럼 **폴더**로 우회하는 길 때문이다.
+            if ((/(^|\/)\.env/i.test(`/${r}`) || /\.env$/i.test(e.name)) && !ENV_KEEP.test(e.name)) {
+                hits.push(r);
+            }
             if (/\.(pem|key|p12|pfx)$/.test(e.name)) hits.push(r);
             // 확장자 없는 자격증명 파일(`.git/config`·`.git/credentials`·`.netrc` 등)도 본다 —
             // 위 정크 반려가 1차 방어이고 이것이 2차다.
@@ -194,14 +277,34 @@ function scanSecrets(dir) {
             let text;
             try {
                 const full = join(d, e.name);
-                if (statSync(full).size > SECRET_CONTENT_MAX) continue;
-                text = readFileSync(full, "utf8");
+                if (statSync(full).size > SECRET_CONTENT_MAX) {
+                    // ⚠ **조용히 건너뛰지 않는다.** 바로 아래 catch 가 같은 말을 적어 두고 있는데
+                    //    이 갈래만 무기록으로 빠져, 큰 파일에 넣은 시크릿이 「시크릿 0」으로 덮였다.
+                    unread.push(`${r} — ${SECRET_CONTENT_MAX / 1024 / 1024}MB 를 넘어 내용을 안 봤습니다`);
+                    continue;
+                }
+                text = decodeText(readFileSync(full));
+                if (text === null) {
+                    // 우리가 읽은 것이 원문이 아니면 「안 읽은 것」이다. 판정에 물린다.
+                    unread.push(`${r} — 글자로 읽히지 않아 내용을 안 봤습니다(UTF-8 로 저장해 재납품하십시오)`);
+                    continue;
+                }
             } catch (err) {
                 // 못 읽은 것은 적는다 — 조용히 넘기면 "0건"이 미측정을 덮는다.
                 unread.push(`${r} — 시크릿 내용 스캔 실패 [${err.code ?? "UNKNOWN"}]`);
                 continue;
             }
-            for (const [label, re] of SECRET_CONTENT) if (re.test(text)) hits.push(`${r} (${label})`);
+            for (const [label, re] of SECRET_CONTENT) {
+                if (!re.test(text)) continue;
+                if (label === "AWS 액세스키" && AWS_DOC_PLACEHOLDER.test(text) && !/\bAKIA(?![0-9A-Z]{9}EXAMPLE\b)[0-9A-Z]{16}\b/.test(text)) continue;
+                hits.push(`${r} (${label})`);
+            }
+            for (const m of text.matchAll(URL_CREDENTIAL)) {
+                if (reachableHost(m[1] ?? "")) {
+                    hits.push(`${r} (URL 내장 자격증명)`);
+                    break;
+                }
+            }
         }
     };
     walk(dir);
