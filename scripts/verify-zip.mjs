@@ -39,6 +39,24 @@
  * lockfile 축도 같은 원리다 — 서빙 박스는 `npm ci` 뿐이라 yarn·pnpm lock 을 소비하지 못한다.
  * 넓게 받으면 "검사기는 통과했는데 업로드가 거절"이 만들어진다(서버 판정과 같은 목록).
  *
+ * ── `--byo` — 원본 마크업 이관물 모드 ────────────────────────────────
+ * 이 러너의 기본 대상은 **외주 납품물**이다(위 `--pack` 대비). 그런데 검사 두 개가 우리 시작 소스의
+ * 부속을 요구한다 — 「가드 회귀 스위트」는 `scripts/lib/test-floors.json` 을, 「미리보기 관문 등재」는
+ * `src/middleware.ts` 를 전제한다. 거래처 원본 마크업을 그대로 옮긴 zip 에는 **애초에 없다.**
+ * 그대로 두면 이 러너가 「우리 템플릿 골격을 이고 있을 것」을 요구하게 되는데, 그 골격을 이관물에
+ * 얹으면 원본 디자인이 달라진다 — 즉 **rc 0 을 받으려면 이관을 망쳐야 하는** 형상이 된다.
+ *
+ * `--byo` 는 「이 zip 은 우리 템플릿 혈통이 아니다」는 **호출자의 선언**이고, 그때만 두 검사를 건너뛴다.
+ * 나머지(lockfile·시크릿·에셋 라이선스·`npm ci`·빌드·standalone 산출)는 그대로 돈다.
+ *
+ * ⚠ **자동 감지가 아니다.** 「표식이 없으면 건너뛴다」로 만들면 그 표식을 지우는 것만으로 가드 집행이
+ *   꺼진다 — 이 검사가 겨냥한 집단은 *우리 소스 zip 을 받아 고쳐 다시 올린 테넌트*이고, 그들에겐 CI 가
+ *   없어 여기가 유일한 집행 지점이다. 그래서 기본은 엄격이고 완화는 명시적으로 켠다
+ *   (샌드박스 `GATE_MISSING_CHECKER` 와 같은 형태 — 완화의 근거를 아티팩트 밖에 둔다).
+ *   감지는 **반대 방향으로만** 쓴다: `--byo` 인데 혈통 표식이 있으면 **거부**한다(rc 2).
+ *
+ * ⚠ 건너뛴 자리는 `✅` 가 아니라 `➖ 미검사`로 찍고 요약에서 한 번 더 외친다. 통과가 아니다.
+ *
  * ── `--pack` — 카탈로그 팩 모드 ────────────────────────────────────
  * 기본은 **납품 검수기**다: 외주 zip 은 테넌트 사이트로 가므로 팩 신원 매니페스트(`.zalkera/pack.json`)를
  * 낼 의무가 없고, 카탈로그 입장 판정은
@@ -48,7 +66,7 @@
  * 매니페스트가 **있으면** 모드와 무관하게 형상을 본다 — 있는데 틀린 것은 어느 경로에서든 결함이다.
  *
  * 사용:
- *   node scripts/verify-zip.mjs <납품.zip> [--keep] [--pack]
+ *   node scripts/verify-zip.mjs <납품.zip> [--keep] [--pack] [--byo]
  *
  * 종료코드: 0=통과 · 1=반려(검사 실패) · 2=실행 불가(인자·환경 문제)
  */
@@ -75,9 +93,22 @@ const zipPath = args.find((a) => !a.startsWith("--"));
 const keep = args.includes("--keep");
 /** 이 zip 이 본사 카탈로그(theme_artifact)에 올라간다는 선언 — 머리말 `--pack` 참조. */
 const packMode = args.includes("--pack");
+/**
+ * **이 zip 이 우리 템플릿 혈통이 아니라는 선언** — 머리말 `--byo` 참조.
+ *
+ * 완화의 근거를 **아티팩트 밖**에 둔다. 「`test-floors.json` 이 없으면 건너뛴다」로 자동 감지하면
+ * 그 파일을 지우는 것만으로 가드 집행이 꺼진다 — 선언 축에서 이미 겪은 형상이다(`[EDECL]` → rc 7).
+ * 그래서 기본은 엄격이고, 완화는 **호출자가 명시적으로 켠다**(샌드박스 `GATE_MISSING_CHECKER` 와 같은 형태).
+ */
+const byoMode = args.includes("--byo");
 
 if (!zipPath) {
-    console.error("사용: node scripts/verify-zip.mjs <납품.zip> [--keep] [--pack]");
+    console.error("사용: node scripts/verify-zip.mjs <납품.zip> [--keep] [--pack] [--byo]");
+    process.exit(2);
+}
+// 카탈로그 팩은 정의상 우리 템플릿이다 — 두 선언이 같이 서면 둘 중 하나가 거짓이다.
+if (packMode && byoMode) {
+    console.error("`--pack` 과 `--byo` 는 같이 못 씁니다 — 카탈로그 팩은 정의상 우리 템플릿 혈통입니다.");
     process.exit(2);
 }
 if (!existsSync(zipPath)) {
@@ -102,10 +133,60 @@ const BUILD_ENV = {
     ZALKERA_OFFLINE_BUILD: "1",
 };
 
+/**
+ * **템플릿 혈통 표식.** 하나라도 있으면 이 zip 은 우리 시작 소스에서 나온 것이다.
+ *
+ * ⚠ **감지를 면제의 근거로 쓰지 않는다 — 방향이 반대다.** 이 목록은 `--byo` 주장이 **거짓일 때
+ *   거부**하는 데만 쓴다. 「표식이 없으면 자동으로 BYO」로 읽으면 표식을 지우는 것만으로 가드
+ *   집행이 꺼져, 이 검사가 겨냥한 집단(템플릿 소스를 받아 고쳐 다시 올린 테넌트)이 그대로 빠져나간다.
+ *
+ * ⚠ `middleware.ts` 는 표식이 **아니다.** Next 앱이면 누구나 둘 수 있어 정당한 BYO 를 거짓 거부한다.
+ *
+ * 남는 위험: 우리 가드 소스(`src/lib/crossOrigin.ts` 등)만 남기고 아래 표식을 전부 지운 zip 은
+ * `--byo` 로 통과한다. 그 지점은 기계가 아니라 사람이 본다(호출자가 origin 을 안다).
+ */
+const LINEAGE = [
+    "src/components/sections/SectionRenderer.tsx",
+    "content/index.ts",
+    "scripts/lib/test-floors.json",
+    "scripts/lib/gate-behavior.mjs",
+];
+/** `--byo` 주장이 참인지 본다 — 거짓이면 사유를 돌려준다(빈 배열이면 참). */
+const lineageEvidence = (root) => {
+    const hit = LINEAGE.filter((f) => existsSync(join(root, f)));
+    try {
+        const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+        const deps = {...(pkg.dependencies ?? {}), ...(pkg.devDependencies ?? {})};
+        if (deps["@zalkera/client"]) hit.push("package.json 의 @zalkera/client 의존");
+        if (pkg.zalkera) hit.push("package.json 의 zalkera 선언");
+    } catch {
+        /* package.json 을 못 읽는 것은 아래 형상 검사가 따로 잡는다 */
+    }
+    return hit;
+};
+
 /** 검사 결과 한 줄을 찍고 통과 여부를 돌려준다 — 호출부가 `failed` 를 세운다. */
 const record = (name, ok, detail = "") => {
     console.log(`${ok ? "✅" : "❌"} ${name}${detail ? ` — ${detail}` : ""}`);
     return ok;
+};
+
+/**
+ * **건너뛴 검사.** `✅` 로 찍지 않는다 — 통과가 아니라 **미검사**다.
+ *
+ * ⚠ 요약에서 한 번 더 외친다(아래 `announceSkipped`). 검사 직후에만 찍으면 항목이 많은 실행에서
+ *   스크롤 밖으로 밀려, 「못 쟀다」가 조용해진다 — 샌드박스가 `GATE-WARN` 을 끝에서 재고지하는 것과 같은 이유다.
+ */
+const skipped = [];
+const recordSkip = (name, why) => {
+    console.log(`➖ ${name} — 건너뜀(${why}) · **통과가 아니라 미검사입니다.**`);
+    skipped.push(name);
+};
+const announceSkipped = (log) => {
+    if (!skipped.length) return;
+    log(`\n미검사 ${skipped.length}건 — 아래 자리는 **재지 않았습니다**(통과가 아닙니다):`);
+    for (const n of skipped) log(`   · ${n}`);
+    log("   `--byo` 는 우리 템플릿 혈통 전용 검사만 끕니다. 이 자리들의 성질은 아무도 안 봤습니다.");
 };
 
 /**
@@ -567,6 +648,21 @@ try {
         failed = true;
     } else {
         const root = effectiveRoot(work);
+
+        // ①-b **`--byo` 주장이 참인가.** 거짓이면 여기서 멈춘다 — 「우리 템플릿 혈통이 아니다」라고
+        //     선언해 놓고 혈통 표식을 달고 오면, 그 선언은 가드 집행을 끄려는 것이다. 고칠 자리가
+        //     소스가 아니라 **호출**이므로 반려(1)가 아니라 실행 불가(2)로 세운다.
+        if (byoMode) {
+            const evidence = lineageEvidence(root);
+            if (evidence.length) {
+                console.error("❌ `--byo` 선언이 zip 과 맞지 않습니다 — 우리 템플릿 혈통 표식이 있습니다:");
+                for (const e of evidence) console.error(`   · ${e}`);
+                console.error("   템플릿에서 출발한 소스는 가드 회귀 스위트를 **돌려야 합니다**. `--byo` 를 빼고 다시 재십시오.");
+                removeWork();
+                process.exit(2);
+            }
+            console.log("➖ 모드 — `--byo`(우리 템플릿 혈통 아님) · 템플릿 전용 검사 2건을 건너뜁니다");
+        }
 
         // ② 형상 — package.json + lockfile, 산출물 미포함.
         const hasPkg = existsSync(join(root, "package.json"));
@@ -1059,7 +1155,13 @@ try {
                 //    있는 테넌트에서만 돈다. 업로드 태생 테넌트는 CI 가 없어 집행이 **0** 이었고,
                 //    `CUSTOMIZE.md` 는 이 명령을 업로드 전 자가 검수로 지목한다 — 즉 고객이 문서대로 다
                 //    해도 가드가 깨진 zip 이 ✅ 를 받는다.
-                {
+                //    ⚠ **`--byo` 에서는 안 돈다.** 하한표(`scripts/lib/test-floors.json`)와 그 시험은
+                //    우리 시작 소스가 실어 보내는 것이라, 원본 마크업 이관물에는 **애초에 없다**.
+                //    그것을 반려로 세우면 이 러너가 「우리 템플릿 골격을 이고 있을 것」을 요구하게 되는데,
+                //    그 골격은 이관물에 얹으면 안 되는 것이다(디자인이 원본과 달라진다).
+                if (byoMode) {
+                    recordSkip("가드 회귀 스위트", "하한표는 우리 시작 소스가 싣는 것 — 이관물에는 없다");
+                } else {
                     // 경로를 **호출 자리에** 둔다 — 변수로 빼면 「러너 자신의 것을 쓰는가」를 재는
                     // 시험이 그 자리를 못 본다(실측: 못 찾아 반려했다).
                     const t = spawnSync("node", [join(HERE, "lib", "floor-gate.mjs"), root], {
@@ -1109,7 +1211,12 @@ try {
                     //     조용히 전부 꺼지는데, 소스를 읽는 검사는 그 형상을 못 본다 — 파일이 멀쩡해도
                     //     위치 오류·matcher 오염·**규약 폐지**(Next 16 이 이미 deprecated 경고를 낸다)로
                     //     안 실릴 수 있다. 위 ⑦-b 스위트의 통제군은 문면 검사라 여기까지는 못 온다.
-                    {
+                    //     ⚠ **`--byo` 에서는 안 돈다.** 관문(`src/middleware.ts`)은 우리 시작 소스의 장치다.
+                    //     남는 위험을 숨기지 않는다: **변이 라우트를 가진 BYO 소스는 미리보기 쓰기 차단이
+                    //     없다.** 그래서 이 자리는 요약에서 미검사로 다시 외친다.
+                    if (byoMode) {
+                        recordSkip("미리보기 관문 등재", "관문은 우리 시작 소스의 장치 — 변이 라우트가 있으면 사람이 볼 것");
+                    } else {
                         const mf = join(root, ".next", "server", "middleware-manifest.json");
                         let entries = null;
                         try {
@@ -1233,6 +1340,7 @@ if (unread.length) {
 
 console.log("─".repeat(60));
 if (failed) {
+    announceSkipped((m) => console.error(m));
     console.error("\n반려 — 위 ❌ 항목을 고쳐 재납품 요청하십시오.");
     // X 지적이 하나도 없는데 "위 ❌ 항목 참조"를 찍으면 없는 것을 가리킨다 — 반려 사유가
     // 문법 오류 하나뿐일 때 실제로 그랬다. 이 줄은 X 지적이 실제로 있을 때만 낸다.
@@ -1246,6 +1354,7 @@ if (failed) {
     console.error("사람이 추가로 볼 것: 에셋 출처 실제 대조 · 링크 소독(safeUrl) 여부 · 개시 후 화면·색 반영.");
     process.exit(1);
 }
+announceSkipped((m) => console.log(m));
 console.log("\n기계 검사 통과. **아직 인수 확정이 아닙니다** — 다음은 사람 몫입니다:");
 console.log("  · 에셋 매니페스트와 실제 이미지 대조(출처·라이선스)");
 console.log("  · href 가 소독을 타는지(오픈 리다이렉트 — 기계가 못 잡는 자리)");
