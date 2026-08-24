@@ -150,17 +150,46 @@ const LINEAGE = [
     "content/index.ts",
     "scripts/lib/test-floors.json",
     "scripts/lib/gate-behavior.mjs",
+    // **가드 소스가 가장 강한 증거다**(보안 심의 🟠2). 위 넷은 지워도 사이트가 그대로 뜨는
+    // 개발 아티팩트라 스크럽이 쉬운데, 아래는 지우면 그 사이트의 위조 가드가 같이 사라진다 —
+    // 즉 「우리 가드를 실은 채 표식만 지운 zip」이 `--byo` 로 빠져나가는 길을 좁힌다.
+    // 원본 마크업 이관물이 우리 crossOrigin.ts 를 실을 이유는 없다.
+    "src/lib/crossOrigin.ts",
+    "src/lib/previewGuard.ts",
+    "src/lib/safeUrl.ts",
+    "src/lib/oauthState.ts",
 ];
+/** `package.json` 을 읽기 전 크기 상한 — 신뢰 밖 zip 이 거대 파일·`/dev/zero` 심링크를 넣는다. */
+const LINEAGE_PKG_MAX = 2 * 1024 * 1024;
 /** `--byo` 주장이 참인지 본다 — 거짓이면 사유를 돌려준다(빈 배열이면 참). */
 const lineageEvidence = (root) => {
-    const hit = LINEAGE.filter((f) => existsSync(join(root, f)));
+    // ⚠ **`lstat` 으로 본다 — 심링크를 따라가지 않는다.** `existsSync` 는 링크를 추종하므로,
+    //   zip 이 표식 이름을 검수자 기계의 임의 경로로 링크해 두면 반려문에 그 이름이 열거되는지로
+    //   **그 경로의 존재가 납품사에게 샌다**(고정 이름 여덟 = 한 판에 여덟 탐침). 같은 이유로
+    //   `readPackManifest` 는 lstat 을 앞에 두고, 시크릿 스캔은 심링크를 아예 거부한다.
+    //   링크 자체는 표식으로 세우지 않는다 — 우리 파일을 «둔» 것이 아니라 «가리킨» 것이다.
+    const present = (f) => {
+        try {
+            return lstatSync(join(root, f)).isFile();
+        } catch {
+            return false;
+        }
+    };
+    const hit = LINEAGE.filter(present);
     try {
-        const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
-        const deps = {...(pkg.dependencies ?? {}), ...(pkg.devDependencies ?? {})};
-        if (deps["@zalkera/client"]) hit.push("package.json 의 @zalkera/client 의존");
-        if (pkg.zalkera) hit.push("package.json 의 zalkera 선언");
+        // ⚠ 크기 캡 후 읽는다. `/dev/zero` 심링크면 캡 없는 read 가 검수자 프로세스를 죽인다.
+        const pkgPath = join(root, "package.json");
+        const st = lstatSync(pkgPath);
+        if (st.isFile() && st.size <= LINEAGE_PKG_MAX) {
+            const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
+            // ⚠ `@zalkera/client` 는 **표식으로 쓰지 않는다**(기능 심의 🟠2). 공개 npm·MIT 라
+            //   우리 공개 API 를 쓰는 **정당한** BYO 이관물도 단다 — 표식으로 세우면 `--byo` 는
+            //   rc 2, 빼면 하한표 부재로 rc 1 이 되어 이 플래그가 닫으려던 덫이 되살아난다.
+            //   선언(`zalkera`)은 남긴다: 그것은 「우리 잣대를 대 달라」는 자기 선언이라 뜻이 다르다.
+            if (pkg.zalkera) hit.push("package.json 의 zalkera 선언");
+        }
     } catch {
-        /* package.json 을 못 읽는 것은 아래 형상 검사가 따로 잡는다 */
+        // 손상·부재는 여기서 판정하지 않는다 — 부재는 ②형상, 파싱 불가는 `npm ci` 가 잡는다.
     }
     return hit;
 };
@@ -180,12 +209,14 @@ const record = (name, ok, detail = "") => {
 const skipped = [];
 const recordSkip = (name, why) => {
     console.log(`➖ ${name} — 건너뜀(${why}) · **통과가 아니라 미검사입니다.**`);
-    skipped.push(name);
+    // ⚠ **사유를 같이 싣는다.** 이름만 저장하면 요약이 「무엇을」만 말하고 「왜 위험한가」를
+    //   버린다 — 정작 잔여 위험은 스크롤 밖으로 밀리는 인라인 줄에만 남는다.
+    skipped.push({name, why});
 };
 const announceSkipped = (log) => {
     if (!skipped.length) return;
     log(`\n미검사 ${skipped.length}건 — 아래 자리는 **재지 않았습니다**(통과가 아닙니다):`);
-    for (const n of skipped) log(`   · ${n}`);
+    for (const {name, why} of skipped) log(`   · ${name} — ${why}`);
     log("   `--byo` 는 우리 템플릿 혈통 전용 검사만 끕니다. 이 자리들의 성질은 아무도 안 봤습니다.");
 };
 
@@ -1311,7 +1342,7 @@ try {
                                   "   → next.config 에 output: 'standalone' 을 추가하고 다시 빌드해 주세요\n" +
                                   "     (잘커라는 빌드 산출물 .next/standalone/server.js 를 실행합니다.\n" +
                                   "      output: 'export'·distDir 변경 상태로는 서빙할 수 없습니다).\n" +
-                                  "   자체 호스팅(BYO)이면 이 요건은 해당 없습니다 — 이 검수는 우리가 서빙할 납품물을 재는 자리입니다.",
+                                  "   고객이 자체 호스팅하면 이 요건은 해당 없습니다 — 이 검수는 우리가 서빙할 납품물을 재는 자리입니다.",
                         )
                     ) {
                         failed = true;
@@ -1358,6 +1389,11 @@ announceSkipped((m) => console.log(m));
 console.log("\n기계 검사 통과. **아직 인수 확정이 아닙니다** — 다음은 사람 몫입니다:");
 console.log("  · 에셋 매니페스트와 실제 이미지 대조(출처·라이선스)");
 console.log("  · href 가 소독을 타는지(오픈 리다이렉트 — 기계가 못 잡는 자리)");
+if (byoMode) {
+    // 미리보기 관문 검사를 껐으므로, 그것이 막던 것을 사람에게 그대로 넘긴다.
+    console.log("  · **변이 라우트(POST·PUT·PATCH·DELETE)가 있는지** — `--byo` 로 미리보기 관문 검사를");
+    console.log("    껐습니다. 변이 라우트가 있으면 미리보기 쓰기 차단이 **없는 상태**입니다.");
+}
 // ⚠ **없는 경고를 고지하지 않는다.** 반려 경로(위)는 이미 `xFindings.length > 0` 로 가드하는데
 //    성공 경로만 무조건 찍어, X 지적이 0건인 zip 에서도 검수자가 없는 경고를 찾으러 갔다(실측:
 //    skeleton·shop-goods 둘 다 「규약 위반 없음」인데 이 줄이 나왔다). 같은 가드를 여기도 건다.
