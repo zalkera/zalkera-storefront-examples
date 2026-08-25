@@ -76,6 +76,7 @@ import {basename, join, relative, resolve} from "node:path";
 import {tmpdir} from "node:os";
 import {fileURLToPath} from "node:url";
 import {childEnv} from "./lib/childEnv.mjs";
+import {probeDevCompile} from "./lib/devCompile.mjs";
 import {junkTopLevel} from "./lib/junkEntries.mjs";
 import {derivedRoutes, appDirOf, sourceRoot, SYNTHETIC} from "./lib/routes.mjs";
 
@@ -217,7 +218,7 @@ const announceSkipped = (log) => {
     if (!skipped.length) return;
     log(`\n미검사 ${skipped.length}건 — 아래 자리는 **재지 않았습니다**(통과가 아닙니다):`);
     for (const {name, why} of skipped) log(`   · ${name} — ${why}`);
-    log("   `--byo` 는 우리 템플릿 혈통 전용 검사만 끕니다. 이 자리들의 성질은 아무도 안 봤습니다.");
+    log("   **이 자리들의 성질은 아무도 안 봤습니다.** 통과로 세지 마십시오.");
 };
 
 /**
@@ -463,6 +464,7 @@ function effectiveRoot(dir) {
  *     verify-zip.mjs
  *     validate-storefront.mjs      ← 규약 검사(`VALIDATOR`)를 spawn 한다
  *     lib/childEnv.mjs             ← 측정 자식 환경(판정을 바꾸는 상속 변수 제거)
+ *     lib/devCompile.mjs           ← 개발 서버 컴파일 판정(빌드가 경고로 넘기는 자리)
  *     lib/floors.mjs               ← 하한 판정
  *     lib/junkEntries.mjs          ← 조기 반려 판정
  *     lib/routes.mjs               ← 관문 등재 프로브 도출
@@ -1140,6 +1142,43 @@ try {
             //   `--ignore-scripts` 를 빼면 postinstall 산출에 기대는 소스가 여기서만 통과한다.
             if (!run("npm ci", "npm", ["ci", "--ignore-scripts", "--include=dev", "--no-audit", "--no-fund"])) failed = true;
             else {
+                // ⑥-b **개발 서버가 첫 화면을 컴파일하는가.**
+                //
+                //    `next build` 는 CSS 파싱 실패를 **경고로 찍고 rc 0 을 낸다** — `next dev` 는 같은
+                //    자리를 하드 에러로 내고 그 페이지가 500 이 된다. 종료 코드만 보던 이 검수는 그
+                //    차이를 못 봐서, 시안 `<style>` 의 `@import` 가 규칙 뒤로 밀린 팩이 **전 항목
+                //    초록으로 납품**됐고 받은 쪽이 미리보기를 켜자마자 멈췄다.
+                //
+                //    ⚠ **설치 직후·빌드 앞에 둔다.** 여기서 반려하면 ❌ 줄이 30초에 뜬다 — 다만
+                //      **뒤 검사를 멈추지는 않는다**(한 판에 결함을 몰아 보고하는 편이 재납품 왕복을
+                //      줄인다). 벽시계는 안 줄어든다. 조기 차단은 「되돌릴 수 없는 사유」에만 건다
+                //      (위 `if (hasPkg && lock && !failed)`).
+                //    ⚠ **완화는 호출자가 켠다.** `--byo` 가 아니면 `strict` 다 — dev 스크립트 부재나
+                //      무응답이 «미검사»가 아니라 **반려**가 된다. zip 내용이 검사를 끄게 두면
+                //      `package.json` 한 줄로 이 가드가 꺼지는데, 겨냥 집단이 바로 그 파일을 쥔 쪽이다.
+                //      `--byo` 에서 완화하는 근거는 `docs/byo-headless-guide.md` 가 `dev` 스크립트를
+                //      요건으로 건 적이 없다는 것이다 — 없는 요건을 집행하지 않는다.
+                //    ⚠ 재는 것은 「**첫 화면 한 장**이 서버에서 컴파일되는가」다. 못 보는 자리 셋은
+                //      `lib/devCompile.mjs` 머리말에 적혀 있다(라우트 1장 · 클라이언트 오류 · 백엔드 부재).
+                {
+                    const {verdict, why} = await probeDevCompile(root, {
+                        pkg: JSON.parse(readFileSync(join(root, "package.json"), "utf8")),
+                        env: childEnv(BUILD_ENV),
+                        strict: !byoMode,
+                    });
+                    if (verdict === "skip") recordSkip("개발 서버 컴파일", why);
+                    else if (verdict === "fail") {
+                        record("개발 서버 컴파일", false, why);
+                        failed = true;
+                    } else record("개발 서버 컴파일", true, why);
+                    // 개발 산출물을 지운다. **뒤 검사가 dev 판을 상용 산출물로 읽지 않게 하는 것이
+                    // 본뜻이다** — ⑧-a 가 `.next/server/middleware-manifest.json` 을, ⑧ 이
+                    // `.next/standalone/server.js` 를 본다. 덤으로 zip 이 몰래 실은 프리빌드 산출물도
+                    // 여기서 사라진다.
+                    // ⚠ SIGKILL 직후라 경합이 난다 — 재시도가 없으면 러너가 판정 대신 스택트레이스로 죽는다.
+                    rmSync(join(root, ".next"), {recursive: true, force: true, maxRetries: 3, retryDelay: 100});
+                }
+
                 // ⑦ 산출물 검사기가 **이 zip 안에서 살아서 뜨는가**.
                 //
                 //    왜 게이트인가: `CUSTOMIZE.md` 는 "그 검사기도 이 zip 에 들어 있습니다"라고 약속하는데,

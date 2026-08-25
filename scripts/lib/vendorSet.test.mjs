@@ -81,6 +81,7 @@ export const VENDOR_SET = [
     "verify-zip.mjs",
     "validate-storefront.mjs",
     "lib/childEnv.mjs",
+    "lib/devCompile.mjs",
     "lib/floors.mjs",
     "lib/junkEntries.mjs",
     "lib/routes.mjs",
