@@ -49,13 +49,13 @@ function verdict(out, name) {
     return {ok: line.trim().startsWith("✅"), line: line.trim()};
 }
 
-function run(entries, {wrap = true, pack = false} = {}) {
+function run(entries, {wrap = true, pack = false, byo = false} = {}) {
     const box = mkdtempSync(join(tmpdir(), "zalkera-vzj-"));
     made.push(box);
     const zip = join(box, "case.zip");
     const shaped = wrap ? entries : Object.fromEntries(Object.entries(entries).map(([k, v]) => [k.replace(/^proj\//, ""), v]));
     writeMiniZip(zip, shaped);
-    const r = spawnSync(process.execPath, [RUNNER, zip, ...(pack ? ["--pack"] : [])], {
+    const r = spawnSync(process.execPath, [RUNNER, zip, ...(pack ? ["--pack"] : []), ...(byo ? ["--byo"] : [])], {
         encoding: "utf8",
         env: {...process.env, TMPDIR: box},
     });
@@ -262,3 +262,71 @@ test("`node_modules` 가 실려 오면 조기에 반려한다", () => {
         assert.equal(verdict(out, "최상위 구성"), null, out.slice(-600));
     });
 }
+
+/**
+ * **⑥-b 배선을 문다** — 판정부(`lib/devCompile.mjs`)가 아니라 CLI 가 그 판정을 `record`·
+ * `recordSkip`·`failed` 로 옮기는 자리다. 그 배선에 시험이 0건이면 다음 변이가 조용히 산다:
+ *   · `failed = true` 삭제      → 깨진 팩이 ❌ 를 찍고도 rc 0
+ *   · `recordSkip` → `record(true)` → 미검사가 ✅ 로 둔갑
+ *
+ * ⚠ **rc 로 재려면 다른 검사가 전부 통과하는 픽스처가 필요하다.** 최소 zip 은 빌드·하한·산출물에서
+ *   어차피 반려라 rc 가 「무엇 때문인지」를 못 가른다(이 파일 머리말의 `verdict()` 가 그래서 있다).
+ *   `--byo` 는 하한·관문을 걷으므로, `build` 가 standalone 을 만들어 주기만 하면 rc 0 이 선다 —
+ *   그 자리에서만 `failed` 배선이 rc 로 드러난다.
+ *
+ * **Next 없이 잰다.** 러너는 `npm run dev` 를 부를 뿐이라, `dev` 가 원하는 상태를 내는 한 줄짜리
+ * node 서버면 충분하다. 의존이 0개라 `npm ci` 가 즉시 끝난다.
+ */
+const devServer = (status) =>
+    `const http=require("http");http.createServer((q,s)=>{s.writeHead(${status},{"content-type":"text/html"});s.end("x")})` +
+    `.listen(process.env.PORT,"127.0.0.1");\n`;
+
+const withDev = (status, extra = {}) => ({
+    ...BASE,
+    "proj/package.json": JSON.stringify({name: "t", version: "1.0.0", scripts: {dev: "node dev.js"}}) + "\n",
+    "proj/dev.js": devServer(status),
+    ...extra,
+});
+
+test("개발 서버가 200 이면 그 자리는 ✅ 다 — 양성 통제군", () => {
+    // 이것이 없으면 「무엇이든 ❌」 구현으로도 아래 시험들이 초록이 된다.
+    const v = verdict(run(withDev(200)).out, "개발 서버 컴파일");
+    assert.ok(v, "판정 줄이 없다");
+    assert.equal(v.ok, true, v.line);
+});
+
+test("개발 서버가 500 이면 반려다 — 이 검사가 생긴 자리다", () => {
+    const {out} = run(withDev(500));
+    const v = verdict(out, "개발 서버 컴파일");
+    assert.ok(v && !v.ok, `놓쳤다: ${v?.line ?? out.slice(-600)}`);
+    assert.match(out, /500/);
+});
+
+test("dev 스크립트가 없으면 **기본 모드에서 반려**다 — zip 이 검사를 끄지 못한다", () => {
+    // `--byo` 없이 도는 실행에서 `package.json` 한 줄로 가드가 꺼지면 안 된다.
+    const v = verdict(run(BASE).out, "개발 서버 컴파일");
+    assert.ok(v && !v.ok, `미검사로 샜다: ${v?.line ?? "판정 줄 없음"}`);
+});
+
+test("`--byo` 에서는 dev 부재가 미검사다 — 없는 요건을 집행하지 않는다", () => {
+    const {out} = run(BASE, {byo: true});
+    assert.equal(verdict(out, "개발 서버 컴파일"), null, "✅/❌ 로 찍혔다 — 미검사여야 한다");
+    assert.match(out, /➖ 개발 서버 컴파일/);
+    assert.match(out, /통과가 아니라 미검사입니다/);
+});
+
+/** `--byo` 에서 나머지 검사가 전부 통과하는 최소 트리. `dev` 상태만 바꿔 rc 를 가른다. */
+const byoPassing = (status) => ({
+    "proj/package.json": JSON.stringify({name: "b", version: "1.0.0", scripts: {dev: "node dev.js", build: "node build.js"}}) + "\n",
+    "proj/package-lock.json": JSON.stringify({name: "b", version: "1.0.0", lockfileVersion: 3, requires: true, packages: {"": {name: "b", version: "1.0.0"}}}) + "\n",
+    "proj/dev.js": devServer(status),
+    "proj/build.js": 'require("fs").mkdirSync(".next/standalone",{recursive:true});require("fs").writeFileSync(".next/standalone/server.js","");\n',
+});
+
+test("개발 서버 반려가 **종료 코드까지** 간다 — ❌ 를 찍고 rc 0 으로 나가지 않는다", () => {
+    // 양성 통제군이 rc 0 이라야 이 시험이 「무엇이든 rc 1」을 재는 것이 아님을 보인다.
+    assert.equal(run(byoPassing(200), {byo: true}).rc, 0, "정상 픽스처가 rc 0 이 아니다 — 이 시험이 아무것도 안 문다");
+    const bad = run(byoPassing(500), {byo: true});
+    assert.equal(bad.rc, 1, `dev 500 인데 rc ${bad.rc} 다 — failed 배선이 끊겼다`);
+    assert.equal(verdict(bad.out, "개발 서버 컴파일")?.ok, false);
+});

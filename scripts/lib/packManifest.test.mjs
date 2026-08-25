@@ -14,11 +14,12 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
 import {spawnSync} from "node:child_process";
-import {mkdirSync, mkdtempSync, rmSync, writeFileSync} from "node:fs";
+import {mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync} from "node:fs";
 import {dirname, join} from "node:path";
 import {tmpdir} from "node:os";
 import {fileURLToPath} from "node:url";
 import {contentManifest, identifierOf} from "./contentManifest.mjs";
+import {REPO_ONLY_FLOORS} from "./floors.mjs";
 
 const TSC = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "node_modules", ".bin", "tsc");
 
@@ -106,4 +107,31 @@ test("생성물이 스스로 가르치는 형상과 실제 형상이 같다", ()
     const out = contentManifest(["our-story"]);
     assert.match(out, /"<slug>": <이름>,/);
     assert.match(out, /^\s{4}"our-story": our_story,$/m);
+});
+
+/**
+ * **정본 전용 시험은 팩에서 빠져야 한다** — `REPO_ONLY_FLOORS` ↔ `SOURCE_EXCLUDES` 불변식.
+ *
+ * 왜 못 박나: 팩의 하한표는 `REQUIRED_FLOORS` 로 **다시 지어지므로**(`pack-preset.mjs` 의
+ * `shippedFloorTable`) 정본 전용 항목이 안 실린다. 그런데 `floor-gate.mjs` 는 표의 키가 아니라
+ * `scripts/** 아래 *.test.mjs` **글롭**으로 시험을 돌린다. 그래서 파일이 팩에 남으면 「하한표 밖의
+ * 스위트」로 **모든 팩이 자기 검수에서 죽고**, `ci.yml` 이 배송되므로 전 테넌트 CI 가 적색이 된다.
+ *
+ * 이 불변식은 지금까지 사람의 기억이 지켰고, **한 번 어긋났다**(`devCompile.test.mjs` 를 새로
+ * 만들 때 배제 목록에 빠뜨렸다가 심의에서 잡혔다). 그래서 기계로 옮긴다.
+ *
+ * ⚠ **문면으로 읽는다.** `pack-preset.mjs` 는 import 하면 도는 CLI 라 상수를 가져올 수 없다 —
+ *   `vendorSet.test.mjs` 가 주석표를 읽는 것과 같은 규율이다.
+ */
+test("정본 전용 `scripts/** 아래 *.test.mjs` 는 전부 팩 배제 목록에 있다", () => {
+    const src = readFileSync(new URL("../pack-preset.mjs", import.meta.url), "utf8");
+    const block = /const SOURCE_EXCLUDES = \[([\s\S]*?)\n\];/.exec(src);
+    assert.ok(block, "SOURCE_EXCLUDES 배열을 못 찾았다 — 이 시험이 아무것도 안 보고 있다");
+    const excluded = new Set([...block[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]));
+    assert.ok(excluded.size >= 10, `배제 항목을 ${excluded.size}개만 찾았다 — 추출이 깨졌다`);
+
+    const repoOnlyScriptTests = Object.keys(REPO_ONLY_FLOORS).filter((f) => f.startsWith("scripts/") && f.endsWith(".test.mjs"));
+    assert.ok(repoOnlyScriptTests.length > 0, "정본 전용 스크립트 시험이 0건이다 — 표본이 틀렸다");
+    const leaking = repoOnlyScriptTests.filter((f) => !excluded.has(f));
+    assert.deepStrictEqual(leaking, [], `팩에 실리면 「하한표 밖의 스위트」로 모든 팩이 죽는다: ${leaking.join(" · ")}`);
 });

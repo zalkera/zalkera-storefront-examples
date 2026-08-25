@@ -182,6 +182,13 @@ const SOURCE_EXCLUDES = [
     "scripts/lib/verifyZipJudgments.test.mjs",
     // 신호 정리 시험은 이 레포의 `dist-presets` 에 든 zip 을 대상으로 삼는다 — 고객 트리엔 없다.
     "scripts/lib/verifyZipSignal.test.mjs",
+    // 개발 서버 판정 시험. **판정부(`lib/devCompile.mjs`)는 싣는다** — `verify-zip.mjs` 가 그것을
+    // import 하므로 빠지면 고객 자가검수가 `ERR_MODULE_NOT_FOUND` 로 죽는다. 시험만 뺀다:
+    // 정본 전용(`REPO_ONLY_FLOORS`)이라 팩 하한표에 안 실리는데, `floor-gate.mjs` 는
+    // `scripts/**/*.test.mjs` **글롭**으로 돌므로 파일이 남으면 「하한표 밖의 스위트」로
+    // **모든 팩이 자기 검수에서 죽는다.**
+    // 재현: 이 줄을 지우고 `node scripts/pack-preset.mjs --version 9.9.9 skeleton` → 표 밖 스위트 1건으로 반려.
+    "scripts/lib/devCompile.test.mjs",
     // 배송 문서(`docs/byo-headless-guide.md`)와 소스의 env 이름 대조 — 우리 문서에 대한 규율이다.
     "scripts/lib/docEnvNames.test.mjs",
     // 사내 성능 재현 도구. 고객이 부를 표면이 없다 — 형제들(pack-preset·snapshot-preview)과 같은 결.
