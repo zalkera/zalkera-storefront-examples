@@ -210,8 +210,14 @@ export async function runDevProbe(root, {env = process.env, bindMs = 30_000, rep
                 await fetch(origin, {method: "HEAD", redirect: "manual", signal: AbortSignal.timeout(1_000)});
                 break;
             } catch (e) {
+                // ⚠ **연결 거부만 재시도한다.** 타임아웃은 「아무도 안 떴다」가 아니라 «누군가
+                //   받았는데 답을 안 준다»다 — 그것을 여기서 재시도로 삼키면 행업이 「포트로 안
+                //   떴다」로 분류되어, 완화 모드에서 **반려가 미검사로 눅는다.**
+                //   재현: `dev` 가 `node -e 'require("http").createServer(()=>{}).listen(process.env.PORT,"127.0.0.1")'`
+                //   인 트리에 `probeDevCompile(root,{strict:false})` → 이 줄이 있으면 `fail`(「붙었지만
+                //   응답하지 않습니다」), 없으면 `skip`(「포트로 안 떴다」)이 된다.
                 const code = e?.cause?.code ?? e?.code ?? "";
-                if (code !== "ECONNREFUSED" && e?.name !== "TimeoutError") break; // 붙긴 했다
+                if (code !== "ECONNREFUSED") break; // 붙긴 했다 — 응답 대기로 넘어간다
                 if (Date.now() >= bindBy) return out({}); // 끝내 안 떴다 → status null
                 await new Promise((r) => setTimeout(r, 300));
             }
