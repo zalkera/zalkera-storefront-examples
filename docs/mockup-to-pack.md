@@ -10,15 +10,28 @@
 
 ## 시작 소스 팩은 어디서 받나
 
-**잘커라 콘솔에서 받은 시작 팩 zip 에서 출발하십시오.** 랜딩 한 장짜리 시안이면
-**커머스 라우트가 없는 팩**을 고르십시오 — 상담·문의형 사이트에 장바구니·결제·주문조회가
-딸려 가면 안 됩니다.
+**잘커라 콘솔에서 받은 시작 팩 zip 에서 출발하십시오.**
+
+시작 팩에는 **커머스 라우트가 딸려 옵니다**(`cart`·`checkout`·`products`·`orders`·`mypage`·
+`payment`·`login`·`blog`). 랜딩 한 장짜리 시안이어도 **그대로 두십시오** — 지우면 검수가
+반려하고(§1-2), `robots.ts` 가 이미 색인에서 막고 있습니다. 랜딩에서 링크하지 않으면 됩니다.
 
 > ⚠ **이 레포를 클론해서 출발하지 마십시오.** 여기 실린 프리셋은 커머스 표면을 전부
 > 갖고 있습니다(`cart`·`checkout`·`products`·`orders`·`mypage`·`payment`·`login`·`blog`).
 > 랜딩 시안을 그 위에 얹으면 쓰지 않는 상거래 페이지가 같이 배포됩니다.
 > 그리고 그 라우트들은 **마음대로 지울 수 없습니다**(§1-2).
 > 이 레포는 **계약의 교본**이지 이 레인의 출발점이 아닙니다.
+
+## 신뢰 경계 — 먼저 읽으십시오
+
+이 레인은 **제3자가 준 HTML·CSS·JS 를 우리가 서빙할 소스로 옮기는 일**입니다.
+시안의 스크립트는 그대로 고객 사이트에서 돕니다.
+
+- **시안의 출처를 확인하십시오.** 누가 만들었고 어디서 받았는지 모르면 시작하지 마십시오.
+- **바이트 그대로 옮기더라도 시안 JS 를 한 번은 읽으십시오.** 무엇을 부르는지, 외부로 무엇을
+  보내는지. 「그대로 옮긴다」는 「안 읽는다」가 아닙니다.
+- **검수는 격리된 환경에서 돌리십시오.** `verify-zip` 은 zip 안의 스크립트를 검수자 기계에서
+  실행합니다 — 그 러너는 스스로 격리하지 않는다고 자기 머리말에 적고 있습니다.
 
 ---
 
@@ -64,18 +77,33 @@
 부득이 지우려면 **셋을 같이** 움직이십시오:
 라우트 디렉터리 · `src/lib/reservedSegments.ts` 의 `RESERVED_SEGMENTS` · `src/app/robots.ts` 의 `disallow`.
 
-같은 이유로 `src/lib/` 의 `content.ts`·`routeParam.ts`·`reservedSegments.ts`·`mediaCache.ts`
-와 그 `*.test.ts` 도 남깁니다. 하한표가 그 시험을 요구합니다.
+**`src/lib/` 와 `scripts/` 는 통째로 남기십시오.** 파일 단위로 고르지 마십시오 —
+하한표(`scripts/lib/floors.mjs` 의 `REQUIRED_FLOORS`)가 요구하는 시험이 20개이고,
+그 요구는 **검사기 자신의 표**로 집행되므로 zip 안의 표를 고쳐서 낮출 수 없습니다.
 
-### 1-3. `package.json` 에 `zalkera` 선언을 붙이지 마라
+덫이 둘 있습니다.
+
+- **`src/lib/theme.ts`** — §1-4 대로 테마 주입을 지우면 죽은 파일로 보이지만
+  `theme.test.ts` 가 하한 9로 요구됩니다. 지우면 반려입니다.
+- **`src/middleware.ts`** — 미리보기 쓰기 관문입니다. 「미리보기 관문 등재」 검사가 빌드
+  산출물에서 이것을 찾습니다.
+
+### 1-3. `package.json` 의 `zalkera` 선언을 **지워라**
+
+시작 팩에는 **이미 들어 있습니다.**
 
 ```jsonc
-// ❌ 이 팩에 넣으면 안 된다
+// 시작 팩의 package.json — 이 두 줄을 지운다
 "zalkera": { "styling": "tailwind-tokens", "content": "source" }
 ```
 
-선언은 「색이 토큰이고 문구가 `content/` 에 있다」는 **약속**입니다. 이 팩은 둘 다 아닙니다.
-붙이면 `[S8]`·N 규칙이 error 로 격상돼 반려되거나, 통과하더라도 콘솔이 거짓성공을 냅니다.
+선언은 「색이 토큰이고 문구가 `content/` 에 있다」는 **약속**입니다. 시안 CSS 를 그대로 쓰는
+이 팩은 둘 다 아닙니다. 남겨 두면 `[S2]`·`[S4]`·`[S8]`·N 규칙이 **error 로 격상**돼 반려됩니다.
+
+> 시안 문구를 `content/pages/*.json` 으로 분해했다면 `"content": "source"` 만 남기십시오.
+> 지우는 것은 **지키지 못하는 약속뿐**입니다.
+
+확인: `node -e 'console.log(JSON.parse(require("fs").readFileSync("package.json")).zalkera)'`
 
 ### 1-4. 테마 주입 배선을 남기지 마라
 
@@ -113,16 +141,25 @@ unzip -q <시작소스팩>.zip -d pack && cd pack
 지우는 것은 **그 팩의 얼굴뿐**입니다 — `content/pages/*.json`, `public/images/*`,
 `src/components/sections/` 안의 프리셋 전용 섹션. 라우트·`src/lib`·`scripts/` 는 그대로 둡니다.
 
+**`.zalkera/pack.json` 도 지웁니다.** 그것은 카탈로그 팩의 신원(코드·판번호)이라, 남겨 두면
+이 사이트가 남의 팩 이름으로 적재됩니다. 납품 zip 에는 의무가 아닙니다.
+
 `content/index.ts` 는 **남기되 비웁니다**(`src/lib/content.ts` 가 이 모듈을 읽습니다):
 
 ```ts
 import nav from "./nav.json";
+
 /** slug → 페이지 콘텐츠. **키가 곧 URL 경로**다. */
-export const pages: Record<string, unknown> = {};
+export const pages: Record<string, unknown> = {
+};
+
 export {nav};
-export const pageSlugs = () => Object.keys(pages);
 ```
 
+> ⚠ **닫는 `};` 앞에 줄바꿈을 두십시오.** 검사기가 맵을 그 형태로만 읽습니다 —
+> `= {};` 한 줄로 적으면 「pages 맵을 못 읽었습니다」로 반려됩니다.
+> 확인: `node -e 'console.log(/export const pages[^=]*=\s*\{([\s\S]*?)\n\};/.test(require("fs").readFileSync("content/index.ts","utf8")))'` → `true`
+>
 > ⚠ 맵을 축약(`{home}`)으로 적지 마십시오 — 검사기가 `"<slug>": <이름>` 표기로만 읽습니다.
 
 `content/nav.json` 은 남은 템플릿 페이지(`/contact`·`/policies`)가 읽으므로
@@ -136,6 +173,12 @@ export const pageSlugs = () => Object.keys(pages);
 ### 2-2. 마크업 — `<body>` → `src/app/page.tsx`
 
 **구조·클래스·문구를 한 글자도 바꾸지 마십시오.** 바꾸는 것은 JSX 문법상 불가피한 것뿐입니다.
+
+> ⚠ **랜딩 한 장짜리 팩이면 `layout.tsx` 의 껍데기를 걷으십시오.** 시작 팩의 layout 은
+> `<SiteHeader/>`·`<SiteFooter/>` 와 폭 제한 컨테이너로 `children` 을 감쌉니다 — 시안이
+> 자기 헤더·푸터를 갖고 있으면 두 벌이 되고, 폭 제한이 전폭 히어로를 자릅니다.
+> `<html><body>{children}</body></html>` 만 남기십시오.
+> 남겨 두는 쪽을 골랐다면 §3 의 「본문 글자수 대조」는 그만큼 어긋납니다(헤더·푸터 문구가 더해집니다).
 
 | HTML | JSX | 비고 |
 | --- | --- | --- |
@@ -151,7 +194,13 @@ export const pageSlugs = () => Object.keys(pages);
 속성값에 따옴표가 섞이면 문자열 리터럴이 깨집니다 — **값을 전부 JSON 인코딩**해서 넣으십시오.
 손으로 하지 말고 변환 스크립트를 쓰십시오.
 
-`<head>` 의 `<title>`·`<meta name="description">` 은 `src/app/layout.tsx` 의 `metadata` 로 옮깁니다.
+`<head>` 의 `<title>`·`<meta name="description">` 은 `src/app/layout.tsx` 로 옮깁니다.
+
+> ⚠ **시작 팩의 `layout.tsx` 에는 `generateMetadata()` 가 있습니다. 그것을 지우고** 정적
+> `export const metadata` 로 갈아 끼우십시오. 한 세그먼트에 둘 다 있으면 Next 는
+> `generateMetadata` 를 쓰고 `metadata` 를 **아예 안 읽습니다.** 그러면 시안 제목이 안 뜨는데도
+> 화면은 멀쩡해 보여서 — 본문 글자수·높이·콘솔 오류 어느 것도 `<title>` 을 안 보므로 —
+> 검증을 그대로 통과합니다. §3 에서 제목을 눈으로 대조하십시오.
 
 ### 2-3. 스타일 — `<style>` → `src/app/globals.css`
 
@@ -216,10 +265,34 @@ export function MockupBehavior() {
 > **고전 스크립트로 실어야 합니다**(`type="module"` 금지). 시안이 `function f(){}` 을
 > 전역으로 선언하고 마크업이 그 이름을 부르기 때문입니다.
 
+#### ⚠ 이 배선은 **디자이너가 준 정적 마크업 전용**입니다
+
+`new Function(...)` 이 `data-onclick` 속성값을 **실행**합니다. 그 값이 시안에서 온 고정
+문자열인 동안에는 원래의 인라인 `onclick` 과 위험이 같습니다. 아래 셋 중 하나라도 해당되면
+**즉시 걷어내고** 필요한 동작만 보통의 `onClick` 핸들러로 다시 쓰십시오.
+
+1. **런타임 값이 이 페이지에 들어온다** — 후기·문의·게시글·`content/*.json` 등 소스 밖에서 온
+   문자열이 속성으로 렌더되는 순간, 그 자리가 임의 JS 실행 지점이 됩니다.
+   리스너는 `document` 전역이고 `closest("[data-onclick]")` 로 **아무 조상**이나 잡습니다.
+2. **`layout.tsx` 로 올렸다** — 전 라우트로 퍼집니다. `page.tsx` 에 두십시오.
+3. **CSP 를 켤 계획이 있다** — `unsafe-eval` 없이는 이 배선이 조용히 죽습니다.
+
+또 하나: 위 리스너는 `[data-onclick]` 조상을 가진 **모든 클릭**에 `preventDefault()` 를 겁니다.
+그 안에 정상 `<a href>` 가 들어 있으면 링크가 죽습니다 — 시안에 그런 구조가 있으면 확인하십시오.
+
 ### 2-5. 폰트·이미지 — 팩 안으로 내린다
 
 `<link href="https://fonts.googleapis.com/...">` 를 지우고, 그 CSS 를 받아
 woff2 를 `public/fonts/` 로 내린 뒤 `@font-face` 를 `globals.css` 앞머리에 붙입니다.
+
+> ⚠ **내려받기에 울타리를 치십시오.** 입력은 **남이 준 HTML** 입니다. 그대로 구현하면
+> 시안이 가리키는 아무 주소나 따라가고, 파일명을 URL 경로에서 따면 `..` 로 소스 트리에
+> 덮어쓸 수 있습니다. 최소한 넷:
+>
+> - `https:` 만 따라간다(`http:`·`file:`·`data:` 금지)
+> - 호스트를 **허용 목록**으로 죈다(`fonts.googleapis.com`·`fonts.gstatic.com`)
+> - 저장 이름은 URL 경로가 아니라 **basename 또는 해시**로 짓는다 — `..` 를 살리지 않는다
+> - 리다이렉트 횟수·응답 크기·타임아웃에 상한을 둔다
 
 받을 때 밟는 함정 셋:
 
@@ -248,6 +321,11 @@ woff2 를 `public/fonts/` 로 내린 뒤 `@font-face` 를 `globals.css` 앞머�
 | `AGENTS.md` | 다음 LLM 이 고칠 좌표와 **금지사항**(§1 을 요약) |
 | `.zalkera/ASSETS-LICENSE.md` | 동봉 자산 출처·라이선스 |
 
+**시안 스크립트의 키·토큰을 눈으로 훑으십시오.** `public/mockup.js` 는 **공개 서빙되는 자리**라
+거기 박힌 것은 전부 공개됩니다. 대행사 시안에는 카카오 JS 앱키·GA 측정 ID·EmailJS·Firebase
+설정이 흔히 들어 있습니다. 검수기의 시크릿 스캔은 몇 가지 모양만 알고 **완전하지 않습니다** —
+자동 검사가 덮는다고 여기지 마십시오. 발견하면 발주처에 **도메인 제한이 걸려 있는지** 확인하십시오.
+
 **자리표시자는 반드시 목록으로 뽑아 적으십시오.** `href=` 만 훑으면 스크립트 안의 것을 놓칩니다.
 `page.tsx` 와 `public/mockup.js` **양쪽**에서 찾으십시오:
 
@@ -260,23 +338,51 @@ grep -ohE 'tel:[0-9+-]+|https://pf\.kakao\.com/[A-Za-z0-9_-]+|YOUR_[A-Z_]+' \
 
 ## 3. 검증 — 이 순서로, 전부 통과해야 한다
 
+### 3-0. **환경변수를 먼저 넣으십시오** — 안 넣으면 첫 명령부터 섭니다
+
+소스가 시동 시점에 테넌트 코드를 읽고, 없으면 **던집니다**. 그 모듈을 `layout.tsx` 가 물기
+때문에 전 라우트가 500 이 됩니다 — **CSS 와 아무 상관 없는 500 입니다.**
+
+```bash
+cp .env.example .env.local
+```
+
+| 변수 | 안 넣으면 |
+| --- | --- |
+| `ZALKERA_TENANT` | 모든 페이지 500 (「CSS 가 깨졌다」로 오진하기 쉬운 자리) |
+| `ZALKERA_API_BASE` | 백엔드 왕복이 실패. 우리 템플릿은 fail-soft 라 화면은 서지만 진열이 빈다 |
+| `ZALKERA_SITE_URL` | `robots.txt`·`sitemap.xml`·JSON-LD 에 `http://localhost:3000` 이 **박힌 채로 배포**됩니다 |
+
+> ⚠ **`.env.local` 을 zip 에 넣지 마십시오.** 검수가 시크릿으로 반려합니다.
+> `pack.py` 는 그것을 걸러 주지 않으니 패키징 전에 지우거나 트리 밖에 두십시오.
+
+### 3-1. 명령
+
 ```bash
 npm ci
 npm run typecheck                      # rc 0
-npm run validate -- --gate             # rc 0
+npm run validate -- --gate             # rc 0 (개발 중에는 `--gate` 없이 권고로 볼 수도 있다)
 npm run build                          # rc 0 — 다만 이것만으로는 부족하다(아래)
 ```
 
-### ⚠ `npm run build` 의 rc 0 을 믿지 마십시오
+### 3-2. ⚠ `npm run build` 의 rc 0 을 믿지 마십시오
 
-CSS 파싱 실패를 **경고로 찍고 rc 0** 을 냅니다. 반드시 개발 서버로 확인하십시오:
+CSS 파싱 실패를 **경고로 찍고 rc 0** 을 냅니다. 개발 서버로 확인하십시오:
 
 ```bash
-npm run dev &
+npm run dev >/tmp/dev.log 2>&1 &
+for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:3000/ && break; sleep 1; done
 curl -s -o /dev/null -w '%{http_code}\n' http://localhost:3000/    # 200 이어야 한다
+kill %1
 ```
 
-**500 이면 CSS 나 모듈이 깨진 것입니다.** 서버 로그에 이유가 있습니다.
+> 뜰 때까지 기다리는 줄이 없으면 아직 안 뜬 서버에 물어 `000` 이 나옵니다.
+
+**500 이면** ⑴ `ZALKERA_TENANT` 를 넣었는지(§3-0) ⑵ CSS·모듈이 깨졌는지 순으로 보십시오.
+`/tmp/dev.log` 에 이유가 있습니다.
+
+> 검수기(`verify-zip`)도 같은 것을 한 번 더 잽니다 — 여기서 미리 보는 이유는 **몇 분짜리 검수를
+> 돌리기 전에** 알기 위해서입니다.
 
 ### 브라우저 콘솔도 보십시오 — **모든 주소를, 개발 모드로**
 
@@ -298,6 +404,7 @@ React 의 개발 경고(중복 키·잘못된 prop 등)는 **상용 빌드에서
 
 | 무엇 | 기준 |
 | --- | --- |
+| **`<title>`** | 시안의 제목과 같아야 한다 — 자동 검사가 안 보는 자리다(§2-2) |
 | 본문 글자수 | 시안과 같아야 한다(`document.body.innerText` 길이) |
 | 전체 높이 | 시안과 근사(수십 px 차이는 폰트 로딩 시점 차이) |
 | 외부 호스트 요청 | **0건** — 실패만 세지 말고 **호스트별로** 세십시오 |
@@ -350,11 +457,14 @@ node scripts/verify-zip.mjs ../pack-<이름>-<날짜>.zip     # rc 0
 | `Invalid or unexpected token` (런타임) | `String.raw` 로 넣음 | §1-5 |
 | `근거 없는 이름은 목록에 없다` | 라우트를 지움 | §1-2 |
 | `<파일> 가 없습니다 — 가드를 재는 자리입니다` | `src/lib/*.ts` 를 지움 | §1-2 |
-| `[EDECL]` rc=7 | `zalkera` 선언 + 미준수 | §1-3 |
-| `pages 맵을 못 읽었습니다` | `content/index.ts` 를 축약 표기로 씀 | §2-1 |
+| `[EDECL]` rc=7 | 선언은 **없는데** 테마 주입 배선이 남아 있다 | §1-4 |
+| `[S2]`·`[S4]`·`[S8]`·N 이 error | `zalkera` 선언을 **안 지웠다** | §1-3 |
+| `pages 맵을 못 읽었습니다` | `content/index.ts` 를 `= {};` 한 줄로 쓰거나 축약 표기로 씀 | §2-1 |
+| 시안 제목이 안 뜬다(오류 없음) | `layout.tsx` 의 `generateMetadata()` 를 안 지웠다 | §2-2 |
+| 첫 화면이 500 인데 CSS 는 멀쩡 | `ZALKERA_TENANT` 미설정 | §3 |
 | `--byo 선언이 zip 과 맞지 않습니다` | 템플릿 파생인데 `--byo` 를 붙임 | §3 |
 | SVG 가 안 보임 | `viewbox` 를 소문자로 둠 | §2-2 |
-| `Encountered two children with the same key` | 같은 주소를 가리키는 내비 항목 + `key={it.href}` | §2-1 |
+| `Encountered two children with the same key` | 내비 목록의 `key` 를 `href` 로 잡았다 | §2-1 |
 | 상용 빌드에서는 안 보이던 콘솔 경고 | React 개발 경고는 상용 빌드에서 제거된다 | §3 |
 
 ---
