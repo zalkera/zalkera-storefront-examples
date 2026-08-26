@@ -84,6 +84,8 @@ export const VENDOR_SET = [
     "lib/devCompile.mjs",
     "lib/floors.mjs",
     "lib/junkEntries.mjs",
+    // 동봉 시크릿 판정표. `verify-zip.mjs` 가 고객 트리에서 읽는다 — 빠지면 그 사본이 죽는다.
+    "lib/secret-content.mjs",
     "lib/routes.mjs",
     "lib/gate-behavior.mjs",
     "lib/content-routes.mjs",

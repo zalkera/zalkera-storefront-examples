@@ -173,6 +173,14 @@ const SOURCE_EXCLUDES = [
     // 재현: 이 줄을 지우고 `bash scripts/finish-pack.sh <판> && node scripts/verify-zip.mjs \
     //       dist-presets/skeleton-<판>.zip; echo rc=$?` → `❌ 가드 회귀 스위트` · rc=1
     "scripts/lib/rendererCoverage.test.mjs",
+    // ⚠ **이 레포 자신을 훑는 자기 검사다** — 공개 레포에 커밋된 열쇠를 찾는다. 고객 트리에서
+    // 돌리면 거짓 양성 하나가 배포 게이트를 통해 그 사이트의 «말로 고치기»를 막는다.
+    // 판정표(`scripts/lib/secret-content.mjs`)는 **뺴지 않는다** — `verify-zip.mjs` 가 고객
+    // 트리에서 그것을 읽는다.
+    "scripts/lib/credential-literals.mjs",
+    // 그 검사기를 부르는 워크플로도 같이 뺀다 — 검사기가 없는 트리에 남으면 고객 CI 가
+    // 영구 적색이 된다. `ci.yml` 은 실리므로 판별자로 갈랐지만, 이쪽은 파일째 안 보낸다.
+    ".github/workflows/credentials.yml",
     "scripts/lib/wiring-parity.mjs",
     // ⚠ **그 픽스처도 함께 뺀다.** 본체만 빼고 시험을 실으면 고객 트리에서 단독 실행 시
     // `ERR_MODULE_NOT_FOUND` 로 죽는다 — 형제 `visitor-ip-parity` 가 그렇게 한 번 나갔다.

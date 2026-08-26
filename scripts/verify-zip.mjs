@@ -78,6 +78,7 @@ import {fileURLToPath} from "node:url";
 import {childEnv} from "./lib/childEnv.mjs";
 import {probeDevCompile} from "./lib/devCompile.mjs";
 import {junkTopLevel} from "./lib/junkEntries.mjs";
+import {SECRET_CONTENT} from "./lib/secret-content.mjs";
 import {derivedRoutes, appDirOf, sourceRoot, SYNTHETIC} from "./lib/routes.mjs";
 
 const HERE = resolve(fileURLToPath(import.meta.url), "..");
@@ -229,29 +230,7 @@ const announceSkipped = (log) => {
 //   여기만 구분하면 `.Env.Example` 이 「저기선 실리는데 여기선 반려되는」 파일이 된다.
 const ENV_KEEP = /\.(example|sample|template)$/i;
 
-/**
- * **내용 축.** 이름만 보면 평범한 `src/lib/cfg.ts` 에 박힌 라이브 키를 이름 검사로는 못 잡는다 — AWS 키·
- * 결제 라이브 시크릿·RSA 개인키를 그렇게 심고 `rc 0 · ✅ 시크릿 0` 으로 통과시켰다. 라벨이 잰 것보다
- * 넓게 말하던 자리다(실제로 잰 것은 "환경파일 이름이 없다"였다).
- *
- * ⚠ **패턴을 문자클래스로 쓴다.** 이 파일 자신이 zip 에 실려 스캔 대상이 되므로, 리터럴로 적으면
- *   스캐너가 자기를 잡는다. 바꿀 때는 4벌에 돌려 오탐 0 을 확인하라.
- *
- * ⚠ 이것은 **완전하지 않다.** 고엔트로피 문자열 일반은 안 본다 — 그래서 라벨이 "이름·내용 패턴"이다.
- *   범위를 넓혀 말하지 마라. 그 과장이 이 결함의 본체였다.
- */
-const SECRET_CONTENT = [
-    ["AWS 액세스키", /\bAKIA[0-9A-Z]{16}\b/],
-    ["개인키 블록", /-----BEGIN [A-Z ]{0,20}PRIVATE KEY-----/],
-    ["결제 라이브 시크릿", /\b(?:sk_live_|live_sk_)[0-9A-Za-z]{8,}/],
-    ["GitHub 토큰", /\b(?:gh[pousr]_[0-9A-Za-z]{20,}|github_pat_[0-9A-Za-z_]{20,})\b/],
-    ["Slack 토큰", /\bxox[abprs]-[0-9A-Za-z-]{10,}\b/],
-    ["Google API 키", /\bAIza[0-9A-Za-z_\-]{35}\b/],
-    ["npm 토큰", /\bnpm_[0-9A-Za-z]{36}\b/],
-    // 우리 고유 형식. 검사기 `[E3]` 도 이걸 알지만 그쪽은 `src/` 만 훑는다 — `public/` 은 Next 가
-    // 그대로 공개 서빙하는 자리라 여기서 봐야 한다 (`public/config.js` 의 키가 무검출이었다).
-    ["잘커라 스토어프론트 키", /\boqsk_[0-9A-Za-z_-]{8,}/],
-];
+/** 동봉 시크릿 판정표. 정본은 `lib/secret-content.mjs` 하나다(사본 금지 — 그 파일 머리말). */
 /**
  * 내용을 훑을 텍스트 파일.
  *
@@ -467,6 +446,7 @@ function effectiveRoot(dir) {
  *     lib/devCompile.mjs           ← 개발 서버 컴파일 판정(빌드가 경고로 넘기는 자리)
  *     lib/floors.mjs               ← 하한 판정
  *     lib/junkEntries.mjs          ← 조기 반려 판정
+ *     lib/secret-content.mjs       ← 동봉 시크릿 판정표(자기 검사는 그 파일의 파생 `REPO_LITERALS` — 보정이 다르다)
  *     lib/routes.mjs               ← 관문 등재 프로브 도출
  *     lib/gate-behavior.mjs        ← `--pack` 의 관문 행위 검사
  *     lib/content-routes.mjs       ← 콘텐츠 페이지가 실제로 서는가

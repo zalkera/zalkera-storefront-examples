@@ -67,6 +67,30 @@ jobs:
             echo "관문 모드 재검사는 잘커라 레포 전용입니다 — 건너뜁니다."
           fi
 
+      - name: 잘커라 레포 전용 — 커밋된 자격증명 리터럴
+        # ⚠ **정본 전용이다.** 이 워크플로는 고객 zip 에 실려 **전 테넌트가 돌린다**(SOURCE_EXCLUDES 에
+        # 없다). 고객 트리에서 돌리면 거짓 양성 하나가 배포 게이트를 통해 그 사이트의 «말로 고치기»를
+        # 무환불로 세워 버린다 — 같은 비대칭으로 관문 모드 재검사·팩 4벌 대조를 가른 그 판별자를 쓴다.
+        #
+        # ■ 왜 여기서 또 보나: 형제 백엔드의 `detect-credential-literals.py` 가 이 레포도 훑지만,
+        #   그것이 도는 자리는 **백엔드 체크아웃이 있는 로컬 게이트**뿐이다(CodeBuild 소스가 백엔드
+        #   하나라 CI 에서는 형제를 0파일 훑는다). 그동안 이 레포는 **공개**고, 공개 레포에 들어간
+        #   열쇠는 푸시 순간 회수가 안 된다.
+        #
+        # ⚠ 검사기는 `SOURCE_EXCLUDES` 로 뺐으므로 고객 트리에는 파일 자체가 없다 — 그래서 위
+        #   판별자가 참일 때만 부른다. 부재를 raw 예외로 죽이지 않는 관용구는 아래 스텝들과 같다.
+        run: |
+          if [ -d presets ] && [ -f scripts/pack-preset.mjs ]; then
+            if [ ! -f scripts/lib/credential-literals.mjs ]; then
+              echo "::error::scripts/lib/credential-literals.mjs 가 없습니다 — 공개 레포에 커밋된 열쇠를 잴 수단이 사라집니다."
+              echo "::error::  고객 레포라면 presets/ 또는 scripts/pack-preset.mjs 를 지우십시오(이 검사는 정본 전용)."
+              exit 1
+            fi
+            node scripts/lib/credential-literals.mjs
+          else
+            echo "자격증명 리터럴 검사는 잘커라 레포 전용입니다 — 건너뜁니다."
+          fi
+
       - name: Typecheck (tsc --noEmit)
         run: npm run typecheck
 
