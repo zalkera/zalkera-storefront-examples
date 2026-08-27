@@ -84,6 +84,79 @@ function freePort() {
     });
 }
 
+/**
+ * **개발 서버가 찍은 React 진단**을 골라낸다.
+ *
+ * ■ 무엇을 잡고 무엇을 못 잡나 — **여기가 이 검사의 경계다**
+ *   React 는 이 진단을 개발 빌드에서만 낸다. 그중 **서버 렌더 단계에서 찍히는 것만** 이
+ *   러너가 본다 — 프로브가 `fetch` 라 브라우저가 안 붙기 때문이다.
+ *
+ *   재현(둘을 갈라 보인다):
+ *     `node -e 'process.env.NODE_ENV="development";const U=require("util"),R=require("react"),
+ *      {renderToStaticMarkup}=require("react-dom/server.node"),h=R.createElement;
+ *      for(const [n,e] of [["stop-color",h("svg",null,h("stop",{"stop-color":"#fff"}))],
+ *                          ["table 공백",h("table",null," ",h("tbody",null,h("tr",null,h("td",null,"x"))))]]){
+ *        const s=[],o=console.error;console.error=(...a)=>s.push(U.format(...a).split("\n")[0]);
+ *        renderToStaticMarkup(e);console.error=o;console.log(n,"→",s.join(" | ")||"(무경고)")}'`
+ *     → `stop-color → Invalid DOM property …` · `table 공백 → (무경고)`
+ *
+ *   문자열이 어느 번들에 사는지도 같이 재라:
+ *     `grep -Fc 'In HTML,' node_modules/next/dist/compiled/react-dom/cjs/react-dom-server.node.development.js`
+ *     → **0** (같은 문자열이 client 번들에는 4건)
+ *
+ *   ⚠ **그래서 하이드레이션 계열은 이 자리가 못 잡는다.** `<table>` 밑 공백 텍스트 노드,
+ *     `cannot be a descendant of`, `Hydration failed`, 그리고 주입 스크립트의 `Uncaught …` 는
+ *     전부 **브라우저에서만** 찍힌다. 그 자리는 여전히 **사람이 미리보기로 본다**
+ *     (`docs/mockup-to-pack.md` §3 이 그 단계를 지목한다). 이 검사가 그것을 대신하지 않는다.
+ *     머리말 ⑵ 와 같은 말이다 — 둘이 어긋나면 머리말이 맞다.
+ *
+ * ■ 왜 상용 빌드로는 못 잡나
+ *   이 부류는 상용 빌드에서 **통째로 제거된다.** `npm run build` 도 `.next/standalone` 기동도
+ *   초록인 채로 결함이 실려 나간다.
+ *
+ * ⚠ **목록은 열거라 늘 모자란다.** 통과 판정은 여전히 상태 코드가 내고 이것은 보조 그물이다.
+ *   문구를 더할 때는 **서버 렌더에서 실제로 찍히는지 위 재현으로 확인**하고 표에 시험을 함께 더한다
+ *   (`devCompile.test.mjs` 의 `SAMPLES` — **표와 독립된 실제 렌더 출력**이다. 표를 데이터로
+ *   도는 시험은 지운 줄을 못 본다: 그 줄을 돌지 않을 뿐이라 전부 초록이 된다).
+ * ⚠ 우리 템플릿이 늘 찍는 문구(middleware 사용 중단 안내)를 넣지 마라 — 정상 팩이 반려된다.
+ * ⚠ **정황에 불과한 것을 넣지 마라.** `Uncaught TypeError`·`ReferenceError` 는 시안 스크립트가
+ *   정상 동작 중에도 낸다(없는 요소 접근 등). 결함이 확정되는 것만 반려로 세운다.
+ */
+export const SERVER_WARNINGS = [
+    "Invalid DOM property",
+    "Invalid event handler property",
+    "React does not recognize the",
+    "for a non-boolean attribute",
+    "Unsupported style property",
+    "is an invalid value for the",
+    "Invalid ARIA attribute",
+    "Invalid aria prop",
+    "Unknown ARIA attribute",
+    'Each child in a list should have a unique "key"',
+    "Functions are not valid as a React child",
+    "instead of setting `selected` on <option>",
+    "without an `onChange` handler",
+];
+
+/**
+ * 로그에서 위 문구가 든 줄만. 중복은 접는다 — 같은 진단이 렌더마다 반복된다.
+ *
+ * ⚠ Next 는 전달 로그에 **색 입힌 접두**를 붙인다(`[browser]`·`[server]`, `receive-logs.js`).
+ *   ANSI 와 두 접두를 모두 벗겨야 서버 직출력분과 전달분이 한 줄로 접힌다.
+ * ⚠ 꼬리 절단(`runDevProbe` 가 64KB 초과 시 뒤 32KB)이 **줄 중간을 자를 수 있다.** 경계에 걸린
+ *   한 줄은 문구가 쪼개져 샌다 — 못 잡는 자리로 알고 있어라.
+ */
+export function reactWarnings(logTail) {
+    const clean = (l) =>
+        l
+            // eslint-disable-next-line no-control-regex
+            .replace(/\x1b\[[0-9;]*m/g, "")
+            .replace(/^\s*\[(?:browser|server)\]\s*/, "")
+            .trim();
+    const lines = String(logTail ?? "").split("\n").map(clean);
+    return [...new Set(lines.filter((l) => SERVER_WARNINGS.some((w) => l.includes(w))))];
+}
+
 /** 실패 사유에 붙일 서버 출력 꼬리. **끝**을 든다 — 오류는 마지막에 있고 배너는 앞에 있다. */
 function tailOf(logTail) {
     if (!logTail) return "";
@@ -151,6 +224,19 @@ export function judgeDevScript(obs) {
                 `개발 서버에서 GET / 가 ${status} 입니다 — 첫 화면이 컴파일되지 않습니다${tail}` +
                 `\n   ⓘ 백엔드 없이 첫 화면을 못 그리는 소스도 여기서 500 으로 보입니다 —` +
                 ` 요청 시점 fetch 가 fail-soft 인지 함께 보십시오.`,
+        };
+    }
+    // ⚠ **200 이 곧 통과가 아니다.** 첫 화면이 서더라도 React 가 개발 진단을 냈다면 그것은
+    //   상용 빌드에서 사라질 뿐 결함이 없어진 것이 아니다 — 하이드레이션이 깨진 팩이 그 자리로
+    //   나갔다. 상태 코드는 여전히 통과의 **필요조건**이고, 이것이 충분조건 쪽을 좁힌다.
+    const warned = reactWarnings(logTail);
+    if (warned.length) {
+        return {
+            verdict: "fail",
+            why:
+                `개발 서버가 렌더 진단 ${warned.length}건을 냈습니다 — 상용 빌드에서는 사라지지만 결함은 남습니다.` +
+                `\n   ${warned.slice(0, 6).join("\n   ")}` +
+                (warned.length > 6 ? `\n   … 외 ${warned.length - 6}건` : ""),
         };
     }
     return {verdict: "pass", why: "GET / 200"};

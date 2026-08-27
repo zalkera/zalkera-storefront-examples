@@ -381,8 +381,23 @@ kill %1
 **500 이면** ⑴ `ZALKERA_TENANT` 를 넣었는지(§3-0) ⑵ CSS·모듈이 깨졌는지 순으로 보십시오.
 `/tmp/dev.log` 에 이유가 있습니다.
 
-> 검수기(`verify-zip`)도 같은 것을 한 번 더 잽니다 — 여기서 미리 보는 이유는 **몇 분짜리 검수를
-> 돌리기 전에** 알기 위해서입니다.
+**200 이어도 로그를 보십시오.** React 는 개발 빌드에서만 렌더 진단을 냅니다 — 상용 빌드에서는
+그 문구가 통째로 사라질 뿐 결함은 남습니다.
+
+```bash
+grep -nE "Invalid DOM property|Invalid event handler property|does not recognize the|non-boolean attribute|Unsupported style property|invalid value for the|ARIA attribute|aria prop|unique \"key\"|not valid as a React child|selected. on <option>|onChange. handler" /tmp/dev.log
+```
+
+한 줄이라도 나오면 고쳐야 합니다. 손이관에서 가장 흔한 것은 **`onclick=` 을 그대로 옮긴 것**
+(`Invalid event handler property`)과 **하이픈 SVG 속성**(`stop-color` → `stopColor`)입니다.
+둘 다 `tsc` 가 안 잡습니다 — JSX 에서 하이픈 속성명은 임의 속성으로 허용되기 때문입니다.
+
+> 검수기(`verify-zip`)도 이 둘(상태 코드 + 렌더 진단)을 한 번 더 잽니다 — 여기서 미리 보는
+> 이유는 **몇 분짜리 검수를 돌리기 전에** 알기 위해서입니다.
+>
+> ⚠ **검수기가 못 보는 것이 있습니다.** 하이드레이션 오류(`whitespace text nodes cannot be a
+> child of <table>`·`Hydration failed`)와 스크립트의 `Uncaught …` 는 **브라우저에서만** 찍힙니다.
+> 검수기는 `curl` 만 쓰므로 그 자리는 **아래 브라우저 확인이 유일한 그물**입니다.
 
 ### 브라우저 콘솔도 보십시오 — **모든 주소를, 개발 모드로**
 

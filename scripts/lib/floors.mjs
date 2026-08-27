@@ -64,7 +64,7 @@ export const REPO_ONLY_FLOORS = {
     "scripts/lib/wiringParity.test.mjs": 10,
     "scripts/lib/verifyZipSignal.test.mjs": 1,
     "scripts/lib/verifyZipJudgments.test.mjs": 24,
-    "scripts/lib/devCompile.test.mjs": 21,
+    "scripts/lib/devCompile.test.mjs": 30,
     "scripts/lib/docEnvNames.test.mjs": 4,
     "scripts/pack-version.test.mjs": 13,
     "src/lib/logoutCart.test.ts": 4,
