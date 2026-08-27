@@ -117,7 +117,7 @@
 
 | 시도 | 결과 |
 | --- | --- |
-| `String.raw\`...\`` | 백슬래시가 살아남아 주입 시 `SyntaxError: Invalid or unexpected token` |
+| **String.raw** 템플릿 | 백슬래시가 살아남아 주입 시 `SyntaxError: Invalid or unexpected token` |
 | 일반 템플릿 리터럴 `` `...` `` | SWC 가 `Expected unicode escape` 로 **빌드 반려** |
 
 **`public/mockup.js` 에 한 글자도 안 고치고 넣고 `<script src>` 로 실으십시오**(§2-4).
@@ -185,7 +185,10 @@ export {nav};
 | `class=` | `className=` | |
 | `for=` | `htmlFor=` | |
 | `tabindex=` | `tabIndex=` | 다른 속성도 camelCase |
-| `viewbox=` `strokewidth=` | `viewBox=` `strokeWidth=` | **SVG 속성은 대소문자를 가린다** — 소문자로 두면 조용히 안 먹는다 |
+| `viewbox=` `stddeviation=` | `viewBox=` `stdDeviation=` | SVG 속성은 대소문자를 가린다 — `tsc` 가 잡아 준다 |
+| `stop-color=` `stroke-width=` | `stopColor=` `strokeWidth=` | **하이픈 표기는 `tsc` 가 안 잡는다**(아래) |
+| `tabindex="0"` | `tabIndex={0}` | 숫자를 요구하는 속성은 `{0}` 으로 |
+| `hidden=""` `disabled=""` | `hidden` `disabled` | 빈 문자열 불리언은 맨 속성으로 |
 | `<br>` `<img>` `<input>` | `<br />` `<img />` `<input />` | void 요소는 자기닫힘 |
 | `<!-- 주석 -->` | `{/* 주석 */}` | |
 | `style="a:b;c:d"` | `style={{a: "b", c: "d"}}` | 속성명 camelCase |
@@ -193,6 +196,42 @@ export {nav};
 
 속성값에 따옴표가 섞이면 문자열 리터럴이 깨집니다 — **값을 전부 JSON 인코딩**해서 넣으십시오.
 손으로 하지 말고 변환 스크립트를 쓰십시오.
+
+#### ⚠ 하이픈 SVG 속성은 타입 검사를 그냥 통과합니다
+
+`stop-color`·`stroke-width`·`text-anchor`·`font-family`·`letter-spacing`·`pointer-events` 같은
+표기는 JSX 에서 **식별자가 될 수 없어 TypeScript 가 임의 속성으로 허용**합니다. `tsc` 가 조용하고,
+브라우저에서만 «Invalid DOM property `stop-color`. Did you mean `stopColor`?» 가 뜹니다.
+(소문자 `stddeviation` 은 반대로 `tsc` 가 잡습니다 — 그래서 하나는 잡히고 하나는 새는 일이 생깁니다.)
+
+찾는 법:
+
+```bash
+grep -oE '\s(stop|stroke|fill|flood|clip|marker|text|dominant|color|font|letter|pointer)-[a-z-]+=\{' src/app/page.tsx | sort -u
+```
+
+#### ⚠ 텍스트 노드 둘
+
+**⑴ 개행이 든 텍스트는 문자열로 감싸십시오.** JSX 는 텍스트 노드의 개행을 공백 하나로 접는데,
+시안이 `white-space: pre-line` 을 쓰면 그 개행이 **줄바꿈**입니다. 접히면 문단이 한 줄로 붙습니다.
+
+```jsx
+<p className="lede">{"휴대폰만 있다면\n24시간 365일 어디서든"}</p>
+```
+
+감쌀 때 **HTML 엔티티를 먼저 푸십시오.** JSX 텍스트 노드는 `&nbsp;` 를 해석하지만 문자열
+리터럴은 안 합니다 — 안 풀면 화면에 `&nbsp;` 가 글자 그대로 찍힙니다.
+
+**⑵ 공백만 있는 노드는 감싸지 마십시오.** HTML 파서는 태그 사이 공백을 버리는데 문자열
+리터럴은 **진짜 텍스트 노드**가 됩니다. `<table>`·`<thead>`·`<tbody>`·`<tfoot>`·`<tr>`·
+`<colgroup>` 밑에서는 그것이 금지라 React 가 하이드레이션 오류를 냅니다.
+(`<ul>`·`<select>` 는 텍스트 자식을 허용하므로 해당 없습니다.)
+
+#### ⚠ 렌더된 DOM 을 떠 온 시안이면 런타임 잔재가 섞입니다
+
+`<div hidden></div>`(Next 포털 루트)·`<next-route-announcer>` 같은 것은 **디자인이 아닙니다.**
+빌드를 깨뜨리므로 걷어내십시오. 디자이너가 손으로 쓴 시안에는 없고, 라이브 사이트를 떠 온
+시안에만 나옵니다.
 
 `<head>` 의 `<title>`·`<meta name="description">` 은 `src/app/layout.tsx` 로 옮깁니다.
 
@@ -204,22 +243,52 @@ export {nav};
 
 ### 2-3. 스타일 — `<style>` → `src/app/globals.css`
 
-**시안 CSS 를 한 글자도 고치지 말고** `@import "tailwindcss";` **아래에** 통째로 붙입니다.
+**시안 CSS 를 한 글자도 고치지 마십시오.** 그 위에 무엇을 얹느냐가 이 절의 전부입니다.
 
-두 가지만 예외입니다.
+#### ⚠ `@import "tailwindcss";` 를 통째로 쓰지 마십시오
 
-**⑴ 시안 안의 `@import url(...)` 은 지웁니다.**
+그 한 줄에는 **preflight**(브라우저 기본값 리셋)가 딸려 옵니다. 시안에 없던 규칙이라
+여백·글꼴 기본값이 전부 밀리고, 화면이 시안과 달라집니다.
+
+같은 팩을 세 방식으로 재서 시안과 픽셀 대조한 결과입니다.
+
+| `globals.css` 머리말 | 시안과 다른 픽셀 | 전체 높이 |
+| --- | --- | --- |
+| `@import "tailwindcss";` | **8.800%** | 5791 → **5840** |
+| Tailwind 를 통째로 뺌 | 0.000% | 5791 |
+| **theme + utilities 만** | **0.000%** | 5791 |
+
+그래서 이렇게 씁니다.
+
+```css
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+/* ↑ preflight(layer base)를 일부러 뺐다. 아래는 시안 CSS 원문. */
+```
+
+Tailwind 를 통째로 버리지 않는 이유는 `/contact`·`/policies` 와 헤더·푸터가 유틸리티 클래스를
+쓰기 때문입니다. 이 형태면 그쪽 레이아웃이 살아 있고, **레이어 밖에 있는 시안 CSS 가 레이어 안
+유틸리티보다 우선**합니다(캐스케이드 레이어 규칙) — 시안이 이깁니다.
+
+> ⚠ **시안 CSS 자체가 Tailwind 빌드면 아무것도 얹지 마십시오.** 이미 만들어진 사이트에서 뜬
+> 시안이 그렇습니다(`@layer` 가 들어 있고 수백 KB 입니다). 우리 `theme`/`utilities` 를 더 들이면
+> 같은 유틸리티가 두 벌이 되어 버튼 높이 같은 값이 밀립니다 — 실측 6.507%, 빼면 0.000%.
+> 판별: `grep -c '@layer' <시안>.html` 이 0 이 아니고 `<style>` 이 수백 KB 면 그쪽입니다.
+
+#### 시안 CSS 에서 손대는 두 곳
+
+**⑴ `@import url(...)` 은 지웁니다.**
 CSS 는 `@import` 가 모든 규칙보다 앞서야 합니다. 시안 CSS 를 통째로 붙이면 그 `@import` 가
 규칙 뒤로 밀려 `next dev` 가 **못 뜹니다**. 폰트는 §2-5 로 내려 `@font-face` 가 대신합니다.
 
 > ⚠ **`next build` 는 이것을 경고로만 찍고 rc=0 을 냅니다.** 종료 코드만 보면 못 잡습니다.
-> 반드시 `npm run dev` 로 확인하십시오(§3).
 
 **⑵ 파서를 죽이는 오타는 «브라우저가 어떻게 처리하는지 재고» 걷어냅니다.**
 시안에 문법 오류가 있을 수 있습니다(실제 사례: `@media` 안에서 `.wrap{padding:0 16px` 가
 안 닫혀 다음 규칙까지 삼킴). Lightning CSS 는 하드 에러, 브라우저는 조용히 버립니다.
 
-**고치기 전에 먼저 재십시오.** 브라우저에서 그 규칙이 실제로 적용되는지 계산값으로 확인합니다:
+**고치기 전에 먼저 재십시오.**
 
 ```js
 // 시안을 브라우저로 열고
@@ -227,11 +296,55 @@ getComputedStyle(document.querySelector('.wrap')).padding
 ```
 
 - **적용 안 됨(=죽은 규칙)** → 지웁니다. 화면이 안 바뀝니다. 지운 사실을 `NOTE.md` 에 적습니다.
-- **적용됨** → 오타를 고칩니다. 화면이 바뀔 수 있으니 **오너에게 확인**하십시오.
+- **적용됨** → 오타를 고칩니다. 화면이 바뀔 수 있으니 **발주처에 확인**하십시오.
 
 ### 2-4. 스크립트 — `<script>` → `public/mockup.js`
 
-`src=` 없는 `<script>` 의 **안쪽 전부**를 이어붙여 `public/mockup.js` 에 **바이트 그대로** 씁니다.
+`src=` 없는 `<script>` 중 **실행되는 것만** 골라 `public/mockup.js` 에 **바이트 그대로** 씁니다.
+
+#### 무엇을 골라 어떻게 잇나
+
+**⑴ `type` 을 보십시오.** `type="application/json"` 같은 블록은 실행 코드가 아니라 **데이터**이고,
+시안 스크립트가 `document.getElementById('...').textContent` 로 읽습니다. 실행 스크립트에 이어
+붙이면 세미콜론 자동 삽입(ASI)이 깨져 앞뒤가 한 문장으로 합쳐집니다.
+
+```js
+[{"n":"조시우", …}]        ← JSON 배열이 세미콜론 없이 끝남
+(function(){ … })();       ← 다음 블록
+```
+
+→ JS 가 **배열을 함수로 호출**하는 것으로 읽습니다: `[{…}] is not a function`.
+
+데이터 섬은 **마크업에 남깁니다.** JSX 에서는 텍스트 자식으로 두면 중괄호 이스케이프가 JSON 을
+망가뜨리므로 `dangerouslySetInnerHTML` 로 넣으십시오.
+
+```tsx
+<script type="application/json" id="rvPool" dangerouslySetInnerHTML={{__html: "[{…}]"}} />
+```
+
+**⑵ 블록은 `;` 로 이으십시오.** 개행만으로 이으면 위와 같은 ASI 사고가 납니다.
+빈 문장 `;` 은 어디에 놓아도 안전합니다.
+
+```python
+js = "\n;\n".join(blocks)
+```
+
+**⑶ 렌더된 DOM 을 떠 온 시안이면 런타임 데이터가 섞여 옵니다.** `self.__next_f.push(...)`
+(Next 의 RSC 플라이트 페이로드) 같은 것은 서버 없이는 뜻이 없고, 편집 과정에서 따옴표가 깨져
+**스크립트 전체를 실행 불가**로 만듭니다. `__next_f`·`__next_s` 가 든 블록은 통째로 버리십시오.
+실제 사례에서 10블록을 걷어내니 시안의 진짜 스크립트는 **389B** 였습니다.
+
+**⑷ 광고·분석 스니펫도 여기서 걷습니다.** Google Tag Manager 로더가 흔히 섞여 있고, 컨테이너
+주소가 상대경로로 바뀐 채라 **매 방문마다 404** 를 냅니다(`dataLayer`·`developer_id` 로 찾으십시오).
+
+**⑸ 다 이었으면 구문을 검사하십시오.**
+
+```bash
+node --check public/mockup.js    # rc 0 이어야 한다
+```
+
+> ⚠ 구문이 유효해도 **의미가 합쳐졌을 수** 있습니다(⑴ 의 ASI 사고가 그렇습니다).
+> `node --check` 는 그것을 통과시킵니다 — 브라우저로 열어 콘솔을 보는 것이 그 자리의 그물입니다.
 
 `src/components/MockupBehavior.tsx`:
 
@@ -283,7 +396,10 @@ export function MockupBehavior() {
 ### 2-5. 폰트·이미지 — 팩 안으로 내린다
 
 `<link href="https://fonts.googleapis.com/...">` 를 지우고, 그 CSS 를 받아
-woff2 를 `public/fonts/` 로 내린 뒤 `@font-face` 를 `globals.css` 앞머리에 붙입니다.
+woff2 를 `public/fonts/` 로 내린 뒤 `@font-face` 를 `globals.css` 의 **`@import` 줄 바로 뒤**에
+붙입니다(§2-3 의 머리말 다음, 시안 CSS 앞).
+
+> ⚠ 문자 그대로 파일 맨 앞에 두지 마십시오 — `@import` 가 규칙보다 뒤로 밀려 무효가 됩니다.
 
 > ⚠ **내려받기에 울타리를 치십시오.** 입력은 **남이 준 HTML** 입니다. 그대로 구현하면
 > 시안이 가리키는 아무 주소나 따라가고, 파일명을 URL 경로에서 따면 `..` 로 소스 트리에
@@ -388,9 +504,12 @@ kill %1
 grep -nE "Invalid DOM property|Invalid event handler property|does not recognize the|non-boolean attribute|Unsupported style property|invalid value for the|ARIA attribute|aria prop|unique \"key\"|not valid as a React child|selected. on <option>|onChange. handler" /tmp/dev.log
 ```
 
-한 줄이라도 나오면 고쳐야 합니다. 손이관에서 가장 흔한 것은 **`onclick=` 을 그대로 옮긴 것**
-(`Invalid event handler property`)과 **하이픈 SVG 속성**(`stop-color` → `stopColor`)입니다.
-둘 다 `tsc` 가 안 잡습니다 — JSX 에서 하이픈 속성명은 임의 속성으로 허용되기 때문입니다.
+한 줄이라도 나오면 고쳐야 합니다. 손이관에서 가장 흔한 것은 **`onclick=` 을 그대로 옮긴 것**(`Invalid event handler property`)과
+**하이픈 SVG 속성**(`stop-color` → `stopColor`)입니다.
+
+둘의 성질이 다릅니다 — `onclick` 은 `tsc` 가 **잡습니다**(TS2322 「Did you mean 'onClick'?」).
+하이픈 표기는 **안 잡힙니다**(§2-2) — JSX 에서 식별자가 될 수 없어 임의 속성으로 허용되기
+때문입니다. 그래서 타입 검사를 지나고도 이 로그에서 처음 드러나는 것은 후자입니다.
 
 > 검수기(`verify-zip`)도 이 둘(상태 코드 + 렌더 진단)을 한 번 더 잽니다 — 여기서 미리 보는
 > 이유는 **몇 분짜리 검수를 돌리기 전에** 알기 위해서입니다.
@@ -447,6 +566,22 @@ await page.waitForTimeout(2000);
 // ⑶ 애니메이션을 종료 상태로 고정합니다.
 await page.screenshot({path: out, fullPage: true, animations: "disabled"});
 ```
+
+#### ⚠ 시안에 **타이머로 도는 위젯**이 있으면 JS 를 끄고 찍으십시오
+
+「실시간 입금 목록」처럼 `setTimeout` 으로 DOM 을 바꾸는 연출이 흔합니다. `animations: "disabled"`
+는 CSS 애니메이션만 멈추지 타이머는 못 멈춥니다 — 촬영 시점마다 행 수가 달라 높이가 흔들립니다.
+
+```js
+const ctx = await browser.newContext({viewport: {width: 1280, height: 1000}, javaScriptEnabled: false});
+```
+
+JS 를 끄면 **마크업·CSS 이관이 옳은지만** 남습니다. 실측으로 시안과 팩이 **0.000%** 로 일치했습니다
+(8개 팩 전부, 높이도 정확히 같음). 켠 채로 재면 같은 팩이 실행마다 흔들립니다.
+
+> 위젯이 **실제로 도는지**는 픽셀이 아니라 §3-2 의 콘솔·로그 확인이 봅니다.
+> 실제로 스크립트가 통째로 안 도는데 픽셀이 0.000% 였던 사례가 있습니다 — 연출이 죽어도
+> 레이아웃은 그대로이기 때문입니다.
 
 **⑴ 이 ⑵ 보다 먼저여야 합니다.** `document.fonts.ready` 는 **부른 시점의 적재 사이클**만
 보장합니다. 한글 폰트는 유니코드 서브셋으로 쪼개져 있어(§2-5) **그 글자가 실제로 그려질 때**
@@ -532,6 +667,12 @@ node scripts/verify-zip.mjs ../pack-<이름>-<날짜>.zip     # rc 0
 | 첫 화면이 500 인데 CSS 는 멀쩡 | `ZALKERA_TENANT` 미설정 | §3 |
 | `--byo 선언이 zip 과 맞지 않습니다` | 템플릿 파생인데 `--byo` 를 붙임 | §3 |
 | SVG 가 안 보임 | `viewbox` 를 소문자로 둠 | §2-2 |
+| **Invalid DOM property** `stop-color` | 하이픈 SVG 속성 — `tsc` 가 안 잡는다 | §2-2 |
+| `[{…}] is not a function` | 데이터 섬을 실행 스크립트에 이어 붙임(ASI) | §2-4 |
+| `Uncaught SyntaxError` (스크립트 전체가 안 돎) | RSC 페이로드(`__next_f`)가 섞임 | §2-4 |
+| 화면이 시안과 미묘하게 다름(높이·여백) | `@import "tailwindcss"` 의 preflight | §2-3 |
+| 문단이 2줄→1줄 | `pre-line` 개행을 JSX 가 접음 | §2-2 |
+| 화면에 `&nbsp;` 가 글자로 보임 | 문자열로 감쌀 때 엔티티를 안 풂 | §2-2 |
 | `Encountered two children with the same key` | 내비 목록의 `key` 를 `href` 로 잡았다 | §2-1 |
 | 상용 빌드에서는 안 보이던 콘솔 경고 | React 개발 경고는 상용 빌드에서 제거된다 | §3 |
 
