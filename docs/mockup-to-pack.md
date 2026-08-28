@@ -5,6 +5,7 @@
 함께 건네십시오.
 
 > **다른 레인이면 여기가 아닙니다.**
+> 거래처가 **이미 돌리고 있는 앱**을 통째로 옮기는 것이라면 → [`existing-app-to-pack.md`](existing-app-to-pack.md)
 > 이미 개시한 사이트의 소스를 고치는 것이라면 → [`../CUSTOMIZE.md`](../CUSTOMIZE.md)
 > 자기 스택으로 프론트를 통째로 짓는 것이라면 → [`byo-headless-guide.md`](byo-headless-guide.md)
 
