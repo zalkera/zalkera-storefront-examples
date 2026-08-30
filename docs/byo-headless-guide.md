@@ -67,10 +67,10 @@ export const zalkera = createZalkeraClient({
 직접 갑니다. 잘커라 콘솔의 **도메인 등록은 콘솔 표시·SEO 링크(sitemap·JSON-LD 절대 URL) 용도일
 뿐, 서빙 라우팅과 무관**합니다. DNS·TLS·CDN은 당신 호스팅 쪽에서 설정하세요.
 
-## 6. 훗날 "잘커라가 호스팅"으로 가고 싶다면 (C-1h 대비)
+## 6. 잘커라에 빌드·서빙을 넘길 때
 
-지금은 자기 호스팅이지만, 나중에 잘커라가 당신 코드를 대신 호스팅하는 옵션(C-1h)이 열립니다.
-그때 매끄럽게 넘어가려면 지금부터:
+**그 레인은 지금 있습니다** → [`existing-app-to-pack.md`](existing-app-to-pack.md).
+넘길 생각이 조금이라도 있으면 지금부터:
 
 - **빌드가 `.next/standalone` 자기완결 산출물을 내게** 하세요 — 실무적으로는 `next.config` 에
   `output: 'standalone'` 한 줄입니다. 잘커라 호스팅은 `next start` 가 아니라 그 산출물을
@@ -86,7 +86,9 @@ export const zalkera = createZalkeraClient({
 배선·`theme.ts`)을 유지한 스토어프론트에서만 반영됩니다. 당신이 그 배선 없이 프론트를 직접
 만들면, **콘솔의 테마/폰트 설정은 당신 사이트에 반영되지 않습니다**(L1 미보장). 이건 숨기지 않고
 분명히 말합니다 — 당신 코드는 당신 것이고, 대신 그 편의 하나를 포기하는 것뿐입니다. 계약을
-유지하고 싶으면 이 예제(`zalkera-storefront-examples`)를 받아서 시작하세요.
+유지하고 싶으면 시작 팩을 **참고물로 열어 두고** 그 배선 둘만 자기 프론트로 가져오십시오 —
+`src/lib/theme.ts` 와 root `layout.tsx` 의 `parseThemeColors` → `<html style={cssVars}>` 주입.
+레포를 클론해 그 위에 얹을 필요는 없습니다(안 쓰는 커머스 표면이 딸려 옵니다).
 
 ---
 

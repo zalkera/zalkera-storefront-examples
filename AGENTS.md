@@ -184,7 +184,12 @@ const access = {accessToken, phone, context: {clientIp: visitorIp(await headers(
 `src/app/robots.ts` 의 `disallow` 도 같이 정리하십시오 — 목록은 그 둘에서 도출됩니다.
 
 한 행을 지웠으면 **`npm run typecheck && npm run build && npm run validate && npm test` 를 돌려
-확인**하십시오. `npm test` 를 빼면 위 목록 어긋남을 못 보고, 업로드 검수에서야 반려됩니다.
+확인**하십시오.
+
+⚠ **`npm test` 는 목록 어긋남의 일부만 봅니다.** `reservedSegments.test.ts` 는
+«실제 라우트» ∪ «`robots.ts` 의 disallow» 를 근거로 인정하므로, **`disallow` 에 남아 있는
+이름은 폴더를 지워도 green** 입니다(`cart`·`checkout`·`orders`·`mypage`·`login`). 검수기도
+같은 시험을 하한으로 쓰므로 마찬가지입니다. 「함께 손대야 하는 것」 칸은 **손으로** 확인하십시오.
 
 | 능력 | 지우면 되는 것 | 함께 손대야 하는 것 | 남는 client 호출 |
 |---|---|---|---|

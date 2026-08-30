@@ -9,19 +9,50 @@
 > 이미 개시한 사이트의 소스를 고치는 것이라면 → [`../CUSTOMIZE.md`](../CUSTOMIZE.md)
 > 자기 스택으로 프론트를 통째로 짓는 것이라면 → [`byo-headless-guide.md`](byo-headless-guide.md)
 
-## 시작 소스 팩은 어디서 받나
+## 시작 소스 팩은 **참고물**입니다 — 얹을 바닥이 아닙니다
 
-**잘커라 콘솔에서 받은 시작 팩 zip 에서 출발하십시오.**
+만들 것은 **고객 시안 그대로의 사이트**입니다. 시작 팩(`skeleton` 등)은 그 사이트를 잘커라가
+받아 줄 수 있게 만드는 데 **무엇이 필요한지 보여 주는 교본**입니다.
 
-시작 팩에는 **커머스 라우트가 딸려 옵니다**(`cart`·`checkout`·`products`·`orders`·`mypage`·
-`payment`·`login`·`blog`). 랜딩 한 장짜리 시안이어도 **그대로 두십시오** — 지우면 검수가
-반려하고(§1-2), `robots.ts` 가 이미 색인에서 막고 있습니다. 랜딩에서 링크하지 않으면 됩니다.
+읽는 방법은 이렇습니다 — *「미리보기 관문이 이렇게 구현돼 있네? 그러면 이 파일을 가져와야
+겠구나」* · *「라우트 이름이 `robots.ts` 와 짝지어져 있네? 그 규율을 지켜야겠구나」*.
 
-> ⚠ **이 레포를 클론해서 출발하지 마십시오.** 여기 실린 프리셋은 커머스 표면을 전부
-> 갖고 있습니다(`cart`·`checkout`·`products`·`orders`·`mypage`·`payment`·`login`·`blog`).
-> 랜딩 시안을 그 위에 얹으면 쓰지 않는 상거래 페이지가 같이 배포됩니다.
-> 그리고 그 라우트들은 **마음대로 지울 수 없습니다**(§1-2).
-> 이 레포는 **계약의 교본**이지 이 레인의 출발점이 아닙니다.
+**이렇게 하지 마십시오:**
+
+| ❌ | 왜 |
+| --- | --- |
+| 시작 팩을 풀고 그 위에 시안을 얹는다 | 쓰지 않는 커머스 표면 여덟(`cart`·`checkout`·`products`·`orders`·`mypage`·`payment`·`login`·`blog`)이 딸려 배포됩니다. 시안에 없는 것은 팩에도 없어야 합니다 |
+| 시작 팩의 얼굴(`content/pages/*.json`·프리셋 섹션·이미지)을 지워 가며 맞춘다 | 지우는 작업이 만드는 작업보다 커지고, 무엇이 남았는지 아무도 모르게 됩니다 |
+| 레포 트리(`presets/` + 루트 `src/`)를 손으로 합친다 | `scripts/lib/test-floors.json` 이 배송본이 아니라 **레포본**으로 실려(레포 34항목 · 배송 20항목) 팩이 자기 검수에서 죽습니다 |
+
+**이렇게 하십시오:** 시안이 요구하는 화면을 만들고, 잘커라가 요구하는 것만 시작 팩에서
+**골라 가져옵니다.** 선은 **얼굴이냐 기능이냐**로 긋습니다.
+
+| | 어디서 오나 | 무엇 |
+| --- | --- | --- |
+| **얼굴** | **전부 시안** | `src/app/page.tsx` · `src/app/globals.css` · `layout.tsx` 의 `metadata` · `public/` 의 이미지·폰트 · `content/nav.json` |
+| **기능** | 시작 팩에서 가져옴 | `src/lib/**`(가드) · `scripts/**`(검수) · `src/middleware.ts` · `robots.ts`·`sitemap.ts` · `next.config.ts`·`package.json`·`tsconfig.json` · `llms.txt` |
+| 🔴 **안 가져옴** | — | `src/components/sections/**` · `content/pages/*.json` · `public/images/**` · 프리셋의 색·폰트·레이아웃 |
+
+**셋째 줄이 이 레인의 존재 이유입니다.** 고객은 자기 디자인을 들고 왔습니다. 거기에 프리셋의
+히어로·특징그리드·후기 섹션이 섞이면 **고객이 만든 것이 아닌 사이트**가 됩니다.
+
+> ⚠ **이 자리는 게이트가 안 잡습니다.** 프리셋 섹션 컴포넌트
+> (`HeroSection`·`FeatureGridSection`·`TestimonialsSection` 등)를 가져오면, 시안의 `page.tsx` 가
+> 그것을 한 번도 안 써도 `src/app/[slug]/page.tsx` 가 `SectionRenderer` 를 불러 **타입 검사는
+> 통과합니다.** 즉 쓰지 않는 프리셋 얼굴이 조용히 실려 나갑니다 — 눈으로 확인하십시오.
+> 랜딩 한 장짜리 시안이면 `[slug]` 로 갈 페이지도 없습니다. 지울 때는 §1-2 대로
+> 라우트·`RESERVED_SEGMENTS`·`robots.ts` 셋을 같이 움직이십시오.
+
+무엇이 필수인지는 §1-2(가드·`src/lib`)와 §3(검수)이 말합니다.
+
+> 📦 **참고물은 어디서 받나**
+> 잘커라 **콘솔에서 시작 팩 zip** 을 받으십시오. 랜딩 시안이면 `skeleton` 이 읽기 가장
+> 쉽습니다 — 커머스 프리셋 셋은 얼굴이 붙어 있어 기능만 보기 어렵습니다.
+>
+> 이 레포를 체크아웃해 두셨다면 `node scripts/pack-preset.mjs --version <x.y.z> <프리셋>` 으로
+> 같은 zip 을 구울 수 있습니다(`dist-presets/` 에 나옵니다 — `.gitignore` 라 GitHub 에는
+> 없습니다). 어느 쪽이든 **구운 zip** 을 보십시오. 레포 트리를 손으로 합치면 안 됩니다.
 
 ## 신뢰 경계 — 먼저 읽으십시오
 
@@ -60,20 +91,32 @@
 
 아래는 전부 **실제로 깨진 자리**입니다. 이유까지 읽으십시오 — 이유를 모르면 다시 밟습니다.
 
-### 1-1. 처음부터 새로 만들지 마라
+### 1-1. 맨바닥에서 짓지 마라 — 그렇다고 시작 팩 위에 얹지도 마라
 
 `create-next-app` 으로 시작하면 미리보기 쓰기 관문·소독기·가드 스위트가 통째로 없어
-검수에서 반려됩니다. **잘커라가 준 시작 소스 팩 zip 을 풀어 그 위에 얹으십시오.**
+검수에서 반려됩니다.
+
+**시작 팩을 열어 두고, 잘커라가 요구하는 것만 골라 가져오십시오.** 그 목록은 아래 §1-2 가
+말합니다 — `src/lib/` 와 `scripts/` 는 통째로, 라우트는 `robots.ts`·`RESERVED_SEGMENTS` 와
+짝을 맞춰서.
+
+⚠ **반대로 시작 팩을 풀어 그 위에 시안을 얹지도 마십시오.** 그러면 쓰지 않는 커머스 표면
+여덟이 딸려 배포되고, 지우는 작업이 만드는 작업보다 커집니다. **만들 것은 시안 그대로의
+사이트**이고, 시작 팩은 그것을 잘커라가 받아 줄 수 있게 하는 **부품 창고**입니다.
 
 ### 1-2. 랜딩이 안 쓴다고 라우트를 지우지 마라
 
 `src/app/contact/`·`src/app/policies/`·`src/app/[slug]/`·`sitemap.ts`·`media/[id]` 는
 랜딩에서 링크되지 않아도 **남깁니다**.
 
-지우면 `src/lib/reservedSegments.test.ts` 가 반려합니다. 그 시험은
+`contact`·`policies` 를 지우면 `src/lib/reservedSegments.test.ts` 가 반려합니다. 그 시험은
 `RESERVED_SEGMENTS` 가 **«실제 라우트» ∪ «robots.txt 의 disallow»** 와 정확히 같은지
 양방향으로 못 박고, 게다가 **둘 다 1건 이상**일 것을 요구합니다(공회전 방지).
 `/` 하나만 남기면 만족시킬 방법이 없습니다.
+
+⚠ **그 시험이 전부를 보지는 않습니다.** `[slug]` 는 대괄호 이름이라 세지 않고,
+`sitemap.ts`·`media/[id]` 는 읽지도 않습니다 — 그 셋은 `npm run validate` 의
+`[D1]`·`[D2]`(문서 좌표 검사)가 잡습니다. **둘 다 돌리십시오.**
 
 부득이 지우려면 **셋을 같이** 움직이십시오:
 라우트 디렉터리 · `src/lib/reservedSegments.ts` 의 `RESERVED_SEGMENTS` · `src/app/robots.ts` 의 `disallow`.
@@ -133,43 +176,69 @@ Google Fonts·CDN·트래커·분석 비콘은 전부 팩 안으로 내리거나
 
 ## 2. 절차
 
-### 2-1. 시작 소스 준비
+### 2-1. 시작 소스 준비 — **기능은 남기고 얼굴은 통째로 버린다**
+
+시작 팩을 풀고, **프리셋의 얼굴을 한 조각도 남기지 않은 뒤** 그 자리에 시안을 놓습니다.
+「그 위에 얹기」와 다른 점은 이것입니다 — 디자인은 **시안 100%** 이고, 프리셋에서 살아남는
+것은 잘커라가 요구하는 **기능·배선뿐**입니다.
 
 ```bash
-unzip -q <시작소스팩>.zip -d pack && cd pack
+unzip -q <시작소스팩>.zip -d ref     # 참고물 원본. 손대지 않습니다
+cp -r ref pack && cd pack
 ```
 
-지우는 것은 **그 팩의 얼굴뿐**입니다 — `content/pages/*.json`, `public/images/*`,
-`src/components/sections/` 안의 프리셋 전용 섹션. 라우트·`src/lib`·`scripts/` 는 그대로 둡니다.
+**⑴ 시안이 안 쓰는 표면을 걷습니다.**
 
-**`.zalkera/pack.json` 도 지웁니다.** 그것은 카탈로그 팩의 신원(코드·판번호)이라, 남겨 두면
-이 사이트가 남의 팩 이름으로 적재됩니다. 납품 zip 에는 의무가 아닙니다.
+```bash
+rm -rf src/app/{cart,checkout,products,orders,mypage,payment,login,blog,auth,c}   # 커머스 표면
+rm -rf src/components/sections content/pages                                      # 프리셋 얼굴
+rm -rf docs CUSTOMIZE.md README.md AGENTS.md                                      # 참고 문서
+rm -rf src/app/'[slug]'                                                           # content/pages 가 비면 못 씀
+```
 
-`content/index.ts` 는 **남기되 비웁니다**(`src/lib/content.ts` 가 이 모듈을 읽습니다):
+**⑵ 라우트를 지웠으면 셋을 같이 움직입니다**(§1-2). 남은 라우트가 `contact`·`policies` 뿐이면:
+
+```ts
+// src/lib/reservedSegments.ts
+export const RESERVED_SEGMENTS: ReadonlySet<string> = new Set(["contact", "policies", "api"]);
+```
+
+```ts
+// src/app/robots.ts — ⚠ 끝 슬래시를 떼십시오
+disallow: ["/api"],
+```
+
+> ⚠ **`"/api/"` 로 두면 시험이 죽습니다.** 끝에 `/` 가 붙은 항목은 **하위만** 막는 것이라
+> `reservedSegments.test.ts` 가 근거로 안 셉니다. 그 시험은 「가려짐」과 「robots 근거」가
+> **둘 다 1건 이상**일 것을 요구하므로(공회전 방지), 근거가 0이 되면
+> `robots 의 disallow 를 하나도 못 찾았다` 로 반려합니다.
+
+**⑶ `content/index.ts` 는 남기되 비웁니다**(`src/lib/content.ts` 가 이 모듈을 읽습니다):
 
 ```ts
 import nav from "./nav.json";
 
 /** slug → 페이지 콘텐츠. **키가 곧 URL 경로**다. */
-export const pages: Record<string, unknown> = {
-};
+export const pages: Record<string, unknown> = {};
 
 export {nav};
+
+export const pageSlugs = () => Object.keys(pages);
 ```
 
-> ⚠ **닫는 `};` 앞에 줄바꿈을 두십시오.** 검사기가 맵을 그 형태로만 읽습니다 —
-> `= {};` 한 줄로 적으면 「pages 맵을 못 읽었습니다」로 반려됩니다.
-> 확인: `node -e 'console.log(/export const pages[^=]*=\s*\{([\s\S]*?)\n\};/.test(require("fs").readFileSync("content/index.ts","utf8")))'` → `true`
->
-> ⚠ 맵을 축약(`{home}`)으로 적지 마십시오 — 검사기가 `"<slug>": <이름>` 표기로만 읽습니다.
+**⑷ `.zalkera/pack.json` 을 지웁니다.** 카탈로그 팩의 신원이라 남기면 이 사이트가 남의 팩
+이름으로 적재됩니다.
 
-`content/nav.json` 은 남은 템플릿 페이지(`/contact`·`/policies`)가 읽으므로
-브랜드명과 링크를 채웁니다. 시안 랜딩은 이 파일을 안 읽습니다.
+`content/nav.json` 은 남은 템플릿 페이지(`/contact`·`/policies`)가 읽으므로 브랜드명과 링크를
+채웁니다. 랜딩 시안은 이 파일을 안 읽습니다.
 
 > ⚠ **같은 주소를 가리키는 링크가 둘 이상이면 렌더 쪽 `key` 를 확인하십시오.**
 > 「이용약관」과 「개인정보처리방침」이 둘 다 `/policies` 로 가는 것은 **정상**인데,
 > `SiteHeader`·`SiteFooter` 가 `key={it.href}` 로 잡고 있으면 React 가 중복 키로 경고하고
 > 항목을 빠뜨릴 수 있습니다. 이 목록은 순서가 곧 화면이므로 **인덱스가 안정된 키**입니다.
+
+**⑸ 여기서 `npx tsc --noEmit` 을 돌리십시오.** 남는 오류는 시안이 채울 자리(`page.tsx`)뿐이어야
+합니다. 다른 오류가 있으면 지운 것과 남긴 것이 어긋난 것입니다.
 
 ### 2-2. 마크업 — `<body>` → `src/app/page.tsx`
 
