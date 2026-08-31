@@ -12,12 +12,12 @@
  *   presets/<code>/content/       → zip 의 `content/` (레포 상주 · 페이지·섹션·문구·내비)
  *   presets/<code>/public/        → zip 의 `public/`  (섹션 이미지 · 레포 상주)
  *   presets/<code>/src/           → zip 의 `src/`     (**이 팩의 소스 전량** — 팩 v4)
- *   presets/<code>/seed.json      → zip 의 `.zalkera/seed.json` (**테마색만**)
  *   presets/<code>/assets/        → zip 의 `.zalkera/assets/`   (섹션 config 가 참조하는 전송 이미지)
  *
  * ── 팩 v3 (memo142) — **배송물은 업무 데이터를 만들지 않는다** ────────────────
- * 시드가 고객 DB 에 상품·갈래를 만들던 경로가 닫혔다. `seed.json` 에 남는 최상위 키는 `themeColors`
- * 하나이고, 콘텐츠 섹션은 업무 축(상품·갈래)을 **가리키지 않는다**.
+ * 시드가 고객 DB 에 상품·갈래를 만들던 경로가 닫혔고(v3), 마지막에 남아 있던 `themeColors` 마저
+ * 색의 정본이 소스로 되돌아가면서 담을 것이 없어져 **시드 자체가 폐지됐다**(memo186 T1).
+ * 콘텐츠 섹션은 업무 축(상품·갈래)을 **가리키지 않는다**.
  *
  * 경계는 **정본 값의 거처**로 긋는다(memo142 §1): 값이 콘텐츠 파일에 사는 저작물은 **선언 섹션**의
  * 소관이고, 값이 업무 DB 에 살고 화면이 비추기만 하는 조회는 **소스가 `@zalkera/client` 를 직접 호출**해
@@ -91,7 +91,6 @@ import {deflateRawSync} from "node:zlib";
 import {crc32} from "./preset-canvas.mjs";
 import {REQUIRED_FLOORS} from "./lib/floors.mjs";
 import {checkWiringParity} from "./lib/wiring-parity.mjs";
-import {readThemeEnums as readThemeEnumsFrom} from "./lib/themeEnums.mjs";
 import {checkVisitorIp} from "./lib/visitor-ip-parity.mjs";
 import {contentManifest} from "./lib/contentManifest.mjs";
 import {clientMismatch, cmpVersion, ledgerShapeError, mergeCodes, packGateDecision} from "./lib/pack-gate.mjs";
@@ -111,7 +110,6 @@ const OUT_DIR = join(ROOT, "dist-presets");
  *    아니라 **정의**다 — 섹션 50개짜리 "템플릿"은 템플릿이 아니라 데이터 이관이다.
  */
 const CAPS = {
-    seedJsonBytes: 256 * 1024,
     assets: 24,
     assetTotalBytes: 20 * 1024 * 1024,
     // 백엔드는 이 값을 `storage.max-file-size` 설정에서 읽는다(기본 20MB). 운영이 그걸 낮추면 이 상수와
@@ -203,8 +201,6 @@ const SOURCE_EXCLUDES = [
     "scripts/lib/workflow-syntax.bench.mjs",
     // 팩 도구(`pack-preset.mjs`)가 시드값을 테마 계약과 대조할 때만 쓰는 판독기와 그 시험.
     // 그 도구가 정본 전용이라 둘 다 같다 — 고객 트리에서 부를 표면이 없다.
-    "scripts/lib/themeEnums.mjs",
-    "scripts/lib/themeEnums.test.mjs",
     // 배송 문서의 측정 주장을 재는 **정본 전용** 검사기다. BASELINE 이 이 레포 파일 경로에 매여 있고
     // `ci.yml` 도 판별자 뒤에서만 부른다 — 고객 트리에 실으면 부를 일 없는 9.8KB 가 전 테넌트에 복제된다.
     "scripts/lib/doc-claims.mjs",
@@ -463,97 +459,7 @@ function iconKeys(code) {
  */
 const HOME_SLUG = "home";
 
-/** 테마 enum 계약은 `src/lib/theme.ts` 에서 읽는다 — 판독기와 그 시험은 `scripts/lib/themeEnums.mjs`. */
-function readThemeEnums() {
-    const file = join(ROOT, "src/lib/theme.ts");
-    return readThemeEnumsFrom(readFileSync(file, "utf8"), file);
-}
 
-/**
- * 시드 v3 검증(memo142) — 남은 최상위 키는 **`themeColors` 하나**다.
- *
- * `pages`·`menus` 는 팩 v2 에서 탈락했고(그 자리를 `content/` 가 받는다 — 아래 [validateContent]),
- * `products`·`categories` 는 팩 v3 에서 탈락했다(그 자리를 **소스의 직접 호출**이 받는다).
- *
- * **잔재 키를 조용히 무시하지 않고 실패시키는 이유는 두 세대가 같다**: 무시하면 그 프리셋은
- * "상품을 넣었는데 안 생기는"·"페이지를 넣었는데 안 나오는" 상태로 나가고, 그 원인이 파일 어디에도
- * 안 적혀 있다. 백엔드도 같은 판정이다(strict 파싱이 미지 키로 개시를 중단한다) — 갈리면 안 되는 축이다.
- */
-function validateSeed(code, seedBytes, assetNames) {
-    if (seedBytes.length > CAPS.seedJsonBytes) {
-        fail("SEED_SIZE", `${code}: seed.json ${seedBytes.length}B > ${CAPS.seedJsonBytes}B`);
-    }
-
-    let seed;
-    try {
-        seed = JSON.parse(seedBytes.toString("utf8"));
-    } catch (e) {
-        fail("SEED_PARSE", `${code}: seed.json 파싱 실패 — ${e.message}`);
-        return null;
-    }
-
-    const legacy = ["pages", "menus"].filter((k) => k in seed);
-    if (legacy.length) {
-        fail(
-            "SEED_V1",
-            `${code}: seed.json 에 ${legacy.join("·")} 가 남아 있습니다 — 팩 v2 에서 사이트의 얼굴은 ` +
-                `presets/${code}/content/ 로 갔습니다. 옮기고 지우십시오`,
-        );
-    }
-    // ⚠ **팩 v3 의 핵심 게이트**(memo142). 상품·갈래를 시드에 실으면 그것은 우리가 고객 DB 에 업무
-    //    데이터를 만드는 것이고, 갈래 이름(`리빙`·`시술`)은 애초에 **사장이 정할 이름**이다.
-    //    카탈로그의 입구는 콘솔·MCP 이고, 화면에 비추는 일은 소스가 `listProducts()` 로 한다.
-    const business = ["products", "categories"].filter((k) => k in seed);
-    if (business.length) {
-        fail(
-            "SEED_BUSINESS_DATA",
-            `${code}: seed.json 에 ${business.join("·")} 가 있습니다 — 시드는 업무 데이터를 만들지 않습니다` +
-                `(memo142 §1). 카탈로그는 콘솔·MCP 가 채우고, 화면은 소스가 listProducts()·` +
-                `listProductCategories() 를 직접 불러 그립니다. 견본 카탈로그가 필요하면 ` +
-                `qa/fixtures/${code}/catalog.json 으로 옮겨 파트너 API 로 적재하십시오`,
-        );
-    }
-    const unknownTop = Object.keys(seed).filter((k) => k !== "themeColors");
-    if (unknownTop.length && !unknownTop.every((k) => ["pages", "menus", "products", "categories"].includes(k))) {
-        const rest = unknownTop.filter((k) => !["pages", "menus", "products", "categories"].includes(k));
-        fail("SEED_STRICT", `${code}: 최상위 미지 키 — ${rest.join(", ")}. 남은 키는 themeColors 뿐입니다`);
-    }
-
-    // ⚠ **키만 보고 값을 안 봤다.** 위 `SEED_STRICT` 는 `themeColors` 라는 **낱말이 있는가**만 재고,
-    //   그 안의 값이 계약 안인지는 팩·`verify-zip` 어디서도 안 쟀다. 그래서 `density: "comfortable"`
-    //   (계약은 `compact|cozy`) 를 실은 팩 2벌이 4벌 전부 ✅ 로 나갔다(심의 실증). 파서는 **조용히
-    //   버린다** — 시드가 선언한 밀도가 화면에 0회 반영되고, 아무 데서도 안 보인다.
-    //
-    //   ⚠ **표를 여기에 다시 쓰지 않는다.** 규칙을 딴 데서 재구현하면 정본이 바뀔 때 이쪽이 낡는다
-    //   (이 레포가 반복해 겪은 형상이다). `src/lib/theme.ts` 의 선언을 **읽어서** 판정한다.
-    const themeEnums = readThemeEnums();
-    for (const [field, allowed] of Object.entries(themeEnums)) {
-        const value = seed.themeColors?.[field];
-        if (value === undefined) continue; // 안 준 것은 기본값을 쓴다 — 위반이 아니다
-        if (!allowed.includes(value)) {
-            fail(
-                "SEED_ENUM",
-                `${code}: seed.json 의 themeColors.${field} = ${JSON.stringify(value)} 가 계약 밖입니다 ` +
-                    `(${allowed.join("|")}). 파서가 조용히 버리므로 그 선언은 화면에 반영되지 않습니다 ` +
-                    `— 정본은 src/lib/theme.ts 입니다`,
-            );
-        }
-    }
-
-    // `.zalkera/assets/` 는 **전송 이미지 풀**이다. 팩 v3 에서 그 유일한 소비자(상품 커버)가 사라져
-    // 현행 팩들은 이 디렉터리가 아예 없다 — 파일을 두면 아무도 안 쓰는 채로 배송된다.
-    // 섹션 이미지의 정위치는 레포 상주(`presets/<code>/public/`)이고 그건 아래 [validateContent] 가 센다.
-    for (const name of assetNames) {
-        fail(
-            "REF_UNUSED",
-            `${code}: 아무도 안 쓰는 전송 에셋 — .zalkera/assets/${name}. 섹션 이미지라면 ` +
-                `presets/${code}/public/ 로 옮기고(레포 상주가 정위치입니다), 상품 이미지라면 ` +
-                `qa/fixtures/${code}/assets/ 로 옮기십시오(카탈로그는 콘솔이 채웁니다)`,
-        );
-    }
-
-    return {seed};
-}
 
 /**
  * 콘텐츠 파일 검증 — **팩 v1 의 시드 페이지 검사가 통째로 이사 온 자리**다.
@@ -1127,11 +1033,18 @@ function inspect(code, contract) {
     if (packSource.length === 0) return null;
     const icons = iconKeys(code);
     const reserved = reservedSlugs(code);
-    const seedBytes = readFileSync(join(dir, "seed.json"));
     const manifest = readFileSync(join(dir, "ASSETS-LICENSE.md"), "utf8");
 
     // `.zalkera/assets/` = 전송 이미지 풀. 팩 v3 에서 그 유일한 소비자(상품 커버)가 사라져
-    // **현행 팩은 전부 이 디렉터리가 없다** — 있으면 validateSeed 가 미사용으로 막는다.
+    // **현행 팩은 전부 이 디렉터리가 없다.**
+    //
+    // 여기서 크게 실패시킨다 — 소비자가 없는 파일을 조용히 싣지 않는다.
+    //
+    // ⚠ **이것은 위생이지 방어가 아니다.** 아티팩트 적재 API 는 임의 zip 바이트를 그대로 받으므로
+    //   이 스크립트를 한 번도 안 돌린 zip 이 개시까지 완주한다 — 유일한 방어선은 백엔드
+    //   `SiteSeedPlanner.rejectCarriedAssets` 이고, 그 판정이 시드 분기 안에 있어 시드 폐지와 함께
+    //   도달 불가가 됐다(memo186 T1 🔴). **그 호출을 시드 분기 밖으로 올리는 것이 정석이고 잔여
+    //   과제다.** 여기서 막는 것으로 그 자리를 대신했다고 여기지 마라.
     const assetDir = join(dir, "assets");
     let assets = [];
     try {
@@ -1145,8 +1058,15 @@ function inspect(code, contract) {
 
     const publicFiles = presetPublicFiles(join(dir, "public"));
 
+    if (assets.length > 0) {
+        fail(
+            "CARRIED_ASSETS",
+            `${code}: presets/${code}/assets/ 에 ${assets.length}개가 있습니다 — 이 풀은 소비자가 ` +
+                `없습니다(팩 v3 에서 상품 커버 경로가 닫혔습니다). 섹션이 쓰는 이미지는 ` +
+                `presets/${code}/public/ 에 두십시오.`,
+        );
+    }
     validateAssets(code, assets);
-    validateSeed(code, seedBytes, new Set(assets.map((a) => a.name)));
     const content = validateContent(
         code,
         join(dir, "content"),
@@ -1174,11 +1094,11 @@ function inspect(code, contract) {
             fail("PRESET_UNTRACKED", `${path}: git 이 추적하지 않는 파일이 배송 대상입니다 — 커밋하거나 지우십시오`);
         }
     }
-    return {code, seedBytes, manifest, assets, publicFiles, content, packSource};
+    return {code, manifest, assets, publicFiles, content, packSource};
 }
 
 function write(inspected, version, source, manual) {
-    const {code, seedBytes, manifest, assets, publicFiles, content, packSource} = inspected;
+    const {code, manifest, assets, publicFiles, content, packSource} = inspected;
     const slugs = content.pages.map((p) => p.slug);
     // 팩 v4: `src/` 는 **이 팩 것만** 들어간다(병합 없음 — 어느 줄이 어디서 왔는지 묻는 일이 없다).
     console.log(`    · 팩 소스 ${packSource.length}개 파일 (presets/${code}/src)`);
@@ -1197,7 +1117,6 @@ function write(inspected, version, source, manual) {
         // ── 신원(팩이 자기 이름·버전을 말한다 · memo150 §8.1) ──────────────
         {path: MANIFEST_PATH, bytes: packManifestBytes(code, version)},
         // ── 전송(업무 데이터) ──────────────────────────────────────────────
-        {path: ".zalkera/seed.json", bytes: seedBytes},
         {path: ".zalkera/ASSETS-LICENSE.md", bytes: Buffer.from(manifest, "utf8")},
         ...assets.map((a) => ({path: `.zalkera/assets/${a.name}`, bytes: a.bytes})),
     ].sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));

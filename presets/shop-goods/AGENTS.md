@@ -4,9 +4,9 @@
 
 착수 절차·브랜치·시크릿·백엔드 직접 fetch 금지 같은 **안전 규칙은 이 문서가 아니라 작업 지시 프롬프트가 단일 출처**다 — 여기서 중복하지 않는다. 이 문서는 "이 코드가 무슨 규약을 쓰나"(코드 사실)만 말한다.
 
-이 레포는 두 가지를 동시에 배송한다. ① 사진과 문구만 바꿔 그대로 쓰는 **판매 완성품** — 실물은 `content/`(사이트의 얼굴)·`public/`(이미지)·`src/`(호출 구성)이고, `.zalkera/seed.json` 은 **테마 색**만 나른다. ② 레시피(`@zalkera/client` 의 `llms.txt`)를 이렇게 따른다는 **본보기** — 실물은 소스 코드와 이 문서다. 뒤쪽은 앞쪽의 격하가 아니라 **역할 추가**다: 이 레포는 카탈로그에 오르고 팩 게이트·진열 게이트를 똑같이 통과하는 상품이면서, 새 템플릿을 짓는 사람·AI 가 읽는 교본이기도 하다.
+이 레포는 두 가지를 동시에 배송한다. ① 사진과 문구만 바꿔 그대로 쓰는 **판매 완성품** — 실물은 `content/`(사이트의 얼굴)·`public/`(이미지)·`src/`(호출 구성)이고, 색의 정본은 **소스의 `src/app/globals.css` 의 `@theme`** 이다. ② 레시피(`@zalkera/client` 의 `llms.txt`)를 이렇게 따른다는 **본보기** — 실물은 소스 코드와 이 문서다. 뒤쪽은 앞쪽의 격하가 아니라 **역할 추가**다: 이 레포는 카탈로그에 오르고 팩 게이트·진열 게이트를 똑같이 통과하는 상품이면서, 새 템플릿을 짓는 사람·AI 가 읽는 교본이기도 하다.
 
-**분담**: 사이트의 **얼굴**(페이지·섹션·정적 문구·섹션 이미지·내비)의 정본은 **이 레포의 `content/`** 이고, `.zalkera/seed.json` 은 **테마 색**만 나른다. **업무 데이터(상품·갈래)는 배송물이 만들지 않는다** — 주인은 콘솔·MCP 이고(계약 rev 6), 화면에 비추는 일은 소스가 `listProducts()`·`listProductCategories()` 를 직접 불러서 한다(`src/components/ProductRail.tsx`). 콘텐츠의 인명·후기·문구는 실감을 위해 지어낸 것이지 규범이 아니다.
+**분담**: 사이트의 **얼굴**(페이지·섹션·정적 문구·섹션 이미지·내비)의 정본은 **이 레포의 `content/`** 이고, 색의 정본은 **소스의 `src/app/globals.css` 의 `@theme`** 이다. **업무 데이터(상품·갈래)는 배송물이 만들지 않는다** — 주인은 콘솔·MCP 이고(계약 rev 6), 화면에 비추는 일은 소스가 `listProducts()`·`listProductCategories()` 를 직접 불러서 한다(`src/components/ProductRail.tsx`). 콘텐츠의 인명·후기·문구는 실감을 위해 지어낸 것이지 규범이 아니다.
 
 **문구를 tsx 마크업에 굽지 마라.** 이 규범은 사라지지 않았고 **거처만 바뀌었다** — 굽지 말아야 할 곳은 그대로 JSX 이고, 있어야 할 곳이 DB 에서 `content/pages/*.json` 으로 왔다. 마크업에 박은 문구는 "말로 고치기"가 파일 하나를 여는 대신 컴포넌트 트리를 탐색하게 만든다.
 
@@ -34,7 +34,7 @@
 
 | 고치려는 것 | 실제 거처 |
 |---|---|
-| 브랜드 색·폰트·모서리·밀도 | DB 사이트 설정 — 콘솔의 "말로 색 바꾸기"가 **값만** 바꾼다. 소스 쪽에 있는 것은 `src/app/globals.css` 의 `@theme` **기본값**과 `src/app/layout.tsx` 의 주입 배선뿐이다(§테마 주입 배선) |
+| 브랜드 색·폰트·모서리·밀도 | **소스** — `src/app/globals.css` 의 `@theme` 토큰 한 자리가 정본이다(§색은 소스가 정본이다) |
 | 회사명·연락처·주소·사이트 기본 SEO | DB — `getSiteConfig()` |
 | 상품·가격·재고·카테고리·후기·예약 슬롯 | DB — 콘솔·`@zalkera/client`. 소스는 **handle 로 가리킬 뿐** |
 | 게시글(블로그) | DB — `listPosts`/`getPost` |
@@ -52,7 +52,7 @@
 
 ## 색·스타일 규약 (tailwind-tokens 계약)
 
-원리: **요소가 "어떤 토큰"을 쓸지는 코드가 정하고, 그 토큰의 "값"은 config(테마)가 정한다.** 그래야 콘솔의 '말로 색 바꾸기'가 코드 수정 없이 값만 바꿔 즉시 반영된다. 리터럴 색을 코드에 박으면 이 계약이 깨진다.
+원리: **요소가 "어떤 토큰"을 쓸지는 컴포넌트가 정하고, 그 토큰의 "값"은 `@theme` 한 자리가 정한다.** 그래야 값 하나를 고쳐 화면 전체가 따라온다. 리터럴 색을 코드에 박으면 그 이점이 사라진다.
 
 - 브랜드색은 **토큰 유틸리티**로: `bg-primary`·`text-primary`·`border-primary` 등. 테마 토큰 키는 `primary`/`secondary`/`background`/`text`.
 - 중립색은 이 템플릿에서 **slate 스케일**로 통일했다(`text-slate-600`·`bg-slate-50` 등). 이건 계약이 아니라 **이 예시의 선택**이고, 이유는 중립 스케일을 하나로 고정해 두면 화면에 남는 유일한 색이 테넌트의 액센트(`primary`) 하나가 되어 테넌트마다 인상이 갈리기 때문이다. 다른 판단이면 다른 스케일을 써도 된다 — 계약이 요구하는 것은 "브랜드색이 토큰을 경유한다"는 것뿐이다.
@@ -195,13 +195,13 @@ const access = {accessToken, phone, context: {clientIp: visitorIp(await headers(
 | **문의·리드** | `src/app/contact/` · `src/app/api/{inquiry,lead}/` | ⚠ `src/components/LeadForm.tsx` 는 **계약 어휘 섹션**(`LeadCtaSection`)이 씁니다. 지우려면 그 섹션과 그것을 쓰는 `content/` 페이지도 같이 지우십시오 · **`src/lib/reservedSegments.ts` 에서 `contact` 빼기** | 리드 제출 |
 
 **중립 배선 — 지우지 마십시오** (능력이 아니라 플랫폼 계약입니다):
-`src/lib/theme.ts` + layout 의 테마 주입 · `src/app/media/[id]/` 프록시 · `src/app/api/revalidate/` ·
+`src/app/media/[id]/` 프록시 · `src/app/api/revalidate/` ·
 `src/lib/{crossOrigin,safeUrl,env,buildEnv}.ts` · `robots.ts`·`sitemap.ts` · `src/lib/content.ts` ·
 `src/middleware.ts` + `src/lib/previewGuard.ts`(미리보기 쓰기 차단) ·
 **`src/lib/{session,authHint,useAuthHint}.ts`** — 세션 배선은 쇼핑몰 전용이 아닙니다. 예약·리뷰·동의
 라우트와 `SiteHeader` 가 씁니다(재현: `grep -rl '@/lib/session\|@/lib/authHint\|@/lib/useAuthHint' src`).
 쇼핑몰·예약·회원 기능을 **전부** 지울 때만 함께 지웁니다.
-이 절 아래 "테마 주입 배선 — 지우지 마라"와 "BFF 라우트 — 교차사이트 위조 가드"가 그 상세입니다.
+이 절 아래 "BFF 라우트 — 교차사이트 위조 가드"가 그 상세입니다.
 
 **표현은 지우는 게 아니라 다시 씁니다.** 헤더·푸터는 사이트가 소유하는 외양이라, 반응형 드로어든
 스티키든 메가메뉴든 자기 것으로 새로 쓰면 됩니다 — 데이터로 표현되지 않는 자리라 **하드코딩이 정답**입니다.
@@ -331,18 +331,20 @@ shadcn 소스는 자기 변수층(`--card`·`--muted-foreground` …)을 전제�
   독자는 사장이고 사장의 표면은 콘솔이다.
 - `TESTIMONIALS` 에 `Review`·`AggregateRating` 을 내지 않는다 — 자사 후기 별점은 정책 위반이다. 누락이 아니라 결정이다.
 
-## 테마 주입 배선 — 지우지 마라 (L1 의 심장)
+## 색은 소스가 정본이다 — `globals.css` 의 `@theme`
 
-root layout(`src/app/layout.tsx`)이 `parseThemeColors(...)` 로 테넌트 색을 읽어 **`<html>` 의 inline style 로
-주입**한다. `globals.css` 의 `@theme` 토큰(`--color-primary` 등)이 그 기본값이고, inline style 이 그걸 덮는다.
+색·타이포의 값은 `src/app/globals.css` 의 `@theme` 토큰 **한 자리**에 있습니다. 고치면 그대로
+나갑니다(다시 빌드해야 반영됩니다).
 
-**이 두 조각이 L1("말로 색 바꾸기")의 전부다.** 하나라도 지우면 콘솔에서 색을 바꿔도 **성공 보고만 나오고
-화면은 그대로**인 거짓성공이 된다 — 사용자는 무엇이 고장났는지 알 길이 없다. validator **S8** 이 이걸 센다
-(declared 레포 전용·error).
+⚠ **콘솔에는 색 설정이 없습니다.** 값을 소스와 콘솔 두 곳에 두면 어느 쪽이 이기는지가 팩마다
+갈리고, 콘솔에서 바꿨는데 화면이 안 움직이는 일이 생깁니다.
 
-자체 헬퍼로 직접 배선했다면 `// zalkera-allow-custom-theme-inject: <이유>` 마커로 사유를 남긴다(warning 강등).
-마커는 검사를 면제할 뿐 **동작을 보장하지 않는다** — 실제 반영은 사람이 한 번 확인해야 한다.
+⚠ **색 리터럴을 컴포넌트에 흩뿌리지 마십시오.** 유틸리티(`bg-primary`·`text-foreground` …)가
+토큰을 읽으므로 값을 한 자리에서 바꾸면 화면 전체가 따라옵니다. 흩뿌리면 그 이점이 사라지고,
+`[S4]`(className 색 리터럴)·`[S2]`(인라인 style)가 그것을 막습니다.
 
+⚠ **`--color-primary-foreground` 를 함께 고르십시오.** `primary` 위에 얹히는 글자색이고
+기본값은 흰색입니다 — 밝은 브랜드색을 넣으면 대비가 죽습니다.
 ## 서빙 산출물 계약 — `next.config` 를 다시 쓸 때
 
 **잘커라가 서빙하는 소스는 빌드가 `.next/standalone` 자기완결 산출물을 내야 한다.** 우리 서빙 박스는 `next start` 가 아니라 그 산출물을 `node server.js` 로 띄운다(:ro 마운트).

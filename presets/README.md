@@ -3,11 +3,10 @@
 콘솔의 "이 프리셋으로 시작"이 고르는 **시작 테마**입니다. 테마 하나 = ① 이 정본 소스에 프리셋 디렉터리를
 병합해 팩 시점에 뜬 zip + ② 레지스트리 카드 메타(백엔드 설정).
 
-> **"시드"의 뜻이 두 번 좁아졌습니다.** 팩 v2에서 사이트의 **얼굴**(페이지·섹션·문구·이미지
-> 선택·내비)이 zip 안의 `content/` 로 갔고 — 소스가 정본입니다 — 팩 v3에서
-> **업무 데이터**(상품·갈래)가 빠졌습니다. `.zalkera/seed.json` 에 남은 최상위 키는 **`themeColors` 하나**
-> 입니다. `pages`·`menus`·`products`·`categories` 중 무엇이든 넣으면 팩이 막고, 뚫려도 백엔드 개시가
-> strict 파싱에서 중단됩니다.
+> **시드는 폐지됐습니다**(memo186 T1). 팩 v2 에서 사이트의 **얼굴**(페이지·섹션·문구·이미지)이
+> `content/` 로 옮겨 갔고, v3 에서 **업무 데이터**(상품·갈래)가 빠졌으며, 마지막에 남아 있던
+> `themeColors` 마저 색의 정본이 소스(`globals.css` 의 `@theme`)로 되돌아가면서 담을 것이
+> 없어졌습니다. **`seed.json` 을 만들지 마십시오** — 팩이 싣지 않습니다.
 
 ## 팩 v4 — **팩마다 자기 소스**입니다 (오너 확정 2026-08-01)
 
@@ -55,7 +54,7 @@ cp -r src presets/<new-code>/src     # 새 팩은 여기서 시작합니다
 > 재현: `git ls-files -- presets/<code>/src | wc -l` · 다른 곳은 팩과 루트의 같은 좌표를 `cmp` 로 비교.
 > 네 팩 모두 **정확히 한 파일**만 다르다 — 그것이 「팩의 얼굴」이고 나머지 117 은 바이트 동일이다.
 
-**시드는 넷 다 `themeColors` 하나뿐입니다** — 팩은 고객 DB 에 상품·갈래를 만들지 않습니다(팩 v3).
+**팩은 고객 DB 에 아무것도 만들지 않습니다.** 색은 소스의 `@theme`, 얼굴은 `content/`, 업무 데이터는 콘솔·MCP 입니다.
 팩의 차이는 데이터가 아니라 **얼굴 저작 · 전환 동선 · 소스 · 보장 주장** 넷으로 표현됩니다.
 
 "원본과 다른 곳"이 지금은 작지만 **작아야 할 이유가 없습니다** — 각 팩은 자기 소스를 온전히 가지므로
@@ -165,7 +164,6 @@ presets/<code>/
   content/nav.json       # 선택 — 헤더·푸터 내비.                    → zip 의 content/nav.json
   public/**              # 선택 — 섹션 이미지(레포 상주).            → zip 의 public/
   src/**                 # **필수** — 이 팩의 소스 전량.              → zip 의 src/ (병합 없음)
-  seed.json              # **필수** — **테마색만**.                   → zip 의 .zalkera/seed.json
   assets/*.png           # 선택 — 전송 이미지 풀. **현행 팩은 전부 없음**(소비자가 사라졌습니다)
   ASSETS-LICENSE.md      # **필수** — 파일별 출처·라이선스.           → zip 의 .zalkera/ASSETS-LICENSE.md
   thumbnail.png          # 선택 — 콘솔 카드 썸네일. **zip 밖**(고객 소스가 아니라 우리 카탈로그 자산)
@@ -247,10 +245,8 @@ zip 루트에는 `llms.txt` 도 실립니다 — 설치된 `@zalkera/client` 의
 
 ⚠ 이 목록은 오버레이 시절 "가리면 안 되는 것"(`PROTECTED_WIRING`)을 **베낀 게 아니라 다시 판정한** 것입니다.
 뜻이 다릅니다 — 그때는 *한 팩이 정본을 가려 가드를 무력화*하는 것을 막았고, 지금은 *넷이 서로 갈리는* 것을
-막습니다. 그래서 셋이 달라졌습니다:
+막습니다. 그래서 둘이 달라졌습니다:
 
-- `theme.ts` 는 **들어왔습니다.** 얼굴처럼 보이지만 실체는 고객 값을 `<html>` inline style 로 넣는 주입
-  지점이라(화이트리스트 파서), 한 벌만 느슨해지면 CSS 주입이 그 팩에서만 열립니다.
 - `content.ts` 는 **들어와 있습니다.** 얼굴 로더로 보이지만 네 팩의 실물이 바이트 동일이고(재현:
   `md5sum src/lib/content.ts presets/*/src/lib/content.ts`), 이 파일이 예약 세그먼트·소유 판정으로
   들어가는 입구라 한 벌만 느슨해지면 그 팩에서만 판정이 갈립니다.
@@ -325,15 +321,13 @@ node scripts/verify-zip.mjs dist-presets/shop-goods-<x.y.z>.zip --pack # 카탈�
 
 | 게이트 | 내용 |
 |---|---|
-| 캡 | 에셋 24개·개별 20MB·총 20MB · seed.json 256KB · 페이지 10 · 내비 링크 30 · 페이지당 섹션 50 · config 64KB |
+| 캡 | 에셋 24개·개별 20MB·총 20MB · 페이지 10 · 내비 링크 30 · 페이지당 섹션 50 · config 64KB |
 | 형식 | 래스터만(png·jpg·webp) + **매직 바이트** 대조. svg·영상 불가 |
-| 시드 v1 잔재 | `seed.json` 에 `pages`·`menus` 가 있으면 **실패**. 조용히 무시하면 "페이지를 넣었는데 사이트에 안 나오는" 상태로 나가고, 원인이 파일 어디에도 안 적힙니다 |
-| 시드 업무 데이터 | `seed.json` 에 `products`·`categories` 가 있으면 **실패**(팩 v3). 시드는 업무 데이터를 만들지 않습니다 — 카탈로그의 주인은 콘솔·MCP 이고, 화면은 소스가 직접 호출해 그립니다. 같은 판정이 백엔드 strict 파싱에도 있습니다(갈리면 안 되는 축) |
 | 콘텐츠 업무 참조 | 섹션 config 에 **업무 참조 키 형상**(`product`·`products`·`*Product(s)`·`categorySlug`)이 있으면 **실패**. **타입 이름이 아니라 키 형상으로 겁니다** — 어휘에서 조회형 둘이 삭제됐지만 같은 성격의 타입이 다시 생겨도 여기서 잡힙니다 |
 | 콘텐츠 형상 | `content/pages/` 부재·`title` 없음·`sections` 가 배열 아님·`config` 가 객체 아님 — 전부 실패 |
 | 필수 참조 | 계약이 필수로 선언한 참조(`requiredRefs`)를 안 가리키면 **실패**. 그룹 축(`requiredRefsAnyOf`)은 그룹마다 **하나 이상**이 채워져야 합니다. 렌더러가 그 섹션을 통째로 건너뛰므로 개시 직후 조용히 사라집니다 |
 | 이미지 참조 | 콘텐츠의 `asset`/`*Asset` 은 **public 루트 절대 경로**(`/images/hero.png`)이고 `presets/<code>/public` 에 실재해야 함. **안 쓰는 이미지가 남아도 실패.** `presets/<code>/assets/`(전송 풀)에 파일이 있으면 소비자가 없으므로 **무조건 실패** — 섹션 이미지면 `public/` 로, 상품 이미지면 `qa/fixtures/<code>/assets/` 로 옮기십시오 |
-| 숫자 id | `assetId`·`productId(s)` 같은 **id 형 키가 있으면 실패**(시드·콘텐츠 양쪽). 숫자 id 는 테넌트 스코프라 이 소스가 다른 테넌트에서 의미를 잃습니다 — 참조형(파일명·경로·handle)이 정규형입니다 |
+| 숫자 id | `assetId`·`productId(s)` 같은 **id 형 키가 있으면 실패**(콘텐츠). 숫자 id 는 테넌트 스코프라 이 소스가 다른 테넌트에서 의미를 잃습니다 — 참조형(파일명·경로·handle)이 정규형입니다 |
 | 계약 | 섹션 타입이 `SECTION_CONTRACT` 에 있어야 함(client 를 못 읽으면 **팩 실패** — `npm ci` 선행). `requiredRefs`·`requiredRefsAnyOf` 가 없는 **구버전 client 로도 팩하지 않습니다** — 있는 줄 알았던 게이트가 꺼져 있는 것이 가장 나쁜 상태입니다. rev 6 부터 어휘는 **10종**이라, 은퇴한 `SERVICE_MENU`·`BOOKING_CTA` 를 콘텐츠에 적으면 여기서 걸립니다 |
 | 아이콘 | `icon` 값이 큐레이션 맵(`src/components/ui/Icon.tsx`)의 키여야 함 |
 | 내비 | `nav.json` 은 없어도 정상(내비가 빕니다). 있으면 `header`·`footer` 가 배열이고 항목이 `{label, href}` 문자열이어야 함 |
@@ -398,16 +392,15 @@ curl -X POST "$API/api/system/themes/beauty-nail/artifacts/<x.y.z>/promote" \
 **문서도 소스입니다** — `AGENTS.md`·루트 `README.md` 한 줄만 고쳐도 zip sha256 이 바뀝니다(이 `presets/`
 디렉터리는 zip 밖이라 무관합니다). 적재 직전에 팩을 다시 돌리십시오.
 
-**버전은 시드나 소스가 바뀌면 올립니다.** 이미 개시한 사이트의 소스는 고객 것이라 소급 갱신이 없습니다.
+**버전은 소스가 바뀌면 올립니다.** 이미 개시한 사이트의 소스는 고객 것이라 소급 갱신이 없습니다.
 
 ## 고칠 때 — 어디를 여는가
 
-**고칠 곳이 파일로 갈립니다.** 팩 v2 이후 "시드 고치기"라는 하나의 작업은 없습니다.
+**고칠 곳이 파일로 갈립니다.**
 
 ### 얼굴 (`presets/<code>/content/`)
 
 - **카피는 `content/pages/<slug>.json` 의 문자열입니다.** 어조를 바꾸려면 여기만 고칩니다
-  (`seed.json` 에는 문구가 없습니다).
 - 페이지를 늘리려면 `content/pages/<slug>.json` 을 하나 더 두면 됩니다 — 매니페스트(`content/index.ts`)는
   팩이 생성하고, 라우팅은 `src/app/[slug]` 가 이미 합니다.
 - **`title` 은 필수**이고 `sections` 는 배열입니다. **배열 순서가 곧 화면 순서**라 `sortOrder` 같은 키는
@@ -427,12 +420,11 @@ curl -X POST "$API/api/system/themes/beauty-nail/artifacts/<x.y.z>/promote" \
   막습니다(위 "경계 규칙"). 진열의 자리는 그 팩의 `src/` 입니다 —
   `presets/<code>/src/app/page.tsx` 에서 `ProductRail` 을 쓰거나 직접 호출을 조합하십시오.
 
-### 테마색 (`presets/<code>/seed.json`)
+### 색 (`presets/<code>/src/app/globals.css`)
 
-- 남은 최상위 키는 **`themeColors` 하나**입니다. `pages`·`menus`·`products`·`categories` 중 무엇이든
-  넣으면 팩이 막고, 뚫려도 백엔드 개시가 strict 파싱에서 중단됩니다.
-- **id 를 직접 적으면 팩이 막습니다**(`themeColors` 안까지 봅니다) — 그 숫자는 만든 사람의 테넌트에서만
-  뜻이 있어서, 다른 사이트에 개시되는 순간 아무것도 못 가리킵니다.
+`@theme` 블록의 토큰 값이 그 팩의 색입니다. 콘솔에는 색 설정이 없으므로 여기가 유일한
+원천입니다. `--color-primary` 를 바꾸면 `--color-primary-foreground`(그 위 글자색)도 함께
+골라야 합니다 — 기본값이 흰색이라 밝은 색을 넣으면 대비가 죽습니다.
 
 ### 견본 카탈로그 (`qa/fixtures/<code>/`)
 

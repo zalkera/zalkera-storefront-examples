@@ -6,8 +6,11 @@ import {loadNav} from "@/lib/content";
 import {zalkera} from "@/lib/zalkera";
 import {parseSeo} from "@/lib/seo";
 import {fallbackSiteName, metadataBaseUrl} from "@/lib/site";
-import {parseThemeColors} from "@/lib/theme";
 import {SiteFooter} from "@/components/SiteFooter";
+
+// zalkera-allow-custom-theme-inject: 색·레이아웃의 정본은 이 팩의 `globals.css` 하나다(memo186).
+// 콘솔 주입 축을 걷었으므로 배선이 **없는 것이 정상**이다 — 배선만 남기면 콘솔에서 색을 바꿔도
+// 화면이 안 움직여 거짓 성공이 된다. 색을 바꾸려면 `@theme` 의 토큰 값을 고친다.
 
 /**
  * 자체 revalidate 가 없는 정적 라우트(checkout·payment/* 등)에 갱신 주기를 준다.
@@ -73,14 +76,12 @@ export default async function RootLayout({children}: {children: ReactNode}) {
     //    갈리는 것은 **URL·헤더**다.
     // 태그만 실은 fetch 는 동적 opt-in 이 아니므로 정적성을 깨지 않는다(§6).
     const config = await zalkera.getSiteConfig({tags: ["site-config"]}).catch(() => null);
-    // themeColors → CSS 변수. inline style 은 어떤 스타일시트보다 우선하므로 @theme 기본값을 덮는다.
-    const {cssVars} = parseThemeColors(config?.themeColors);
     // 내비는 `content/nav.json` — 사이트 얼굴의 구조라 소스가 정본이다(어휘 계약 rev 4 `contentFile`).
     // 파일이 없거나 비어도 사이트는 산다(내비만 빈다).
     const {header: headerMenus, footer: footerMenus} = loadNav();
 
     return (
-        <html lang="ko" style={cssVars}>
+        <html lang="ko">
             <body className="bg-background text-foreground font-sans antialiased">
                 <div className="mx-auto max-w-4xl px-4">
                     <SiteHeader menus={headerMenus} />

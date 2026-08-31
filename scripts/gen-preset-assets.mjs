@@ -19,7 +19,7 @@ import {Canvas, hex, rng} from "./preset-canvas.mjs";
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 /**
- * 테마별 팔레트·에셋 목록. 팔레트는 seed.json 의 themeColors 와 **같은 값**이어야 한다 —
+ * 테마별 팔레트·에셋 목록. 팔레트는 그 팩 `globals.css` 의 `@theme` 토큰과 **같은 값**이어야 한다 —
  * 아트가 사이트 색과 따로 놀면 "토큰만으로 인상이 갈린다"(§2.1 ③)는 주장이 첫 화면에서 깨진다.
  */
 const THEMES = {
@@ -352,7 +352,7 @@ function mix(fromHex, toHex, t) {
  * 여기서 목록을 따로 관리하면 키트와 갈라지고, 갈라진 순간 커버가 섹션 자리(`public/`)로 새어 나가
  * 팩 게이트의 "아무도 안 쓰는 이미지"에 걸린다.
  *
- * ⚠ **거처가 시드에서 키트로 옮겨졌다**(memo142). 종전 정본은 `presets/<code>/seed.json` 의
+ * ⚠ **거처가 키트다**(memo142 · 시드는 memo186 T1 에서 폐지). 종전 정본은 `presets/<code>/seed.json` 의
  * `products[].imageAsset` 이었는데, 시드가 상품을 만들지 않게 되면서 그 축이 사라졌다. 카탈로그 견본은
  * 이제 **배송물이 아니라 검수용**이고(콘솔·파트너 API 로 적재한다), 그래서 이미지도 zip 밖에 산다.
  * 키트가 없는 테마는 빈 집합이라 커버 자리가 아예 안 생긴다.

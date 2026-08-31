@@ -41,7 +41,6 @@ export const REQUIRED_FLOORS = {
     "scripts/workflow-syntax.test.mjs": 35,
     "scripts/lib/floorGate.test.mjs": 11,
     "scripts/lib/contentRoutes.test.mjs": 12,
-    "src/lib/theme.test.ts": 9,
     "src/lib/preview.test.ts": 4,
 };
 
@@ -58,7 +57,6 @@ export const REPO_ONLY_FLOORS = {
     "scripts/lib/packGate.test.mjs": 6,
     "scripts/lib/rendererCoverage.test.mjs": 2,
     "scripts/lib/packManifest.test.mjs": 8,
-    "scripts/lib/themeEnums.test.mjs": 16,
     "scripts/lib/validateSeverity.test.mjs": 3,
     "scripts/lib/visitor-ip-parity.test.mjs": 32,
     "scripts/lib/wiringParity.test.mjs": 10,
