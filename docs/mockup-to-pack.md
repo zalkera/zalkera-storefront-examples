@@ -728,7 +728,7 @@ node scripts/verify-zip.mjs ../pack-<이름>-<날짜>.zip     # rc 0
 | `Invalid or unexpected token` (런타임) | `String.raw` 로 넣음 | §1-5 |
 | `근거 없는 이름은 목록에 없다` | 라우트를 지움 | §1-2 |
 | `<파일> 가 없습니다 — 가드를 재는 자리입니다` | `src/lib/*.ts` 를 지움 | §1-2 |
-| `[EDECL]` rc=7 | 선언은 **없는데** 테마 주입 배선이 남아 있다 | §1-4 |
+| `[EDECL]` rc=7 | 선언은 **없는데** `globals.css` 가 우리 토큰 이름을 쓴다(`--radius-knob`·`--color-surface` 등 다섯 중 둘 이상) | §1-3 |
 | `[S2]`·`[S4]`·`[S8]`·N 이 error | `zalkera` 선언을 **안 지웠다** | §1-3 |
 | `pages 맵을 못 읽었습니다` | `content/index.ts` 를 `= {};` 한 줄로 쓰거나 축약 표기로 씀 | §2-1 |
 | 시안 제목이 안 뜬다(오류 없음) | `layout.tsx` 의 `generateMetadata()` 를 안 지웠다 | §2-2 |
