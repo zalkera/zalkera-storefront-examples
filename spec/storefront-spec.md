@@ -251,7 +251,16 @@ const products = await client.listProducts({...});
 일이다.
 
 ⚠ **관문이 그것을 강제하지는 않는다.** 둘째 스타일시트를 `import` 해 거기서 색을 덮는 형태는
-`[S5]`(단일 CSS)가 **경고로만** 잡는다 — declared 모드에서도 그렇다(실측: rc=0 · 경고 1).
+`[S5]`(단일 CSS)가 **경고로만** 잡는다 — declared 모드에서도 그렇다:
+
+```bash
+printf ':root{--color-primary:#f00}\n' > src/app/brand.css
+# layout.tsx 에 import "./brand.css" 를 더한 뒤
+npx zalkera-validate ./src --gate; echo rc=$?
+# → ⚠️ [S5] src/app/brand.css … · ✅ 통과 (경고 1) · rc=0
+rm src/app/brand.css && git checkout -- src/app/layout.tsx   # 되돌리기
+```
+
 그래서 이 문장은 규칙이 아니라 **약속**이다. 색을 두 자리에 두면 다음 「색 바꿔 주세요」가
 전수 수색이 되고, 그 비용은 당신이 아니라 이 소스를 물려받는 사람이 문다.
 
@@ -267,15 +276,26 @@ const products = await client.listProducts({...});
 ```
 
 - 스타일 진입점에 `@theme` 과 `--color-primary:` 정의가 있을 것. 없으면 `bg-primary` 같은
-  유틸리티가 **아예 생성되지 않는다**(에러도 안 난다) — 그것을 `[S8]` 이 센다.
+  유틸리티가 **아예 생성되지 않는다.** JSX 클래스에서 쓴 것은 조용히 버려지고(에러가 안 난다),
+  `@apply` 에서 쓴 것은 빌드가 죽는다 — 그것을 `[S8]` 이 센다.
 
-⚠ **서버 값을 읽어 색을 덮어쓰는 배선을 만들지 마라.** 종전 판본은 root layout 이
-`parseThemeColors(config?.themeColors)` 로 `<html>` 에 inline style 을 주입할 것을 요구했다.
-**그 요구는 걷혔고 헬퍼도 없어졌다**(`@zalkera/client` `0.28.0`) — 색의 원천이 소스와 콘솔 둘로
-갈려 어느 쪽이 이겼는지 화면에서 알 수 없었기 때문이다. 옛 소스를 참고하다 그 조각을 옮겨 오면
-`import` 에서 바로 죽는다.
+⚠ **서버 값을 읽어 색을 덮어쓰는 배선을 만들지 마라.** 색의 원천이 소스와 콘솔 둘이면 어느 쪽이
+이겼는지 화면에서 알 수 없다 — 그것이 이 규칙의 제약이다. `@zalkera/client` 에 그런 배선을 만드는
+헬퍼는 **없다**:
 
-⚠ **`0.28.0` 이상을 쓴다.** 그 아래 판의 검사기는 아직 그 호출을 요구해서, 없으면 `[S8]` 로 잡는다.
+```bash
+node -e 'console.log(Object.keys(require("@zalkera/client")).filter(n=>/[Tt]heme/.test(n)))'
+# → []
+```
+
+⚠ **`@zalkera/client` 는 `0.28.0` 이상을 쓴다.** 그 아래 판의 검사기는 이 배선을 **요구**해서,
+안 만든 소스를 오류로 잡는다:
+
+```bash
+npm i --no-save @zalkera/client@0.27.0 && npx zalkera-validate ./src --gate; echo rc=$?
+# → ❌ [S8] … 테마 주입 배선이 없습니다 · rc=1
+npm ci   # 되돌리기 — 설치본을 선언된 판으로 되돌린다
+```
 
 ## 8. 데이터 조회 · 시크릿 — `[E1]`~`[E3]`
 
