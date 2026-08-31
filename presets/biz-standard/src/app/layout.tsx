@@ -8,7 +8,6 @@ import {parseSeo} from "@/lib/seo";
 import {fallbackSiteName, metadataBaseUrl} from "@/lib/site";
 import {SiteFooter} from "@/components/SiteFooter";
 
-// zalkera-allow-custom-theme-inject: 색·레이아웃의 정본은 이 팩의 `globals.css` 하나다(memo186).
 // 콘솔 주입 축을 걷었으므로 배선이 **없는 것이 정상**이다 — 배선만 남기면 콘솔에서 색을 바꿔도
 // 화면이 안 움직여 거짓 성공이 된다. 색을 바꾸려면 `@theme` 의 토큰 값을 고친다.
 

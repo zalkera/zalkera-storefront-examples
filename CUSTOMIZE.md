@@ -257,7 +257,7 @@ npm run validate | grep '규약 모드'
 ⚠ **S1 은 `.css` 파일 안은 안 봅니다.** `globals.css` 에 `var(--oneq-*)` 를 남겨도 안 잡힙니다.
 
 정당한 예외는 **그 파일에** 주석 마커로 사유를 남기면 면제되거나 경고로 내려갑니다
-(`// zalkera-allow-dynamic: <이유>` · `// zalkera-allow-inline-style: <이유>` · `// zalkera-allow-custom-theme-inject: <이유>`).
+(`// zalkera-allow-dynamic: <이유>` · `// zalkera-allow-inline-style: <이유>`).
 **마커와 사유는 같은 줄**이어야 합니다 — 사유가 없거나 다음 줄에 있으면 면제되지 않습니다.
 마커는 **검사만 면제할 뿐 동작을 보장하지 않습니다** — 실제로 되는지는 사람이 한 번 확인해야 합니다.
 
