@@ -123,7 +123,7 @@ src/components/sections/SectionRenderer.tsx   ← 경로가 고정이다 (§5)
   | 빠진 선언 | 관문이 보는 증거 | 결과 |
   |---|---|---|
   | `content` | `content/pages/*.json` 이 `SECTION_CONTRACT` 의 `type` 을 쓴다 | rc=7 |
-  | `styling` | root layout 이 `parseThemeColors(...)` 를 부른다 **∧ `tailwindcss` 가 deps 에 있다** | rc=7 |
+  | `styling` | `globals.css` 가 우리 토큰 이름을 쓴다(정족수) **∧ `tailwindcss` 가 deps 에 있다** | rc=7 |
 
 - 지워도 아래 축들은 **그대로 error 로 남는다**: 시크릿 노출(`E1`~`E3`) · 렌더 모드(`C1` 계열) ·
   섹션 렌더러 누락(`C2`). 어느 쪽으로도 선언 제거로 통과를 만들 수 없다.
@@ -236,51 +236,46 @@ const products = await client.listProducts({...});
 - **`//` 앵커가 있어야 한다.** 앵커 없는 맨몸 글자는 안 먹는다.
   (반대로 `//` 가 붙어 있으면 문자열 안이라도 먹는 규칙이 있다 — 면제를 숨기지 마라.)
 - **사유가 필수이고 같은 줄에 있어야 한다.** 사유가 없거나 다음 줄에 있으면 안 먹는다.
-- 인정되는 이름: `dynamic` · `inline-style` · `cross-origin` · `custom-theme-inject`.
+- 인정되는 이름: `dynamic` · `inline-style` · `cross-origin`.
+  ⚠ `custom-theme-inject` 는 **없어졌다**(0.28.0) — 그 검사(`[S8]`-b)가 걷혀 면제할 대상이 없다.
+  옛 소스에 남아 있으면 지워라. 검사기는 모르는 이름을 조용히 무시한다.
 - **`cross-origin` 마커는 파일 상단 — 첫 `export` 앞에만 듣는다.** 아래에 두면 무시된다.
   `dynamic` 은 **원인 파일**에 단다(페이지가 아니라 그 API 를 부르는 파일).
 - **면제는 출구가 아니라 기록이다.** 다만 **목록으로 찍히는 것은 교차출처 면제뿐**이다 —
-  `dynamic`·`custom-theme-inject` 는 보통 경고 줄로 나오고, `inline-style` 억제는 아무것도 안 찍는다.
+  `dynamic` 은 보통 경고 줄로 나오고, `inline-style` 억제는 아무것도 안 찍는다.
   마커를 달았다고 남이 알아본다고 여기지 마라.
 
-## 7. 테마 주입 배선 — `[S8]` · 지우지 마라
+## 7. 색 토큰 — `[S8]` · 정본은 이 파일 하나다
 
-root layout 이 테넌트 색을 읽어 `<html>` 의 inline style 로 주입한다. `globals.css` 의 `@theme` 토큰이
-기본값이고 inline style 이 그걸 덮는다.
+`globals.css` 의 `@theme` 블록이 **이 사이트의 색 정본**이다. 색을 바꾸는 일은 이 파일을 고치는
+일이다.
 
-```tsx
-// src/app/layout.tsx
-import {parseThemeColors} from "@zalkera/client";
+⚠ **관문이 그것을 강제하지는 않는다.** 둘째 스타일시트를 `import` 해 거기서 색을 덮는 형태는
+`[S5]`(단일 CSS)가 **경고로만** 잡는다 — declared 모드에서도 그렇다(실측: rc=0 · 경고 1).
+그래서 이 문장은 규칙이 아니라 **약속**이다. 색을 두 자리에 두면 다음 「색 바꿔 주세요」가
+전수 수색이 되고, 그 비용은 당신이 아니라 이 소스를 물려받는 사람이 문다.
 
-const config = await client.getSiteConfig({tags: ["site-config"]});
-const {cssVars} = parseThemeColors(config?.themeColors);
-return (
-    <html lang="ko" style={cssVars}>
-        …
-    </html>
-);
+```css
+/* src/app/globals.css */
+@import "tailwindcss";
+
+@theme {
+    --color-primary: oklch(20.8% 0.042 265.755);
+    --color-primary-foreground: #ffffff;
+    /* … */
+}
 ```
 
-⚠ **인자와 반환을 그대로 지켜라.** `parseThemeColors(raw: string | null | undefined)` 는 **설정 객체가
-아니라 `themeColors` 문자열**을 받고, `{cssVars}` 를 돌려준다. `parseThemeColors(config)` 로 넘기거나
-반환값을 통째로 `style` 에 얹으면 React 가 아무것도 적용하지 않는다 — 그리고 **`[S8]` 은 호출이
-있는지만 보므로 그 상태로 rc=0 이 난다.** 화면은 콘솔에서 색을 바꿔도 안 움직인다.
-살아 있는 서명은 `node_modules/@zalkera/client/dist/index.d.ts` 에서 확인한다.
+- 스타일 진입점에 `@theme` 과 `--color-primary:` 정의가 있을 것. 없으면 `bg-primary` 같은
+  유틸리티가 **아예 생성되지 않는다**(에러도 안 난다) — 그것을 `[S8]` 이 센다.
 
-**이 두 조각이 "말로 색 바꾸기"의 전부다.** 하나라도 없으면 콘솔에서 색을 바꿔도 **성공 보고만 나오고
-화면은 그대로**인 거짓성공이 된다 — 사용자는 무엇이 고장났는지 알 길이 없다.
+⚠ **서버 값을 읽어 색을 덮어쓰는 배선을 만들지 마라.** 종전 판본은 root layout 이
+`parseThemeColors(config?.themeColors)` 로 `<html>` 에 inline style 을 주입할 것을 요구했다.
+**그 요구는 걷혔고 헬퍼도 없어졌다**(`@zalkera/client` `0.28.0`) — 색의 원천이 소스와 콘솔 둘로
+갈려 어느 쪽이 이겼는지 화면에서 알 수 없었기 때문이다. 옛 소스를 참고하다 그 조각을 옮겨 오면
+`import` 에서 바로 죽는다.
 
-둘 다 있어야 하고, 어느 쪽이 빠져도 출력에는 `[S8]` 로 찍힌다.
-
-- 스타일 진입점에 `@theme` 과 `--color-primary:` 정의가 있을 것.
-- root layout 에 `parseThemeColors(` **호출**과 `<html … style=>` 이 있을 것.
-  주석이 아니라 **코드**에서 찾는다. (Pages Router 에는 이 자리가 없어 뒤쪽 축이 성립하지 않는다.)
-- 자기 헬퍼로 직접 배선했으면 `// zalkera-allow-custom-theme-inject: <이유>` 로 사유를 남긴다.
-  **마커는 검사를 면제할 뿐 동작을 보장하지 않는다** — 반영은 사람이 한 번 확인해야 한다.
-
-⚠ **`parseThemeColors(...)` 호출은 스타일 계약을 자처하는 신호이기도 하다.** `tailwindcss` 를 문
-레포가 이걸 부르면서 `zalkera.styling` 을 선언하지 않으면 관문이 rc=7 을 낸다(§4). 우리 토큰 계약을 따르는 것이
-아니면 이 배선을 쓰지 마라 — 색은 자기 방식으로 넣으면 된다.
+⚠ **`0.28.0` 이상을 쓴다.** 그 아래 판의 검사기는 아직 그 호출을 요구해서, 없으면 `[S8]` 로 잡는다.
 
 ## 8. 데이터 조회 · 시크릿 — `[E1]`~`[E3]`
 
