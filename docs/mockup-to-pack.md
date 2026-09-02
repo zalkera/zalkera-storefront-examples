@@ -190,6 +190,13 @@ Tailwind 가 랜딩에 닿으면 시안이 어긋납니다. 그래서 둘을 **�
 Google Fonts·CDN·트래커·분석 비콘은 전부 팩 안으로 내리거나 지웁니다(§2-5).
 테넌트 사이트가 남의 호스트에 의존하면 그 호스트가 죽을 때 같이 죽습니다.
 
+**예외는 하나 — 발주처가 측정 ID 를 준 분석 태그.** 시안에 박혀 온 GTM·GA 로더 스니펫은 걷고(§2-4 ⑷),
+그 대신 시작 팩의 `src/components/Analytics.tsx` 를 랜딩 레이아웃에 렌더합니다(§2-1 ⑵). 그 컴포넌트는
+`NEXT_PUBLIC_GA4_ID` 가 있을 때만 GA4 로더를 싣고 없으면 아무것도 내지 않습니다. ID 는 **소스에 박지 않습니다**
+— 관리형은 콘솔 「사이트 환경변수」, 자체 배포는 `.env.local` 에 둡니다. 시안 스크립트에서 발견한 컨테이너·측정
+ID 는 자리표시자 표에 올려 발주처에 확인하고, 확인된 **GA4 측정 ID(`G-…`)** 를 그 자리에 넣습니다. GTM 컨테이너
+ID(`GTM-…`)는 그 자리에 안 들어갑니다(§2-4 ⑷).
+
 ---
 
 ## 2. 절차
@@ -247,6 +254,7 @@ import "./landing.css";
 import type {Metadata, Viewport} from "next";
 import type {ReactNode} from "react";
 import {metadataBaseUrl} from "@/lib/site";
+import {Analytics} from "@/components/Analytics";   // env 에 GA4 측정 ID 가 있을 때만 로더를 싣는다(§1-6)
 
 export const metadata: Metadata = {
     metadataBase: metadataBaseUrl(),
@@ -266,7 +274,10 @@ export const viewport: Viewport = {
 export default function LandingLayout({children}: {children: ReactNode}) {
     return (
         <html lang="ko">
-            <body>{children}</body>
+            <body>
+                {children}
+                <Analytics />
+            </body>
         </html>
     );
 }
@@ -576,6 +587,9 @@ js = "\n;\n".join(blocks)
 
 **⑷ 광고·분석 스니펫도 여기서 걷습니다.** Google Tag Manager 로더가 흔히 섞여 있고, 컨테이너
 주소가 상대경로로 바뀐 채라 **매 방문마다 404** 를 냅니다(`dataLayer`·`developer_id` 로 찾으십시오).
+거기 든 컨테이너·측정 ID(`GTM-…`·`G-…`)는 버리지 말고 자리표시자 표에 적습니다 — 발주처가 확인해 준
+**GA4 측정 ID(`G-` 로 시작)만** `NEXT_PUBLIC_GA4_ID` 로 들어갑니다. GTM 컨테이너(`GTM-`)는 이 자리로 안
+들어갑니다(형식이 달라 무시됩니다) — 필요하면 AGENTS.md 「분석 태그」 절대로 컴포넌트를 따로 둡니다(§1-6).
 
 **⑸ 다 이었으면 구문을 검사하십시오.**
 
@@ -687,7 +701,7 @@ woff2 를 `public/fonts/` 로 내린 뒤 `@font-face` 를 `landing.css` 의 **�
 | 파일 | 무엇을 적나 |
 | --- | --- |
 | `NOTE.md` | 시안 대비 **고친 것 전부**(§2-3 ⑴⑵·`data:` 추출 포함) · **「추가한 것」**(시안에 없던 파일이 하나라도 있으면 그 절을 둔다 — §2-5 의 폰트 추정이 여기 온다) · 자리표시자 목록 · 검증 결과 |
-| `AGENTS.md` | 다음 LLM 이 고칠 좌표와 **금지사항** — §1 의 요약에 더해 「루트 레이아웃은 둘이다, 루트 `layout.tsx` 를 만들지 마라」(§2-1 ⑵)와 「`landing.css` 에 Tailwind 를 들이지 마라」(§2-3) |
+| `AGENTS.md` | 다음 LLM 이 고칠 좌표와 **금지사항** — §1 의 요약에 더해 「루트 레이아웃은 둘이다, 루트 `layout.tsx` 를 만들지 마라」(§2-1 ⑵)와 「`landing.css` 에 Tailwind 를 들이지 마라」(§2-3), 그리고 「분석 태그는 `NEXT_PUBLIC_GA4_ID` 로만 — 콘솔 `analyticsConfig` 를 잇지 마라」(§1-6) |
 | `.zalkera/ASSETS-LICENSE.md` | 동봉 자산 출처·라이선스 |
 
 **시안 스크립트의 키·토큰을 눈으로 훑으십시오.** `public/mockup.js` 는 **공개 서빙되는 자리**라
@@ -721,6 +735,7 @@ cp .env.example .env.local
 | `ZALKERA_TENANT` | `/contact`·`/policies`·`/sitemap.xml`·BFF 가 500 이고 `npm run build` 도 실패한다(「CSS 가 깨졌다」로 오진하기 쉬운 자리). 랜딩은 이 값을 안 읽어 200 이다 |
 | `ZALKERA_API_BASE` | 백엔드 왕복이 실패. fail-soft 라 화면은 서지만 `/policies` 본문이 비고 `/contact` 전송이 실패하며 `sitemap.xml` 에 상품·글 URL 이 안 실린다. 랜딩 화면은 무관하다 |
 | `ZALKERA_SITE_URL` | `robots.txt`·`sitemap.xml`·JSON-LD 에 `http://localhost:3000` 이 **박힌 채로 배포**됩니다 |
+| `NEXT_PUBLIC_GA4_ID` | 비어 있으면 분석 태그가 안 실립니다 — 발주처가 ID 를 주기 전까지는 **비어 있는 것이 정상**입니다(§1-6) |
 
 > ⚠ **`.env.local` 을 zip 에 넣지 마십시오.** 검수가 시크릿으로 반려합니다.
 > 아래 `pack.py` 가 걸러 주지만, 트리 밖에 두는 편이 안전합니다.
@@ -809,6 +824,12 @@ curl -s http://localhost:3000/ | grep -oE '<script type="application/ld\+json">[
 # Organization 그래프 한 덩어리 — @type·name·url(절대 URL)·telephone(시안에 있을 때만). 백엔드 없이도 나와야 한다(하드코딩)
 ZALKERA_AEO_ALLOW_LOCAL=1 npm run check:aeo -- http://localhost:3000 --site-wide-only
 # ✅ siteWide/robots · ✅ siteWide/sitemap · ⏭️ siteWide/sitemap-covers-required-routes(무주장이라 SKIPPED) · ✅ siteWide/absolute-urls → rc 0
+curl -s http://localhost:3000/ | grep -c 'googletagmanager\.com/gtag/js'   # 0 이어야 한다(ID 미설정)
+kill %1
+NEXT_PUBLIC_GA4_ID=G-TEST1234 npm run dev >/tmp/dev-ga.log 2>&1 &
+for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:3000/ && break; sleep 1; done
+curl -s http://localhost:3000/ | grep -c 'googletagmanager\.com/gtag/js'   # 1 이상이어야 한다
+# 둘 다 봐야 배선이 산 것이다. 0→0 이면 <Analytics /> 가 레이아웃에 없다
 kill %1
 ```
 
@@ -851,7 +872,7 @@ React 의 개발 경고(중복 키·잘못된 prop 등)는 **상용 빌드에서
 | **`<title>`** | 시안의 제목과 같아야 한다 — 자동 검사가 안 보는 자리다(§2-2) |
 | 본문 글자수 | 시안과 같아야 한다(`document.body.innerText` 길이). 시안이 `<title>`·`<meta>` 를 `<body>` 에 두었으면 그 문구를 빼고 견준다(§2-2) |
 | 전체 높이 | 시안과 같아야 한다 — **아래 촬영 조건을 맞춘 뒤에** 견주십시오 |
-| 외부 호스트 요청 | **0건** — 실패만 세지 말고 **호스트별로** 세십시오 |
+| 외부 호스트 요청 | **0건** — 실패만 세지 말고 **호스트별로** 세십시오. `NEXT_PUBLIC_GA4_ID` 를 넣고 잰 경우에만 `googletagmanager.com`·`google-analytics.com` 이 허용이고, 그 사실을 보고에 적습니다(§1-6) |
 | 시안 `<html>` 에 `lang` 이 없을 때 | 대조용 **사본**에만 `lang="ko"` 를 보태 찍고 NOTE 에 적는다. Chrome 은 언어 정보가 없으면 공백 글자 폭을 달리 그려 줄바꿈·높이가 어긋난다 |
 
 > 스크린샷만 비교하면 **부가 연출이 죽어도 못 잡습니다** — 높이·글자수가 거의 안 변하기 때문입니다.
@@ -984,6 +1005,8 @@ node scripts/verify-zip.mjs ../pack-<이름>-<날짜>.zip     # rc 0
 | `/contact`·`/policies` 가 500 인데 CSS 는 멀쩡 | `ZALKERA_TENANT` 미설정 | §3 |
 | 홈에 JSON-LD 가 안 나온다 | `(landing)/page.tsx` 에 `<JsonLd data={organization} />` 를 안 넣었다 | §2-2 ⑵ |
 | 홈 JSON-LD 의 `url` 이 `http://localhost:3000` | 빌드 때 `ZALKERA_SITE_URL` 이 없었다 | §3-0 |
+| 콘솔에 ID 를 넣었는데 GA 태그가 안 실린다 | 랜딩 레이아웃에 `<Analytics />` 가 없거나, 값이 `G-…` 형식이 아니거나, 값 변경 뒤 재빌드가 안 됐다 | §1-6 · §2-1 ⑵ |
+| 외부 호스트 요청에 `googletagmanager.com` 이 잡힌다 | `NEXT_PUBLIC_GA4_ID` 가 들어간 상태 — 발주처가 준 ID 면 정상, 아니면 env 를 비운다 | §1-6 |
 | `check:aeo` 가 `내부 주소는 검사하지 않습니다` 로 rc=2 | 로컬 주소 — `ZALKERA_AEO_ALLOW_LOCAL=1` 을 준다 | §3-3 |
 | `--byo 선언이 zip 과 맞지 않습니다` | 템플릿 파생인데 `--byo` 를 붙임 | §3 |
 | SVG 가 안 보임 | `viewbox` 를 소문자로 둠 | §2-2 |

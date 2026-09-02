@@ -127,6 +127,7 @@ npm run dev                    # http://localhost:3000
 | `ZALKERA_TENANT` | 이 사이트의 테넌트 코드 (잘커라 콘솔에서 발급) |
 | `ZALKERA_SITE_URL` | 이 사이트의 공개 URL (SEO·sitemap·JSON-LD 용) |
 | `NEXT_PUBLIC_{KAKAO,NAVER,GOOGLE}_CLIENT_ID` | 소셜 로그인 사용 시 각 제공자 클라이언트 ID |
+| `NEXT_PUBLIC_GA4_ID` | Google Analytics 4 측정 ID(`G-…`). 발주처가 준 값만 — 비우면 태그가 안 실린다. 관리형은 콘솔 「사이트 환경변수」 |
 | `ZALKERA_REVALIDATE_SECRET` | ISR 재검증 웹훅 공유 시크릿(잘커라 콘솔과 동일 값) |
 
 백엔드가 떠 있어야 하고, `ZALKERA_TENANT` 에 이 사이트의 테넌트 코드를 넣어야 합니다.
