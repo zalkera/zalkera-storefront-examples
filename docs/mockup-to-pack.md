@@ -32,7 +32,7 @@
 | --- | --- | --- |
 | **얼굴** | **시안** | `src/app/(landing)/page.tsx` · `(landing)/landing.css` · `(landing)/layout.tsx` 의 `metadata`·`viewport` · `public/` 의 이미지·폰트 |
 | **기능** | 시작 팩에서 가져옴 | `src/lib/**`(가드) · `scripts/**`(검수) · `src/middleware.ts` · `robots.ts`·`sitemap.ts`·`not-found.tsx` · `next.config.ts`·`package.json`·`tsconfig.json` · `llms.txt` |
-| **템플릿 페이지** | 시작 팩 얼굴 **그대로** | `src/app/(template)/` 아래 `layout.tsx`·`globals.css`·`contact/`·`policies/` · `src/components/` 의 `SiteHeader`·`SiteFooter` · `content/nav.json` |
+| **템플릿 페이지** | 시작 팩 얼굴 **그대로** | `src/app/(template)/` 아래 `layout.tsx`·`globals.css`·`contact/`·`policies/` · `src/components/` 는 `sections/` 만 빼고 그대로 · `content/nav.json` |
 | 🔴 **안 가져옴** | — | `src/components/sections/**` · `content/pages/*.json` · `public/images/**` · 프리셋의 색·폰트·레이아웃 |
 
 **넷째 줄이 이 레인의 존재 이유입니다.** 고객은 자기 디자인을 들고 왔습니다. 거기에 프리셋의
@@ -119,14 +119,15 @@ Tailwind 가 랜딩에 닿으면 시안이 어긋납니다. 그래서 둘을 **�
 `RESERVED_SEGMENTS` 가 **«실제 라우트» ∪ «robots.txt 의 disallow»** 와 정확히 같은지
 양방향으로 못 박고, 게다가 **둘 다 1건 이상**일 것을 요구합니다(공회전 방지).
 `api/` 는 하위에만 `route.ts` 가 있어 라우트로 세지 않으므로 `/` 하나만 남기면 만족시킬 방법이
-없습니다. 라우트 그룹 안쪽은 그 시험이 내려가 봅니다 — `(template)/contact` 도 `contact` 로 셉니다.
+없습니다. 라우트 그룹 안쪽은 그 시험이 세 겹까지 내려가 봅니다 — `(template)/contact` 도 `contact` 로 셉니다.
 
 두 페이지는 시험 때문에만 남는 것이 아닙니다. `/contact` 는 문의 접점(BFF `/api/inquiry`),
 `/policies` 는 콘솔에서 채우는 정책·사업자 정보 화면입니다. **시작 팩 얼굴 그대로** 서빙되어야
 하고, 그래서 §2-1 ⑵ 가 랜딩과 다른 루트 레이아웃에 둡니다.
 
-⚠ **그 시험이 전부를 보지는 않습니다.** `sitemap.ts`·`media/[id]`·`not-found.tsx` 를 지우는 것은
-`npm test`·`validate`·`verify-zip` 어느 것도 잡지 않습니다 — 그래서 남기는 것을 여기서 규칙으로 못 박습니다.
+⚠ **그 시험이 전부를 보지는 않습니다.** `sitemap.ts`·`media/[id]`·`not-found.tsx` 를 지워도
+`npm test`·`verify-zip` 은 말이 없고, `validate` 도 §1-3 대로 `name` 을 바꾼 뒤에는 조용합니다
+(`[D2]` 는 본보기 레포에서만 돕니다) — 그래서 남기는 것을 여기서 규칙으로 못 박습니다.
 
 부득이 지우려면 **셋을 같이** 움직이십시오:
 라우트 디렉터리 · `src/lib/reservedSegments.ts` 의 `RESERVED_SEGMENTS` · `src/app/robots.ts` 의 `disallow`.
@@ -135,7 +136,7 @@ Tailwind 가 랜딩에 닿으면 시안이 어긋납니다. 그래서 둘을 **�
 하한표(`scripts/lib/floors.mjs` 의 `REQUIRED_FLOORS`)가 스위트별 시험 수를 요구하고,
 그 요구는 **검사기 자신의 표**로 집행되므로 zip 안의 표를 고쳐서 낮출 수 없습니다.
 
-덫이 둘 있습니다.
+덫이 있습니다.
 
 - **`src/middleware.ts`** — 미리보기 쓰기 관문입니다. 「미리보기 관문 등재」 검사가 빌드
   산출물에서 이것을 찾습니다.
@@ -224,9 +225,16 @@ mv src/app/layout.tsx src/app/globals.css src/app/contact src/app/policies 'src/
 rm src/app/page.tsx                                   # 시작 팩 홈 — 시안이 대신한다
 ```
 
-`(template)/` 아래 파일은 **한 글자도 고치지 않습니다.** `layout.tsx` 의 `import "./globals.css"` 는
-같이 옮겼으므로 그대로 풀리고, `SiteHeader`·`SiteFooter`·컨테이너·`generateMetadata()` 도 그 안에서
-그대로 삽니다 — 그 화면은 시작 팩 얼굴이 정본입니다.
+`(template)/` 아래 파일은 고치지 않습니다. `layout.tsx` 의 `import "./globals.css"` 는 같이 옮겼으므로
+그대로 풀리고, `SiteHeader`·`SiteFooter`·컨테이너·`generateMetadata()` 도 그 안에서 그대로 삽니다 —
+그 화면은 시작 팩 얼굴이 정본입니다. 예외는 둘입니다.
+
+- `globals.css` 머리말 주석의 「레포의 유일한 CSS 파일 … 다른 CSS 파일을 추가하지 않는다」 두 문장은
+  지웁니다 — 이 팩은 `landing.css` 를 따로 쓰므로 거짓이 되고, 다음 LLM 이 그것을 지우라는 지시로 읽습니다.
+- **`SiteHeader`·`SiteFooter` 에 ⑴ 이 지운 라우트로 가는 링크가 있으면 그 줄만 지웁니다.** 커머스
+  프리셋(`beauty-nail`·`shop-goods`)의 헤더는 `/cart`·`/login`·`/mypage` 를 하드코딩합니다 — 그대로 두면
+  `/contact` 헤더가 404 링크를 싣고 나가는데, §3 의 어느 검사도 링크를 눌러 보지 않습니다.
+  `skeleton`·`biz-standard` 의 헤더는 `/` 와 `nav.json` 만 씁니다.
 
 랜딩 쪽은 새로 씁니다.
 
@@ -531,7 +539,7 @@ export function MockupBehavior() {
 1. **런타임 값이 이 페이지에 들어온다** — 후기·문의·게시글·`content/*.json` 등 소스 밖에서 온
    문자열이 속성으로 렌더되는 순간, 그 자리가 임의 JS 실행 지점이 됩니다.
    리스너는 `document` 전역이고 `closest("[data-onclick]")` 로 **아무 조상**이나 잡습니다.
-2. **`layout.tsx` 로 올렸다** — 전 라우트로 퍼집니다. `page.tsx` 에 두십시오.
+2. **`layout.tsx` 로 올렸다** — 그 레이아웃 아래 라우트 전체로 퍼집니다. `page.tsx` 에 두십시오.
 3. **CSP 를 켤 계획이 있다** — `unsafe-eval` 없이는 이 배선이 조용히 죽습니다.
 
 또 하나: 위 리스너는 `[data-onclick]` 조상을 가진 **모든 클릭**에 `preventDefault()` 를 겁니다.
@@ -621,7 +629,7 @@ cp .env.example .env.local
 
 | 변수 | 안 넣으면 |
 | --- | --- |
-| `ZALKERA_TENANT` | `/contact`·`/policies`·BFF 가 500 (「CSS 가 깨졌다」로 오진하기 쉬운 자리). 랜딩은 이 값을 안 읽어 200 이다 |
+| `ZALKERA_TENANT` | `/contact`·`/policies`·`/sitemap.xml`·BFF 가 500 이고 `npm run build` 도 실패한다(「CSS 가 깨졌다」로 오진하기 쉬운 자리). 랜딩은 이 값을 안 읽어 200 이다 |
 | `ZALKERA_API_BASE` | 백엔드 왕복이 실패. 우리 템플릿은 fail-soft 라 화면은 서지만 진열이 빈다 |
 | `ZALKERA_SITE_URL` | `robots.txt`·`sitemap.xml`·JSON-LD 에 `http://localhost:3000` 이 **박힌 채로 배포**됩니다 |
 
@@ -639,7 +647,7 @@ npm run build                          # rc 0 — 다만 이것만으로는 부�
 ```
 
 `validate` 는 이 형상에서 경고를 찍고 rc 0 을 냅니다 — 선언을 지운 트리라 S 규칙군이 경고입니다.
-정상인 경고는 이것들입니다.
+정상인 경고는 이것들입니다(문면은 검사기 `@zalkera/client` 0.28.1 의 것).
 
 ```
 ⚠️  [S3] app/layout.* · pages/_app.* 을 찾지 못했습니다 — 전역 CSS 를 실을 자리가 없습니다. …
@@ -658,7 +666,7 @@ npm run build                          # rc 0 — 다만 이것만으로는 부�
 > 토큰 어휘(`--radius-knob`·`--color-surface` 등)를 그대로 갖고 있으므로, 검사기가 그것을 읽게 되면
 > `[EDECL]`(rc=7 — 선언 없이 우리 토큰을 쓴다)이 설 수 있습니다. 그때의 처방은 이 문서에 없습니다 —
 > 선언을 되살리면 S 규칙군이 error 로 올라오고, 토큰을 개명하면 시작 팩 파일을 고치는 일입니다.
-> 두 루트 레이아웃을 따로 재도록 검사기(`@zalkera/client`)를 고치는 것이 답입니다.
+> 그 자리는 팩이 아니라 검사기가 풀 문제입니다.
 
 ### 3-2. ⚠ `npm run build` 의 rc 0 을 믿지 마십시오
 
@@ -691,7 +699,8 @@ grep -nE "Invalid DOM property|Invalid event handler property|does not recognize
 하이픈 표기는 **안 잡힙니다**(§2-2) — JSX 에서 식별자가 될 수 없어 임의 속성으로 허용되기
 때문입니다. 그래서 타입 검사를 지나고도 이 로그에서 처음 드러나는 것은 후자입니다.
 
-> 검수기(`verify-zip`)도 이 둘(상태 코드 + 렌더 진단)을 한 번 더 잽니다 — 여기서 미리 보는
+> 검수기(`verify-zip`)도 이 둘(상태 코드 + 렌더 진단)을 한 번 더 잽니다 — 다만 `/` 한 장만
+> 프로브하므로 `/contact` 쪽은 여기서 본 것이 유일한 확인입니다. 여기서 미리 보는
 > 이유는 **몇 분짜리 검수를 돌리기 전에** 알기 위해서입니다.
 >
 > ⚠ **검수기가 못 보는 것이 있습니다.** 하이드레이션 오류(`whitespace text nodes cannot be a
@@ -850,7 +859,7 @@ node scripts/verify-zip.mjs ../pack-<이름>-<날짜>.zip     # rc 0
 | `<파일> 가 없습니다 — 가드를 재는 자리입니다` | `src/lib/*.ts` 를 지움 | §1-2 |
 | `[EDECL]` rc=7 | 선언은 **없는데** 루트가 싣는 CSS 가 우리 토큰 이름을 쓴다(`--radius-knob`·`--color-surface` 등 다섯 중 둘 이상). 두 루트 레이아웃 형상에서는 검사기가 그 CSS 를 읽지 않아 서지 않는다 | §1-3 · §3-1 |
 | `[S2]`·`[S4]`·`[S8]`·N 이 error | `zalkera` 선언을 **안 지웠다** | §1-3 |
-| `pages 맵을 못 읽었습니다` | `content/index.ts` 를 `= {};` 한 줄로 쓰거나 축약 표기로 씀 | §2-1 |
+| `content/pages 가 없는데 매니페스트가 그 안을 가져옵니다` | ⑴ 로 `content/pages` 를 지우고 `content/index.ts` 의 `import … from "./pages/…"` 를 남겼다 | §2-1 ⑷ |
 | 시안 제목이 안 뜬다(오류 없음) | 랜딩 레이아웃에 `generateMetadata()` 를 두었다 | §2-2 |
 | `/contact`·`/policies` 가 왼쪽에 붙고 여백·입력칸 테두리가 없다 | 루트 레이아웃이 하나다 — 시안 CSS 가 템플릿 페이지에 닿는다 | §2-1 ⑵ |
 | `[S3] app/layout.* … 을 찾지 못했습니다`(경고) | 두 루트 레이아웃 형상 — 정상. 루트 `layout.tsx` 를 만들지 않는다 | §3-1 |
@@ -876,7 +885,8 @@ node scripts/verify-zip.mjs ../pack-<이름>-<날짜>.zip     # rc 0
 zip 1개 + 그 안의 `NOTE.md`·`AGENTS.md`·`.zalkera/ASSETS-LICENSE.md`.
 
 **검증 결과를 숫자로 보고하십시오** — 「됐습니다」는 보고가 아닙니다:
-`typecheck` rc · `validate` rc · `build` rc · `dev GET /` 상태코드 ·
+`typecheck` rc · `validate` rc(경고 종류별 건수) · `npm test` rc · `build` rc ·
+`dev GET /`·`/contact` 상태코드 · `/contact`→`/` 이동 뒤 `link[rel=stylesheet]` 수 ·
 **주소별** 콘솔 오류 건수(어느 주소를 봤는지 같이) · 외부 호스트 건수 ·
 본문 글자수(시안 대 팩) · `verify-zip` rc.
 
