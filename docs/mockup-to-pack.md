@@ -30,8 +30,8 @@
 
 | | 어디서 오나 | 무엇 |
 | --- | --- | --- |
-| **얼굴** | **시안** | `src/app/(landing)/page.tsx` · `(landing)/landing.css` · `(landing)/layout.tsx` 의 `metadata`·`viewport`(시안 `<head>` 의 값 + `metadataBase`·canonical 배선, §2-2 ⑴) · `public/` 의 이미지·폰트 |
-| **기능** | 시작 팩에서 가져옴 | `src/lib/**`(가드) · `scripts/**`(검수) · `src/middleware.ts` · `robots.ts`·`sitemap.ts`·`not-found.tsx` · 홈의 `Organization` JSON-LD(`JsonLd.tsx` + 콘솔 설정, §2-2) · `next.config.ts`·`package.json`·`tsconfig.json` · `llms.txt` |
+| **얼굴** | **시안** | `src/app/(landing)/page.tsx` · `(landing)/landing.css` · `(landing)/layout.tsx` 의 `metadata`·`viewport`(시안 `<head>` 의 값 + `metadataBase`·canonical 배선, §2-2 ⑴) · 홈 `Organization` JSON-LD(시안에 보이는 정체성, §2-2 ⑵) · `public/` 의 이미지·폰트 |
+| **기능** | 시작 팩에서 가져옴 | `src/lib/**`(가드) · `scripts/**`(검수) · `src/middleware.ts` · `robots.ts`·`sitemap.ts`·`not-found.tsx` · `JsonLd.tsx`(안전 직렬화) · `next.config.ts`·`package.json`·`tsconfig.json` · `llms.txt` |
 | **템플릿 페이지** | 시작 팩 얼굴 **그대로** | `src/app/(template)/` 아래 `layout.tsx`·`globals.css`·`contact/`·`policies/` · `src/components/` 는 `sections/` 만 빼고 그대로 · `content/nav.json` |
 | 🔴 **안 가져옴** | — | `src/components/sections/**` · `content/pages/*.json` · `public/images/**` · 프리셋의 색·폰트·레이아웃 |
 
@@ -76,6 +76,9 @@ Tailwind 가 랜딩에 닿으면 시안이 어긋납니다. 그래서 둘을 **�
 
 **입력** — 고객이 완성해 건넨 HTML 1장. 스타일은 인라인 `<style>`, 동작은 인라인 `<script>`.
 **출력** — 잘커라에 업로드해 서빙되는 Next.js 소스 zip 1개.
+**성질** — 랜딩은 **정적**입니다. 마크업·CSS·스크립트·메타가 소스에 하드코딩되고 백엔드를 부르지
+않습니다. 백엔드 연동은 템플릿 페이지(문의·정책)의 몫이고, 상품·글·콘텐츠 페이지 같은 동적 콘텐츠가
+생기는 날부터 헤드리스 연동이 들어옵니다.
 
 **이 레인이 아닌 것** — 아래를 하라고 시키지 않았다면 하지 마십시오.
 
@@ -392,8 +395,9 @@ grep -oE '\s(stop|stroke|fill|flood|clip|marker|text|dominant|color|font|letter|
 #### SEO·AEO 메타 — 시안의 것을 옮기고, 기계용 그래프 하나를 얹는다
 
 화면은 시안 그대로입니다. SEO·AEO 로 **이 레인이 새로 쓰는** 자리는 `<head>` 메타와 JSON-LD 입니다
-(robots·sitemap 은 시작 팩 것을 그대로 씁니다). 값은 **시안에 있던 문구**이거나 **콘솔에 입력된 사업자
-정보**이고, 예외는 아래 블록에 주석으로 적힌 기본값뿐입니다. 플랫폼의 AEO 보장표
+(robots·sitemap 은 시작 팩 것을 그대로 씁니다). 값은 **시안에 있던 것**(문구·연락처)이고, 예외는 아래
+블록에 주석으로 적힌 기본값뿐입니다. 랜딩은 백엔드를 부르지 않습니다(§0) — 콘솔의 사업자 정보는
+템플릿 페이지가 쓰는 것이고 여기로 끌어오지 않습니다. 플랫폼의 AEO 보장표
 (`@zalkera/client/contracts/aeo-surface-guarantees.json`)가 재는 사이트 축은 robots · sitemap · sitemap 의 보장
 라우트 포함 · JSON-LD 의 절대 URL 이고, 「비즈니스 홍보(MARKETING)」 카테고리는 홈에 `Organization`
 (업종에 따라 `LocalBusiness`·`BeautySalon` 으로 좁혀도 통과) JSON-LD 를 요구합니다. 판정 지점은 소스가
@@ -431,40 +435,46 @@ export const metadata: Metadata = {
 이미지 · `authors`·`publisher` 같은 창작 필드. 본문 쪽(제목 태그 구조·`alt`·문구)은 손대지 않습니다 —
 문제가 보이면 고치지 말고 NOTE 의 발주처 확인 항목에 적습니다.
 
-**⑵ 홈 JSON-LD — `Organization` 하나, 콘솔 데이터로.** `(landing)/page.tsx` 를 시작 팩 홈과 같은 방식으로
-씁니다(**`generateMetadata()` 는 옮기지 않습니다** — 아래 ⚠). 값은 콘솔의 사이트 설정(회사명·전화·이메일·주소)에서
-오고 비어 있으면 필드가 빠집니다.
+**⑵ 홈 JSON-LD — `Organization` 하나, 시안에 보이는 정체성으로 하드코딩.** `(landing)/page.tsx` 에 객체
+리터럴로 둡니다. 백엔드·콘솔을 부르지 않으므로 페이지는 정적 그대로이고 `ZALKERA_TENANT` 도 필요 없습니다.
+시작 팩 홈의 `getSiteConfig`·`generateMetadata()`·`organizationJsonLd` 는 **옮기지 않습니다**(아래 ⚠).
 
 ```tsx
-import {zalkera} from "@/lib/zalkera";
 import {siteUrl} from "@/lib/site";
-import {JsonLd, organizationJsonLd} from "@/components/JsonLd";
+import {JsonLd} from "@/components/JsonLd";                    // 안전 직렬화(`</script>` 이스케이프)만 빌려 쓴다
 import {MockupBehavior} from "@/components/MockupBehavior";   // 실행 스크립트가 있는 팩만(§2-4)
 
-export const dynamic = "force-static";
-export const revalidate = 600;                                  // 시작 팩 홈과 같은 ISR — 콘솔에서 고쳐도 이 주기가 지난 뒤 재생성된다(상한 1주기)
+/** 시안에 보이는 정체성만 — 시안에 없는 필드는 넣지 않는다. */
+const organization = {
+    "@context": "https://schema.org",
+    "@type": "Organization",                                   // 주소가 시안에 없으므로 LocalBusiness 로 좁히지 않는다
+    name: "<시안의 og:site_name, 없으면 <title> 에서 구분자(-·—·|) 앞의 브랜드 토막>",
+    url: siteUrl(),                                            // ZALKERA_SITE_URL 로 만든 절대 URL — 보장표 「절대 URL」
+    telephone: "<시안 tel: 링크의 번호 — 있을 때만, 표기 그대로>",
+};
 
-export default async function Home() {
-    const config = await zalkera.getSiteConfig({tags: ["site-config"]}).catch(() => null);   // fail-soft
+export default function Home() {
     return (
         <>
             {/* … 시안 <body> 그대로 … */}
-            {config && <JsonLd data={organizationJsonLd(config, siteUrl())} />}
+            <JsonLd data={organization} />
             <MockupBehavior />
         </>
     );
 }
 ```
 
-- `organizationJsonLd` 는 `@type` 을 콘솔의 업종으로 고르고 `url` 을 **절대 URL**(`siteUrl()`)로 냅니다 —
-  보장표의 「절대 URL」 항목이 이것입니다. 이로써 랜딩도 `ZALKERA_TENANT` 를 읽습니다(§3-0).
+- `siteUrl()` 은 env 만 읽습니다(`robots.ts`·`sitemap.ts` 와 같은 값). 빌드 때 박히므로 §3-0 의
+  `ZALKERA_SITE_URL` 이 없으면 `http://localhost:3000` 이 그래프에 남습니다.
+- 시안의 `tel:` 번호는 자리표시자일 수 있습니다(§2-6). 자리표시자 표에 올린 번호를 여기에도 같은 값으로
+  두고, 발주처가 바꾸면 둘을 같이 바꿉니다.
 - 이 팩은 「비즈니스 홍보」 **간판은 못 겁니다** — 그 카테고리는 CMS 페이지 라우트(`/{slug}`)의 SSR 도
   요구하는데 §2-1 ⑴ 이 그 라우트를 지웁니다(콘텐츠 페이지가 없으므로). 간판과 무관하게 `Organization`
   그래프는 답변 엔진이 사이트 주체를 읽는 자리라 넣습니다. 보장표대로 「못 거는 것은 간판뿐」입니다.
 - **만들지 않는 것**: 시안의 후기·별점·처리 건수는 시뮬레이션입니다 — `Review`·`AggregateRating` 을 내지
   않습니다(보장표의 의도적 부정 보장). `Product`·`Offer` 도 내지 않습니다 — 이 팩은 상품을 팔지 않고, 그 둘은
   쇼핑몰 칸의 required 표면이라 팔 것이 없는 사이트에서는 거짓 진술이 됩니다. 카카오 오픈채팅 주소는
-  `sameAs` 가 아닙니다(소셜 프로필이 아닙니다). 주소·이메일을 시안에서 지어 채우지 않습니다(콘솔 값만).
+  `sameAs` 가 아닙니다(소셜 프로필이 아닙니다). 시안에 없는 주소·이메일을 채우지 않습니다.
 - 선택: 시안에 FAQ 섹션이 있으면 `FAQPage` 를 더할 수 있습니다. 화면에 **정적으로 보이는** 질문·답을 한
   글자도 바꾸지 않고 옮기고, 스크립트가 나중에 그리는 항목은 넣지 않으며, 팩당 하나입니다. 문구를 고칠 때
   둘을 같이 고쳐야 하는 부담이 생기므로 발주처가 원치 않으면 생략합니다.
@@ -475,6 +485,8 @@ export default async function Home() {
 > 검증을 그대로 통과합니다. §3 에서 제목을 눈으로 대조하십시오.
 > 랜딩 **페이지**에도 `generateMetadata()`(시작 팩 홈의 `pageMetadata`)를 두지 마십시오 — `openGraph` 는
 > 얕은 교체라 ⑴ 로 옮긴 시안 `og:*` 가 통째로 콘솔 회사명으로 바뀌고, `<title>` 은 멀쩡해서 눈에 안 띕니다.
+> 시작 팩 홈의 `getSiteConfig()`·`organizationJsonLd()` 도 옮기지 마십시오 — 랜딩이 백엔드를 물게 되고
+> 정적이 아니게 됩니다(§0).
 > `(template)/layout.tsx` 의 `generateMetadata()` 는 그대로입니다 — 그 문서의 제목은 콘솔의
 > 회사명이 정본입니다.
 
@@ -698,7 +710,7 @@ grep -ohE 'tel:[0-9+-]+|https://pf\.kakao\.com/[A-Za-z0-9_-]+|YOUR_[A-Z_]+' \
 ### 3-0. **환경변수를 먼저 넣으십시오** — 안 넣으면 첫 명령부터 섭니다
 
 소스가 시동 시점에 테넌트 코드를 읽고, 없으면 **던집니다**. 그 모듈을 `(template)/layout.tsx`·BFF
-라우트·랜딩 홈(§2-2 ⑵ 의 JSON-LD)이 물기 때문에 라우트가 500 이 됩니다 — **CSS 와 아무 상관 없는 500 입니다.**
+라우트·`sitemap.ts` 가 물기 때문에 그쪽이 500 이 됩니다 — **CSS 와 아무 상관 없는 500 입니다.**
 
 ```bash
 cp .env.example .env.local
@@ -706,8 +718,8 @@ cp .env.example .env.local
 
 | 변수 | 안 넣으면 |
 | --- | --- |
-| `ZALKERA_TENANT` | `/`·`/contact`·`/policies`·`/sitemap.xml`·BFF 가 500 이고 `npm run build` 도 실패한다(「CSS 가 깨졌다」로 오진하기 쉬운 자리) |
-| `ZALKERA_API_BASE` | 백엔드 왕복이 실패. fail-soft 라 화면은 서지만 진열이 비고, 홈 JSON-LD 도 빠진다(§2-2 ⑵) |
+| `ZALKERA_TENANT` | `/contact`·`/policies`·`/sitemap.xml`·BFF 가 500 이고 `npm run build` 도 실패한다(「CSS 가 깨졌다」로 오진하기 쉬운 자리). 랜딩은 이 값을 안 읽어 200 이다 |
+| `ZALKERA_API_BASE` | 백엔드 왕복이 실패. fail-soft 라 화면은 서지만 진열이 빈다. 랜딩은 무관하다 |
 | `ZALKERA_SITE_URL` | `robots.txt`·`sitemap.xml`·JSON-LD 에 `http://localhost:3000` 이 **박힌 채로 배포**됩니다 |
 
 > ⚠ **`.env.local` 을 zip 에 넣지 마십시오.** 검수가 시크릿으로 반려합니다.
@@ -759,8 +771,8 @@ kill %1
 
 > 뜰 때까지 기다리는 줄이 없으면 아직 안 뜬 서버에 물어 `000` 이 나옵니다.
 
-**500 이면** ⑴ `ZALKERA_TENANT` 를 넣었는지(§3-0) ⑵ CSS·모듈이 깨졌는지 순으로 보십시오.
-`/tmp/dev.log` 에 이유가 있습니다.
+**`/contact` 가 500 이면** ⑴ `ZALKERA_TENANT` 를 넣었는지(§3-0) ⑵ 모듈이 깨졌는지 순으로,
+**`/` 가 500 이면** 랜딩 CSS·`page.tsx` 가 깨진 것입니다. `/tmp/dev.log` 에 이유가 있습니다.
 
 **200 이어도 로그를 보십시오.** React 는 개발 빌드에서만 렌더 진단을 냅니다 — 상용 빌드에서는
 그 문구가 통째로 사라질 뿐 결함은 남습니다.
@@ -794,7 +806,7 @@ for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:3000/ && break; 
 curl -s http://localhost:3000/ | grep -oE '<title>[^<]*</title>|<meta name="description"[^>]*>|<link rel="canonical"[^>]*>|<meta property="og:[a-z_:]+"[^>]*>'
 # 시안 <head> 의 값 그대로 · canonical 과 og:url 은 ZALKERA_SITE_URL 로 시작해야 한다
 curl -s http://localhost:3000/ | grep -oE '<script type="application/ld\+json">[^<]*</script>' | sed -E 's/<[^>]+>//g'
-# 백엔드가 이 테넌트의 설정을 돌려줄 때만 Organization 그래프가 나온다. 로컬에 백엔드·테넌트가 없으면 비어 있는 것이 정상이고, 그 자리는 개시 후 스모크가 본다
+# Organization 그래프 한 덩어리 — @type·name·url(절대 URL)·telephone(시안에 있을 때만). 백엔드 없이도 나와야 한다(하드코딩)
 ZALKERA_AEO_ALLOW_LOCAL=1 npm run check:aeo -- http://localhost:3000 --site-wide-only
 # ✅ siteWide/robots · ✅ siteWide/sitemap · ⏭️ siteWide/sitemap-covers-required-routes(무주장이라 SKIPPED) · ✅ siteWide/absolute-urls → rc 0
 kill %1
@@ -805,8 +817,8 @@ kill %1
 
 `--category MARKETING` 은 개시 후 스모크용입니다. 이 레인의 팩에서는 `required/cms-page-ssr: MISSING_ROUTE`
 가 나오고 판정은 FAIL·rc 1 입니다(§2-2 ⑵ — 간판은 못 겁니다). 이 레인에서는 예상된 결과이고, 그 스냅샷을
-promote 입력으로 넘기지 마십시오. 그 출력에서 볼 것은 `required/home-organization` 이 PASS 인지,
-`negative/no-Review`·`no-AggregateRating` 이 PASS 인지입니다.
+promote 입력으로 넘기지 마십시오. 그 출력에서 볼 것은 `required/home-organization` 이 PASS 인지
+(하드코딩 그래프라 로컬에서도 PASS 여야 합니다), `negative/no-Review`·`no-AggregateRating` 이 PASS 인지입니다.
 
 ### 브라우저 콘솔도 보십시오 — **모든 주소를, 개발 모드로**
 
@@ -967,8 +979,9 @@ node scripts/verify-zip.mjs ../pack-<이름>-<날짜>.zip     # rc 0
 | `[D2] llms.txt 가 본보기로 지목한 …`(경고) | `package.json` 의 `name` 을 안 바꿨다 | §1-3 |
 | 콘솔에 `favicon.ico` 404 | 파비콘은 발주처 자산 — 집계에서 빼고 자리표시자로 | §2-5 |
 | `theme-color` 가 시안과 다르다 | 시안에 둘일 때 뒤의 값을 골랐다 — 브라우저는 첫 값을 쓴다 | §2-2 |
-| 어느 라우트든 500 인데 CSS 는 멀쩡 | `ZALKERA_TENANT` 미설정 | §3 |
-| 홈에 JSON-LD 가 안 나온다 | 백엔드에 못 닿아 `config` 가 `null`(로컬에 백엔드·테넌트가 없을 때) — 서빙에서 다시 본다 | §2-2 ⑵ |
+| `/contact`·`/policies` 가 500 인데 CSS 는 멀쩡 | `ZALKERA_TENANT` 미설정 | §3 |
+| 홈에 JSON-LD 가 안 나온다 | `(landing)/page.tsx` 에 `<JsonLd data={organization} />` 를 안 넣었다 | §2-2 ⑵ |
+| 홈 JSON-LD 의 `url` 이 `http://localhost:3000` | 빌드 때 `ZALKERA_SITE_URL` 이 없었다 | §3-0 |
 | `check:aeo` 가 `내부 주소는 검사하지 않습니다` 로 rc=2 | 로컬 주소 — `ZALKERA_AEO_ALLOW_LOCAL=1` 을 준다 | §3-3 |
 | `--byo 선언이 zip 과 맞지 않습니다` | 템플릿 파생인데 `--byo` 를 붙임 | §3 |
 | SVG 가 안 보임 | `viewbox` 를 소문자로 둠 | §2-2 |
@@ -991,8 +1004,8 @@ zip 1개 + 그 안의 `NOTE.md`·`AGENTS.md`·`.zalkera/ASSETS-LICENSE.md`.
 `typecheck` rc · `validate` rc(경고 종류별 건수) · `npm test` rc · `build` rc ·
 `dev GET /`·`/contact` 상태코드 · `/contact`→`/` 이동 뒤 `link[rel=stylesheet]` 수 ·
 **주소별** 콘솔 오류 건수(어느 주소를 봤는지 같이) · 외부 호스트 건수 ·
-본문 글자수(시안 대 팩) · `<title>`·canonical·og 유무 · 홈 JSON-LD `@type`·`url`(로컬에서 `config`
-미도달이면 「0건 — 개시 후 스모크에서 확인」) · `check:aeo --site-wide-only` rc · `verify-zip` rc.
+본문 글자수(시안 대 팩) · `<title>`·canonical·og 유무 · 홈 JSON-LD `@type`·`url` ·
+`check:aeo --site-wide-only` rc · `verify-zip` rc.
 
 **기계 검사 통과는 인수가 아닙니다.** 사람이 볼 것이 남습니다 —
 자산 출처 실제 대조 · 자리표시자 연락처·파비콘 · NOTE 「추가한 것」의 발주처 확인 ·
