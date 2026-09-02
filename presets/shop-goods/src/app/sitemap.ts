@@ -19,23 +19,52 @@ import {siteUrl} from "@/lib/site";
  */
 export const revalidate = 3600;
 
-/** 페이지네이션 안전 상한 — 카탈로그가 폭증해도 크롤 1회가 무한 루프가 되지 않게 한다. */
+/**
+ * 열거 상한 — 상품·글 각각 `MAX_PAGES × PAGE_SIZE` 건까지만 싣는다. 크롤 1회가 백엔드를 끝없이 훑지 않게
+ * 하는 안전장치이고, 이 상한을 넘는 항목은 sitemap 에서 **빠진다**. 그래서 상한 초과와 백엔드 미도달은 아래가
+ * 서버 로그에 경고로 남긴다(llms.txt §5.1 — 조용히 누락하는 sitemap 은 「있는 것을 없다고 말하는」 거짓이다).
+ * 한 sitemap 파일의 규격 상한은 URL 50,000건·비압축 50MB 라 이 상한 안에서는 한 파일로 충분하다.
+ *
+ * 카탈로그가 여기 닿으면 **하위 라우트로** 나눈다 — `app/products/sitemap.ts` 에 `generateSitemaps` 를 두면
+ * `/products/sitemap/0.xml` 이 되고, 그 주소들을 `robots.ts` 의 `sitemap` 배열에 싣는다.
+ * ⚠ **이 파일에 `generateSitemaps` 를 넣지 마라** — 라우트가 `/sitemap/[id].xml` 로 바뀌어 `/sitemap.xml` 이
+ *   사라지고(Next 는 인덱스를 만들지 않는다) robots 가 가리키던 자리와 AEO 게이트가 같이 깨진다.
+ */
 const MAX_PAGES = 50;
 const PAGE_SIZE = 100;
+const ENUMERATION_CAP = MAX_PAGES * PAGE_SIZE;
+
+/** 상한에 걸린 축을 서버 로그에 남긴다 — 빌드·재생성 로그에서 보인다. */
+function warnTruncated(what: string): void {
+    console.warn(
+        `sitemap: ${what} ${ENUMERATION_CAP}건 상한에 걸렸다 — 그 뒤 항목은 sitemap 에서 빠진다. ` +
+            "하위 라우트(app/products/sitemap.ts 등)의 generateSitemaps 로 나누고 robots.ts 의 sitemap 배열에 " +
+            "실으라 — 이 파일에 넣으면 /sitemap.xml 이 없어진다(llms.txt §5.1).",
+    );
+}
+
+/** 백엔드에 못 닿아 한 축이 통째로 빠진 것을 남긴다 — fail-soft 로 축소된 sitemap 이 나갔다는 사실이다. */
+function warnFetchFailed(what: string): void {
+    console.warn(`sitemap: ${what} 목록을 못 읽었다 — 이 축이 통째로 빠진 sitemap 이 나간다(백엔드 미도달).`);
+}
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     const base = siteUrl();
 
     const products: MetadataRoute.Sitemap = [];
     for (let page = 0; page < MAX_PAGES; page++) {
-        // 백엔드가 죽어도 sitemap 은 홈만이라도 내야 한다 — 500 보다 축소된 sitemap 이 낫다.
+        // 백엔드가 죽어도 sitemap 은 홈만이라도 내야 한다 — 500 보다 축소된 sitemap 이 낫다. 다만 말은 남긴다.
         const result = await zalkera.listProducts({page, size: PAGE_SIZE}).catch(() => null);
-        if (!result) break;
+        if (!result) {
+            warnFetchFailed("상품");
+            break;
+        }
 
         for (const p of result.content) {
             products.push({url: `${base}/products/${p.slug}`, changeFrequency: "daily", priority: 0.8});
         }
         if (result.last) break;
+        if (page === MAX_PAGES - 1) warnTruncated("상품");
     }
 
     // 상품 카테고리 — `/c/{slug}`. **상품 0건인 카테고리도 싣는다**: 목록·글 목록을 비었을 때 빼는
@@ -55,8 +84,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     // 백엔드 왕복이고 아래는 매니페스트 읽기다.
     // 고정 페이지 — 정본이 `content/pages/*.json` 이라 매니페스트가 곧 목록이다(백엔드 왕복 0).
     // 이게 없으면 "말로 만든 페이지가 검색에 안 잡히는" 결함이 남는다.
-    // `lastModified` 는 내지 않는다 — 파일에 그 값이 없고, 빌드 시각을 대신 넣으면 재빌드마다
-    // 안 바뀐 페이지까지 "방금 수정됨"이라 주장해 크롤 판단을 망친다(지어낸 시각의 정확한 해악).
+    // `lastModified` 는 원본에 그 시각이 있을 때만 낸다(글의 `publishedAt` 처럼 — llms.txt §5.1). 콘텐츠
+    // 페이지 파일에는 그 값이 없고, 빌드 시각을 대신 넣으면 재빌드마다 안 바뀐 페이지까지 "방금 수정됨"이라
+    // 주장해 크롤 판단을 망친다(지어낸 시각의 정확한 해악).
     const pages: MetadataRoute.Sitemap = pageSlugs()
         // 홈은 `/` 로 이미 실려 있다(`/home` 은 루트로 리다이렉트된다 — 두 URL 로 색인되면 안 된다).
         .filter((slug) => slug !== "home")
@@ -68,7 +98,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     const posts: MetadataRoute.Sitemap = [];
     for (let page = 0; page < MAX_PAGES; page++) {
         const result = await zalkera.listPosts({page, size: PAGE_SIZE}).catch(() => null);
-        if (!result) break;
+        if (!result) {
+            warnFetchFailed("글");
+            break;
+        }
 
         for (const p of result.content) {
             posts.push({
@@ -79,6 +112,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
             });
         }
         if (result.last) break;
+        if (page === MAX_PAGES - 1) warnTruncated("글");
     }
 
     return [
