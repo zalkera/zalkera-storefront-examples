@@ -19,9 +19,23 @@ import {siteUrl} from "@/lib/site";
  */
 export const revalidate = 3600;
 
-/** 페이지네이션 안전 상한 — 카탈로그가 폭증해도 크롤 1회가 무한 루프가 되지 않게 한다. */
+/**
+ * 열거 상한 — 상품·글 각각 `MAX_PAGES × PAGE_SIZE` 건까지만 싣는다. 크롤 1회가 백엔드를 끝없이 훑지 않게
+ * 하는 안전장치이고, 이 상한을 넘는 항목은 sitemap 에서 **빠진다**. 그래서 넘치면 아래가 서버 로그에 경고를
+ * 남긴다 — 조용히 누락하지 않는다(llms.txt §5.1). 카탈로그가 여기 닿으면 `generateSitemaps` 로 인덱스 + 분할
+ * 파일로 옮긴다. 한 sitemap 파일의 규격 상한은 URL 50,000건·비압축 50MB 라 이 상한 안에서는 한 파일로 충분하다.
+ */
 const MAX_PAGES = 50;
 const PAGE_SIZE = 100;
+const ENUMERATION_CAP = MAX_PAGES * PAGE_SIZE;
+
+/** 상한에 걸린 축을 서버 로그에 남긴다 — 빌드·재생성 로그에서 보인다. */
+function warnTruncated(what: string): void {
+    console.warn(
+        `sitemap: ${what} ${ENUMERATION_CAP}건 상한에 걸렸다 — 그 뒤 항목은 sitemap 에서 빠진다. ` +
+            "generateSitemaps 로 인덱스+분할로 옮기라(llms.txt §5.1).",
+    );
+}
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     const base = siteUrl();
@@ -36,6 +50,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
             products.push({url: `${base}/products/${p.slug}`, changeFrequency: "daily", priority: 0.8});
         }
         if (result.last) break;
+        if (page === MAX_PAGES - 1) warnTruncated("상품");
     }
 
     // 상품 카테고리 — `/c/{slug}`. **상품 0건인 카테고리도 싣는다**: 목록·글 목록을 비었을 때 빼는
@@ -55,8 +70,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     // 백엔드 왕복이고 아래는 매니페스트 읽기다.
     // 고정 페이지 — 정본이 `content/pages/*.json` 이라 매니페스트가 곧 목록이다(백엔드 왕복 0).
     // 이게 없으면 "말로 만든 페이지가 검색에 안 잡히는" 결함이 남는다.
-    // `lastModified` 는 내지 않는다 — 파일에 그 값이 없고, 빌드 시각을 대신 넣으면 재빌드마다
-    // 안 바뀐 페이지까지 "방금 수정됨"이라 주장해 크롤 판단을 망친다(지어낸 시각의 정확한 해악).
+    // `lastModified` 는 원본에 그 시각이 있을 때만 낸다(글의 `publishedAt` 처럼 — llms.txt §5.1). 콘텐츠
+    // 페이지 파일에는 그 값이 없고, 빌드 시각을 대신 넣으면 재빌드마다 안 바뀐 페이지까지 "방금 수정됨"이라
+    // 주장해 크롤 판단을 망친다(지어낸 시각의 정확한 해악).
     const pages: MetadataRoute.Sitemap = pageSlugs()
         // 홈은 `/` 로 이미 실려 있다(`/home` 은 루트로 리다이렉트된다 — 두 URL 로 색인되면 안 된다).
         .filter((slug) => slug !== "home")
@@ -79,6 +95,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
             });
         }
         if (result.last) break;
+        if (page === MAX_PAGES - 1) warnTruncated("글");
     }
 
     return [
