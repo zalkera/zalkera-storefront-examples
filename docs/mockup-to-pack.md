@@ -23,19 +23,24 @@
 | --- | --- |
 | 시작 팩을 풀고 그 위에 시안을 얹는다 | 쓰지 않는 커머스 표면 여덟(`cart`·`checkout`·`products`·`orders`·`mypage`·`payment`·`login`·`blog`)이 딸려 배포됩니다. 시안에 없는 것은 팩에도 없어야 합니다 |
 | 시작 팩의 얼굴(`content/pages/*.json`·프리셋 섹션·이미지)을 지워 가며 맞춘다 | 지우는 작업이 만드는 작업보다 커지고, 무엇이 남았는지 아무도 모르게 됩니다 |
-| 레포 트리(`presets/` + 루트 `src/`)를 손으로 합친다 | `scripts/lib/test-floors.json` 이 배송본이 아니라 **레포본**으로 실려(레포 34항목 · 배송 20항목) 팩이 자기 검수에서 죽습니다 |
+| 레포 트리(`presets/` + 루트 `src/`)를 손으로 합친다 | `scripts/lib/test-floors.json` 이 배송본이 아니라 **레포본**으로 실려(레포본은 정본 전용 스위트까지 들어 있어 항목이 더 많습니다) 팩이 자기 검수에서 죽습니다 |
 
 **이렇게 하십시오:** 시안이 요구하는 화면을 만들고, 잘커라가 요구하는 것만 시작 팩에서
 **골라 가져옵니다.** 선은 **얼굴이냐 기능이냐**로 긋습니다.
 
 | | 어디서 오나 | 무엇 |
 | --- | --- | --- |
-| **얼굴** | **전부 시안** | `src/app/page.tsx` · `src/app/globals.css` · `layout.tsx` 의 `metadata` · `public/` 의 이미지·폰트 · `content/nav.json` |
-| **기능** | 시작 팩에서 가져옴 | `src/lib/**`(가드) · `scripts/**`(검수) · `src/middleware.ts` · `robots.ts`·`sitemap.ts` · `next.config.ts`·`package.json`·`tsconfig.json` · `llms.txt` |
+| **얼굴** | **시안** | `src/app/(landing)/page.tsx` · `(landing)/landing.css` · `(landing)/layout.tsx` 의 `metadata`·`viewport` · `public/` 의 이미지·폰트 |
+| **기능** | 시작 팩에서 가져옴 | `src/lib/**`(가드) · `scripts/**`(검수) · `src/middleware.ts` · `robots.ts`·`sitemap.ts`·`not-found.tsx` · `next.config.ts`·`package.json`·`tsconfig.json` · `llms.txt` |
+| **템플릿 페이지** | 시작 팩 얼굴 **그대로** | `src/app/(template)/` 아래 `layout.tsx`·`globals.css`·`contact/`·`policies/` · `src/components/` 의 `SiteHeader`·`SiteFooter` · `content/nav.json` |
 | 🔴 **안 가져옴** | — | `src/components/sections/**` · `content/pages/*.json` · `public/images/**` · 프리셋의 색·폰트·레이아웃 |
 
-**셋째 줄이 이 레인의 존재 이유입니다.** 고객은 자기 디자인을 들고 왔습니다. 거기에 프리셋의
+**넷째 줄이 이 레인의 존재 이유입니다.** 고객은 자기 디자인을 들고 왔습니다. 거기에 프리셋의
 히어로·특징그리드·후기 섹션이 섞이면 **고객이 만든 것이 아닌 사이트**가 됩니다.
+
+**셋째 줄은 그 반대 방향의 규율입니다.** `/contact`·`/policies` 는 시안에 없는 화면이라 시작 팩
+얼굴로 서빙됩니다. 그 화면에 시안 CSS 가 닿으면 여백·입력칸이 밀려 깨지고, 반대로 시작 팩의
+Tailwind 가 랜딩에 닿으면 시안이 어긋납니다. 그래서 둘을 **루트 레이아웃 둘**로 가릅니다(§2-1 ⑵).
 
 > ⚠ **이 자리는 게이트가 안 잡습니다.** 프리셋 섹션 컴포넌트
 > (`HeroSection`·`FeatureGridSection`·`TestimonialsSection` 등)를 가져오면, 시안의 `page.tsx` 가
@@ -79,7 +84,8 @@
 | 섹션 어휘로 분해(`content/pages/*.json`) | 그건 「콘솔에서 말로 고치기」 레인이다. 디자인이 프리셋 번역판이 되어 원본과 달라진다 |
 | 시안 CSS 를 Tailwind 로 재작성 | 원본 그대로가 요건이다. 재작성은 반드시 어긋난다 |
 | 색을 토큰으로 바꾸기 | 시안 CSS 의 리터럴이 정본이다 |
-| 없던 페이지·문구·이미지 추가 | 시안에 없으면 팩에도 없다 |
+| 없던 페이지·문구·이미지 추가 | 시안에 없으면 팩에도 없다. 파비콘도 이미지다(§2-5) |
+| 시안이 가리키는데 안 준 파일을 추정으로 채우기 | 폰트·이미지 파일은 발주처에서 받는다(§2-5) |
 
 **결과물의 성질을 정직하게 알고 시작하십시오.** 이 팩은 **소스를 LLM 으로 고치는** 팩입니다.
 콘솔에서 말로 색·문구를 바꾸는 동선은 **없습니다**. 그 동선을 흉내 내는 배선을 남기면
@@ -106,23 +112,27 @@
 
 ### 1-2. 랜딩이 안 쓴다고 라우트를 지우지 마라
 
-`src/app/contact/`·`src/app/policies/`·`src/app/[slug]/`·`sitemap.ts`·`media/[id]` 는
-랜딩에서 링크되지 않아도 **남깁니다**.
+`contact/`·`policies/`(§2-1 뒤에는 `src/app/(template)/` 아래) · `sitemap.ts` · `media/[id]` ·
+`not-found.tsx` 는 랜딩에서 링크되지 않아도 **남깁니다**.
 
 `contact`·`policies` 를 지우면 `src/lib/reservedSegments.test.ts` 가 반려합니다. 그 시험은
 `RESERVED_SEGMENTS` 가 **«실제 라우트» ∪ «robots.txt 의 disallow»** 와 정확히 같은지
 양방향으로 못 박고, 게다가 **둘 다 1건 이상**일 것을 요구합니다(공회전 방지).
-`/` 하나만 남기면 만족시킬 방법이 없습니다.
+`api/` 는 하위에만 `route.ts` 가 있어 라우트로 세지 않으므로 `/` 하나만 남기면 만족시킬 방법이
+없습니다. 라우트 그룹 안쪽은 그 시험이 내려가 봅니다 — `(template)/contact` 도 `contact` 로 셉니다.
 
-⚠ **그 시험이 전부를 보지는 않습니다.** `[slug]` 는 대괄호 이름이라 세지 않고,
-`sitemap.ts`·`media/[id]` 는 읽지도 않습니다 — 그 셋은 `npm run validate` 의
-`[D1]`·`[D2]`(문서 좌표 검사)가 잡습니다. **둘 다 돌리십시오.**
+두 페이지는 시험 때문에만 남는 것이 아닙니다. `/contact` 는 문의 접점(BFF `/api/inquiry`),
+`/policies` 는 콘솔에서 채우는 정책·사업자 정보 화면입니다. **시작 팩 얼굴 그대로** 서빙되어야
+하고, 그래서 §2-1 ⑵ 가 랜딩과 다른 루트 레이아웃에 둡니다.
+
+⚠ **그 시험이 전부를 보지는 않습니다.** `sitemap.ts`·`media/[id]`·`not-found.tsx` 를 지우는 것은
+`npm test`·`validate`·`verify-zip` 어느 것도 잡지 않습니다 — 그래서 남기는 것을 여기서 규칙으로 못 박습니다.
 
 부득이 지우려면 **셋을 같이** 움직이십시오:
 라우트 디렉터리 · `src/lib/reservedSegments.ts` 의 `RESERVED_SEGMENTS` · `src/app/robots.ts` 의 `disallow`.
 
 **`src/lib/` 와 `scripts/` 는 통째로 남기십시오.** 파일 단위로 고르지 마십시오 —
-하한표(`scripts/lib/floors.mjs` 의 `REQUIRED_FLOORS`)가 요구하는 시험이 20개이고,
+하한표(`scripts/lib/floors.mjs` 의 `REQUIRED_FLOORS`)가 스위트별 시험 수를 요구하고,
 그 요구는 **검사기 자신의 표**로 집행되므로 zip 안의 표를 고쳐서 낮출 수 없습니다.
 
 덫이 둘 있습니다.
@@ -146,6 +156,12 @@
 > 지우는 것은 **지키지 못하는 약속뿐**입니다.
 
 확인: `node -e 'console.log(JSON.parse(require("fs").readFileSync("package.json")).zalkera)'`
+
+**`name` 도 사이트 이름으로 바꾸십시오.** `@zalkera/storefront-examples` 그대로 두면 검사기가 이 트리를
+본보기 레포로 보고 본보기 전용 검사(`[D2]` — `llms.txt` 가 지목한 `src/app/[slug]/page.tsx`·`src/app/page.tsx`
+등의 부재를 경고)를 돌립니다. 이름은 이 사이트의 신원입니다.
+
+확인: `node -e 'console.log(JSON.parse(require("fs").readFileSync("package.json")).name)'`
 
 ### 1-4. 테마 주입 배선을 남기지 마라
 
@@ -194,7 +210,71 @@ rm -rf docs CUSTOMIZE.md README.md AGENTS.md                                    
 rm -rf src/app/'[slug]'                                                           # content/pages 가 비면 못 씀
 ```
 
-**⑵ 라우트를 지웠으면 셋을 같이 움직입니다**(§1-2). 남은 라우트가 `contact`·`policies` 뿐이면:
+**⑵ 랜딩과 템플릿 페이지를 루트 레이아웃 둘로 가릅니다.**
+
+시안 CSS 는 전역 리셋·배경·타이포를 담고, 시작 팩의 `/contact`·`/policies` 는 Tailwind
+유틸리티와 `@theme` 토큰으로 그려집니다. 한 문서에 두면 어느 한쪽이 깨집니다 — 시안 CSS 의
+`* {margin:0}` 같은 리셋이 템플릿 페이지의 여백·입력칸을 밀어 버리거나, Tailwind 의 preflight 가
+랜딩에 스며듭니다. Next 의 라우트 그룹으로 **루트 레이아웃을 둘** 두면 문서가 갈라져 서로의
+스타일시트가 닿지 않고, 그룹 사이 이동은 전체 페이지 로드가 됩니다.
+
+```bash
+mkdir -p 'src/app/(landing)' 'src/app/(template)'
+mv src/app/layout.tsx src/app/globals.css src/app/contact src/app/policies 'src/app/(template)/'
+rm src/app/page.tsx                                   # 시작 팩 홈 — 시안이 대신한다
+```
+
+`(template)/` 아래 파일은 **한 글자도 고치지 않습니다.** `layout.tsx` 의 `import "./globals.css"` 는
+같이 옮겼으므로 그대로 풀리고, `SiteHeader`·`SiteFooter`·컨테이너·`generateMetadata()` 도 그 안에서
+그대로 삽니다 — 그 화면은 시작 팩 얼굴이 정본입니다.
+
+랜딩 쪽은 새로 씁니다.
+
+```tsx
+// src/app/(landing)/layout.tsx — 랜딩의 루트 레이아웃. 얼굴은 시안이 든다.
+import "./landing.css";
+import type {Metadata, Viewport} from "next";
+import type {ReactNode} from "react";
+import {metadataBaseUrl} from "@/lib/site";
+
+export const metadata: Metadata = {
+    metadataBase: metadataBaseUrl(),
+    alternates: {canonical: "./"},
+    title: "<시안의 <title>>",
+    description: "<시안의 <meta name=\"description\">>",
+};
+
+export const viewport: Viewport = {
+    width: "device-width",
+    initialScale: 1,
+    viewportFit: "cover", // 시안 <meta name="viewport"> 에 viewport-fit=cover 가 있을 때만. 없으면 이 키를 뺀다
+    themeColor: "<시안의 <meta name=\"theme-color\">>", // 둘 이상이면 첫 값(브라우저가 첫 값을 쓴다). 없으면 이 키를 뺀다
+};
+
+// <html lang> 은 시안 값 그대로. 시안에 없을 때만 "ko". <body> 클래스도 시안 <body class> 그대로(§2-2).
+export default function LandingLayout({children}: {children: ReactNode}) {
+    return (
+        <html lang="ko">
+            <body>{children}</body>
+        </html>
+    );
+}
+```
+
+`src/app/(landing)/page.tsx` 에 시안 `<body>` 를(§2-2), `src/app/(landing)/landing.css` 에 시안
+`<style>` 을(§2-3) 놓습니다.
+
+`src/app/not-found.tsx` 는 루트에 그대로 두고 첫 줄에 `import "./(template)/globals.css";` 를 더합니다.
+루트 레이아웃이 없는 자리라 Next 가 자기 기본 `<html><body>` 로 감싸므로 스타일시트는 스스로 실어야
+하고, `SiteHeader`·`SiteFooter` 는 붙지 않습니다 — 404 는 템플릿 톤이되 헤더·푸터 없는 한 장입니다.
+그 파일 머리말 주석의 「레이아웃 안에서 그려지므로 헤더·푸터가 붙고」와 「`notFound()` 를 부르는 자리가
+넷」 문장은 이 팩에서 거짓이 되므로 지웁니다(그 자리들은 ⑴ 이 지웠습니다).
+
+> ⚠ **루트 `src/app/layout.tsx` 를 남기지 마십시오.** 그 파일이 있으면 그룹의 `layout.tsx` 는 중첩
+> 레이아웃이 되어 `<html>` 이 겹치고, 두 CSS 가 한 문서에 실려 위의 깨짐이 그대로 돌아옵니다.
+> 라우트 그룹은 `reservedSegments.test.ts` 와 `verify-zip` 의 라우트 도출이 둘 다 이해합니다.
+
+**⑶ 라우트를 지웠으면 셋을 같이 움직입니다**(§1-2). 남은 라우트가 `contact`·`policies` 뿐이면:
 
 ```ts
 // src/lib/reservedSegments.ts
@@ -211,7 +291,7 @@ disallow: ["/api"],
 > **둘 다 1건 이상**일 것을 요구하므로(공회전 방지), 근거가 0이 되면
 > `robots 의 disallow 를 하나도 못 찾았다` 로 반려합니다.
 
-**⑶ `content/index.ts` 는 남기되 비웁니다**(`src/lib/content.ts` 가 이 모듈을 읽습니다):
+**⑷ `content/index.ts` 는 남기되 비웁니다**(`src/lib/content.ts` 가 이 모듈을 읽습니다):
 
 ```ts
 import nav from "./nav.json";
@@ -224,29 +304,29 @@ export {nav};
 export const pageSlugs = () => Object.keys(pages);
 ```
 
-**⑷ `.zalkera/pack.json` 을 지웁니다.** 카탈로그 팩의 신원이라 남기면 이 사이트가 남의 팩
+**⑸ `.zalkera/pack.json` 을 지웁니다.** 카탈로그 팩의 신원이라 남기면 이 사이트가 남의 팩
 이름으로 적재됩니다.
 
-`content/nav.json` 은 남은 템플릿 페이지(`/contact`·`/policies`)가 읽으므로 브랜드명과 링크를
-채웁니다. 랜딩 시안은 이 파일을 안 읽습니다.
+`content/nav.json` 은 템플릿 페이지의 `SiteHeader`·`SiteFooter` 가 읽으므로 `header`·`footer` 의
+`{label, href}` 목록을 채웁니다(`/policies`·`/contact` 링크 정도). 랜딩 시안은 이 파일을 안 읽습니다.
 
 > ⚠ **같은 주소를 가리키는 링크가 둘 이상이면 렌더 쪽 `key` 를 확인하십시오.**
 > 「이용약관」과 「개인정보처리방침」이 둘 다 `/policies` 로 가는 것은 **정상**인데,
 > `SiteHeader`·`SiteFooter` 가 `key={it.href}` 로 잡고 있으면 React 가 중복 키로 경고하고
 > 항목을 빠뜨릴 수 있습니다. 이 목록은 순서가 곧 화면이므로 **인덱스가 안정된 키**입니다.
 
-**⑸ 여기서 `npx tsc --noEmit` 을 돌리십시오.** 남는 오류는 시안이 채울 자리(`page.tsx`)뿐이어야
-합니다. 다른 오류가 있으면 지운 것과 남긴 것이 어긋난 것입니다.
+**⑹ 여기서 `npx tsc --noEmit` 과 `npm test` 를 돌리십시오.** 둘 다 rc 0 이어야 합니다(`(landing)/page.tsx` 는
+아직 없어도 오류가 아닙니다). `npm test` 가 ⑶ 의 `RESERVED_SEGMENTS`·`disallow` 어긋남을 이름을 대고
+잡습니다. 오류가 있으면 지운 것과 남긴 것이 어긋난 것입니다.
 
-### 2-2. 마크업 — `<body>` → `src/app/page.tsx`
+### 2-2. 마크업 — `<body>` → `src/app/(landing)/page.tsx`
 
 **구조·클래스·문구를 한 글자도 바꾸지 마십시오.** 바꾸는 것은 JSX 문법상 불가피한 것뿐입니다.
 
-> ⚠ **랜딩 한 장짜리 팩이면 `layout.tsx` 의 껍데기를 걷으십시오.** 시작 팩의 layout 은
-> `<SiteHeader/>`·`<SiteFooter/>` 와 폭 제한 컨테이너로 `children` 을 감쌉니다 — 시안이
-> 자기 헤더·푸터를 갖고 있으면 두 벌이 되고, 폭 제한이 전폭 히어로를 자릅니다.
-> `<html><body>{children}</body></html>` 만 남기십시오.
-> 남겨 두는 쪽을 골랐다면 §3 의 「본문 글자수 대조」는 그만큼 어긋납니다(헤더·푸터 문구가 더해집니다).
+> 랜딩의 루트 레이아웃은 `<html lang><body className>` 껍데기입니다(§2-1 ⑵). 시안이 자기
+> 헤더·푸터·레이아웃을 갖고 있으므로 거기에 시작 팩의 `SiteHeader`·`SiteFooter`·폭 제한 컨테이너를
+> 얹지 마십시오 — 두 벌이 되고, 폭 제한이 전폭 히어로를 자릅니다. 시안 `<body>` 에 클래스가 있으면
+> 그 클래스는 랜딩 레이아웃의 `<body className>` 으로 옮깁니다.
 
 | HTML | JSX | 비고 |
 | --- | --- | --- |
@@ -275,7 +355,7 @@ export const pageSlugs = () => Object.keys(pages);
 찾는 법:
 
 ```bash
-grep -oE '\s(stop|stroke|fill|flood|clip|marker|text|dominant|color|font|letter|pointer)-[a-z-]+=\{' src/app/page.tsx | sort -u
+grep -oE '\s(stop|stroke|fill|flood|clip|marker|text|dominant|color|font|letter|pointer)-[a-z-]+=\{' 'src/app/(landing)/page.tsx' | sort -u
 ```
 
 #### ⚠ 텍스트 노드 둘
@@ -301,53 +381,45 @@ grep -oE '\s(stop|stroke|fill|flood|clip|marker|text|dominant|color|font|letter|
 빌드를 깨뜨리므로 걷어내십시오. 디자이너가 손으로 쓴 시안에는 없고, 라이브 사이트를 떠 온
 시안에만 나옵니다.
 
-`<head>` 의 `<title>`·`<meta name="description">` 은 `src/app/layout.tsx` 로 옮깁니다.
+`<head>` 의 `<title>`·`<meta name="description">`·`viewport`·`theme-color` 는
+`src/app/(landing)/layout.tsx` 의 정적 `metadata`·`viewport` 로 옮깁니다(§2-1 ⑵ 의 본보기).
+`og:*`·`twitter:*`·`canonical` 은 옮기지 않습니다 — 자리표시자 도메인이 박혀 있기 마련이고,
+canonical 은 레이아웃의 `alternates` 가 짓습니다.
 
-> ⚠ **시작 팩의 `layout.tsx` 에는 `generateMetadata()` 가 있습니다. 그것을 지우고** 정적
-> `export const metadata` 로 갈아 끼우십시오. 한 세그먼트에 둘 다 있으면 Next 는
-> `generateMetadata` 를 쓰고 `metadata` 를 **아예 안 읽습니다.** 그러면 시안 제목이 안 뜨는데도
-> 화면은 멀쩡해 보여서 — 본문 글자수·높이·콘솔 오류 어느 것도 `<title>` 을 안 보므로 —
+> ⚠ **랜딩 레이아웃에는 정적 `metadata` 만 두십시오.** 시작 팩 루트 레이아웃의 `generateMetadata()`
+> 를 여기로 옮겨 오면 Next 는 그것만 읽고 정적 `metadata` 를 **아예 안 읽습니다.** 시안 제목이 안
+> 뜨는데도 화면은 멀쩡해 보여서 — 본문 글자수·높이·콘솔 오류 어느 것도 `<title>` 을 안 보므로 —
 > 검증을 그대로 통과합니다. §3 에서 제목을 눈으로 대조하십시오.
+> `(template)/layout.tsx` 의 `generateMetadata()` 는 그대로입니다 — 그 문서의 제목은 콘솔의
+> 회사명이 정본입니다.
 
-### 2-3. 스타일 — `<style>` → `src/app/globals.css`
+- **`theme-color` 가 둘 이상이면 첫 값을 씁니다.** 브라우저는 문서 순서에서 첫 `theme-color` 를
+  읽습니다.
+- **`<title>`·`<meta>` 가 `<body>` 안에 있는 시안이 있습니다.** 브라우저는 그대로 두므로 화면에는
+  안 보이지만, 옮기지 않으면 레이아웃의 제목과 두 벌이 됩니다. `<head>` 에 있던 것과 똑같이
+  레이아웃으로 옮기고 본문에서는 뺍니다. §3 의 본문 글자수 대조에서 시안 쪽에만 그 문구가 섞이니
+  제외하고 견주십시오.
 
-**시안 CSS 를 한 글자도 고치지 마십시오.** 그 위에 무엇을 얹느냐가 이 절의 전부입니다.
+### 2-3. 스타일 — `<style>` → `src/app/(landing)/landing.css`
 
-#### ⚠ `@import "tailwindcss";` 를 통째로 쓰지 마십시오
+**시안 CSS 를 한 글자도 고치지 마십시오.** 예외는 아래 두 곳(⑴⑵)과 §2-5 의 `data:` 추출뿐입니다.
 
-그 한 줄에는 **preflight**(브라우저 기본값 리셋)가 딸려 옵니다. 시안에 없던 규칙이라
-여백·글꼴 기본값이 전부 밀리고, 화면이 시안과 달라집니다.
+`landing.css` 는 **§2-5 의 `@font-face` + 시안 CSS 원문**입니다. Tailwind 는 한 줄도 들이지
+마십시오.
 
-같은 팩을 세 방식으로 재서 시안과 픽셀 대조한 결과입니다.
+| `landing.css` 에 | 왜 안 되나 |
+| --- | --- |
+| `@import "tailwindcss";` | **preflight**(브라우저 기본값 리셋)가 딸려 와 여백·글꼴 기본값이 밀린다. 시안에 없던 규칙이다 |
+| `@import "tailwindcss/theme.css"`·`utilities.css` | 랜딩은 유틸리티를 안 쓴다. 템플릿 페이지의 유틸리티는 `(template)/globals.css` 가 **자기 문서**에서 싣는다(§2-1 ⑵) |
 
-| `globals.css` 머리말 | 시안과 다른 픽셀 | 전체 높이 |
-| --- | --- | --- |
-| `@import "tailwindcss";` | **8.800%** | 5791 → **5840** |
-| Tailwind 를 통째로 뺌 | 0.000% | 5791 |
-| **theme + utilities 만** | **0.000%** | 5791 |
-
-그래서 이렇게 씁니다.
-
-```css
-@layer theme, base, components, utilities;
-@import "tailwindcss/theme.css" layer(theme);
-@import "tailwindcss/utilities.css" layer(utilities);
-/* ↑ preflight(layer base)를 일부러 뺐다. 아래는 시안 CSS 원문. */
-```
-
-Tailwind 를 통째로 버리지 않는 이유는 `/contact`·`/policies` 와 헤더·푸터가 유틸리티 클래스를
-쓰기 때문입니다. 이 형태면 그쪽 레이아웃이 살아 있고, **레이어 밖에 있는 시안 CSS 가 레이어 안
-유틸리티보다 우선**합니다(캐스케이드 레이어 규칙) — 시안이 이깁니다.
-
-> ⚠ **시안 CSS 자체가 Tailwind 빌드면 아무것도 얹지 마십시오.** 이미 만들어진 사이트에서 뜬
-> 시안이 그렇습니다(`@layer` 가 들어 있고 수백 KB 입니다). 우리 `theme`/`utilities` 를 더 들이면
-> 같은 유틸리티가 두 벌이 되어 버튼 높이 같은 값이 밀립니다 — 실측 6.507%, 빼면 0.000%.
-> 판별: `grep -c '@layer' <시안>.html` 이 0 이 아니고 `<style>` 이 수백 KB 면 그쪽입니다.
+시안 CSS 자체가 Tailwind 빌드여도 같습니다 — 라이브 사이트에서 뜬 시안이 그렇습니다(`@layer` 가
+들어 있고 수백 KB). 그것도 시안 CSS 원문이므로 그대로 놓고 아무것도 얹지 않습니다.
+판별: `grep -c '@layer' <시안>.html` 이 0 이 아니고 `<style>` 이 수백 KB 면 그쪽입니다.
 
 #### 시안 CSS 에서 손대는 두 곳
 
 **⑴ `@import url(...)` 은 지웁니다.**
-CSS 는 `@import` 가 모든 규칙보다 앞서야 합니다. 시안 CSS 를 통째로 붙이면 그 `@import` 가
+CSS 는 `@import` 가 모든 규칙보다 앞서야 합니다. 앞에 `@font-face` 가 놓이면 그 `@import` 는
 규칙 뒤로 밀려 `next dev` 가 **못 뜹니다**. 폰트는 §2-5 로 내려 `@font-face` 가 대신합니다.
 
 > ⚠ **`next build` 는 이것을 경고로만 찍고 rc=0 을 냅니다.** 종료 코드만 보면 못 잡습니다.
@@ -397,6 +469,9 @@ getComputedStyle(document.querySelector('.wrap')).padding
 js = "\n;\n".join(blocks)
 ```
 
+이었으면 세어 보십시오 — `grep -c '^;$' public/mockup.js` 가 0 이면 개행으로만 이은 것입니다
+(블록 안에 `;` 단독 줄이 없다면 블록 수 − 1 이 나옵니다).
+
 **⑶ 렌더된 DOM 을 떠 온 시안이면 런타임 데이터가 섞여 옵니다.** `self.__next_f.push(...)`
 (Next 의 RSC 플라이트 페이로드) 같은 것은 서버 없이는 뜻이 없고, 편집 과정에서 따옴표가 깨져
 **스크립트 전체를 실행 불가**로 만듭니다. `__next_f`·`__next_s` 가 든 블록은 통째로 버리십시오.
@@ -441,7 +516,8 @@ export function MockupBehavior() {
 }
 ```
 
-`page.tsx` 끝에서 `<MockupBehavior />` 를 한 번 렌더합니다.
+`(landing)/page.tsx` 끝에서 `<MockupBehavior />` 를 한 번 렌더합니다. 실행 스크립트가 0개로
+남았다면(트래커·런타임 잔재만 있던 시안) `mockup.js` 도 `MockupBehavior` 도 만들지 않습니다.
 
 > **고전 스크립트로 실어야 합니다**(`type="module"` 금지). 시안이 `function f(){}` 을
 > 전역으로 선언하고 마크업이 그 이름을 부르기 때문입니다.
@@ -464,10 +540,8 @@ export function MockupBehavior() {
 ### 2-5. 폰트·이미지 — 팩 안으로 내린다
 
 `<link href="https://fonts.googleapis.com/...">` 를 지우고, 그 CSS 를 받아
-woff2 를 `public/fonts/` 로 내린 뒤 `@font-face` 를 `globals.css` 의 **`@import` 줄 바로 뒤**에
-붙입니다(§2-3 의 머리말 다음, 시안 CSS 앞).
-
-> ⚠ 문자 그대로 파일 맨 앞에 두지 마십시오 — `@import` 가 규칙보다 뒤로 밀려 무효가 됩니다.
+woff2 를 `public/fonts/` 로 내린 뒤 `@font-face` 를 `landing.css` 의 **맨 앞**(시안 CSS 앞)에
+붙입니다. 시안 CSS 의 `@import` 는 §2-3 ⑴ 로 이미 지웠으므로 순서 문제가 없습니다.
 
 > ⚠ **내려받기에 울타리를 치십시오.** 입력은 **남이 준 HTML** 입니다. 그대로 구현하면
 > 시안이 가리키는 아무 주소나 따라가고, 파일명을 URL 경로에서 따면 `..` 로 소스 트리에
@@ -490,9 +564,23 @@ woff2 를 `public/fonts/` 로 내린 뒤 `@font-face` 를 `globals.css` 의 **`@
 브라우저가 필요한 조각만 받습니다. 가변폰트는 여러 `font-weight` 가 **같은 파일**을 가리키는데
 그것도 정상입니다(원본 CSS 가 그렇습니다).
 
+**시안이 가리키는데 시안에 없는 폰트 파일은 만들어 채우지 마십시오.** 라이브 사이트를 떠 온
+시안은 `url(/fonts/….woff2)` 처럼 자기 서버의 파일을 가리키면서 파일은 안 줍니다. 유니코드 범위가
+맞는 Google Fonts 서브셋으로 채우는 것은 **추정**이고, 시안 옆에 그 파일이 없으니 §3 의 대조는
+그 추정을 검증하지 못합니다(시안 쪽은 대체 글꼴로 찍힙니다). 발주처에서 파일을 받으십시오.
+개시가 막혀 부득이 채웠다면 NOTE 의 「추가한 것」과 자리표시자 표에 적고 발주처 확인을 받습니다.
+
 이미지는 `public/` 에 넣습니다. 파일명이 한글이면 참조도 같이 퍼센트 인코딩하십시오.
 `foo.jpg` 와 `foo.jpg.webp` 가 같이 있으면 **접두 충돌**에 주의하십시오 —
 치환할 때 `(?![A-Za-z0-9._~%-])` 같은 경계를 걸지 않으면 참조가 통째로 깨집니다.
+
+시안이 이미지·폰트를 `data:` URI 로 안고 있으면 파일로 뽑아 `public/assets/` 에 두고 참조를
+바꿔도 됩니다 — 바이트가 같은 자산의 자리만 옮긴 것입니다. 뽑은 개수와 자리를 NOTE 에 적습니다.
+
+**파비콘은 시안·발주처 자산입니다.** 시안에 `<link rel="icon">` 과 그 파일이 있으면 파일을 `public/` 에
+두고 `(landing)/layout.tsx` 의 `metadata.icons` 로 잇습니다. 없으면 **만들지 않습니다** — 색 하나로
+그린 마크도 시안에 없던 이미지입니다.
+자리표시자 표에 「파비콘 — 발주처」 행을 두고, §3 의 콘솔 집계에서 `/favicon.ico` 404 한 건은 뺍니다.
 
 `.zalkera/ASSETS-LICENSE.md` 에 동봉 자산의 출처와 라이선스를 적습니다
 (Google Fonts 자가호스팅은 대개 **SIL OFL 1.1** — 재배포 허용).
@@ -501,8 +589,8 @@ woff2 를 `public/fonts/` 로 내린 뒤 `@font-face` 를 `globals.css` 의 **`@
 
 | 파일 | 무엇을 적나 |
 | --- | --- |
-| `NOTE.md` | 시안 대비 **고친 것 전부**(§2-3 ⑴⑵ 포함) · 자리표시자 목록 · 검증 결과 |
-| `AGENTS.md` | 다음 LLM 이 고칠 좌표와 **금지사항**(§1 을 요약) |
+| `NOTE.md` | 시안 대비 **고친 것 전부**(§2-3 ⑴⑵·`data:` 추출 포함) · **「추가한 것」**(시안에 없던 파일이 하나라도 있으면 그 절을 둔다 — §2-5 의 폰트 추정이 여기 온다) · 자리표시자 목록 · 검증 결과 |
+| `AGENTS.md` | 다음 LLM 이 고칠 좌표와 **금지사항** — §1 의 요약에 더해 「루트 레이아웃은 둘이다, 루트 `layout.tsx` 를 만들지 마라」(§2-1 ⑵)와 「`landing.css` 에 Tailwind 를 들이지 마라」(§2-3) |
 | `.zalkera/ASSETS-LICENSE.md` | 동봉 자산 출처·라이선스 |
 
 **시안 스크립트의 키·토큰을 눈으로 훑으십시오.** `public/mockup.js` 는 **공개 서빙되는 자리**라
@@ -515,7 +603,7 @@ woff2 를 `public/fonts/` 로 내린 뒤 `@font-face` 를 `globals.css` 의 **`@
 
 ```bash
 grep -ohE 'tel:[0-9+-]+|https://pf\.kakao\.com/[A-Za-z0-9_-]+|YOUR_[A-Z_]+' \
-  src/app/page.tsx public/mockup.js | sort -u
+  'src/app/(landing)/page.tsx' public/mockup.js | sort -u
 ```
 
 ---
@@ -524,8 +612,8 @@ grep -ohE 'tel:[0-9+-]+|https://pf\.kakao\.com/[A-Za-z0-9_-]+|YOUR_[A-Z_]+' \
 
 ### 3-0. **환경변수를 먼저 넣으십시오** — 안 넣으면 첫 명령부터 섭니다
 
-소스가 시동 시점에 테넌트 코드를 읽고, 없으면 **던집니다**. 그 모듈을 `layout.tsx` 가 물기
-때문에 전 라우트가 500 이 됩니다 — **CSS 와 아무 상관 없는 500 입니다.**
+소스가 시동 시점에 테넌트 코드를 읽고, 없으면 **던집니다**. 그 모듈을 `(template)/layout.tsx` 와
+BFF 라우트가 물기 때문에 그쪽이 500 이 됩니다 — **CSS 와 아무 상관 없는 500 입니다.**
 
 ```bash
 cp .env.example .env.local
@@ -533,12 +621,12 @@ cp .env.example .env.local
 
 | 변수 | 안 넣으면 |
 | --- | --- |
-| `ZALKERA_TENANT` | 모든 페이지 500 (「CSS 가 깨졌다」로 오진하기 쉬운 자리) |
+| `ZALKERA_TENANT` | `/contact`·`/policies`·BFF 가 500 (「CSS 가 깨졌다」로 오진하기 쉬운 자리). 랜딩은 이 값을 안 읽어 200 이다 |
 | `ZALKERA_API_BASE` | 백엔드 왕복이 실패. 우리 템플릿은 fail-soft 라 화면은 서지만 진열이 빈다 |
 | `ZALKERA_SITE_URL` | `robots.txt`·`sitemap.xml`·JSON-LD 에 `http://localhost:3000` 이 **박힌 채로 배포**됩니다 |
 
 > ⚠ **`.env.local` 을 zip 에 넣지 마십시오.** 검수가 시크릿으로 반려합니다.
-> `pack.py` 는 그것을 걸러 주지 않으니 패키징 전에 지우거나 트리 밖에 두십시오.
+> 아래 `pack.py` 가 걸러 주지만, 트리 밖에 두는 편이 안전합니다.
 
 ### 3-1. 명령
 
@@ -546,8 +634,31 @@ cp .env.example .env.local
 npm ci
 npm run typecheck                      # rc 0
 npm run validate -- --gate             # rc 0 (개발 중에는 `--gate` 없이 권고로 볼 수도 있다)
+npm test                               # rc 0 — reservedSegments 등 가드 시험
 npm run build                          # rc 0 — 다만 이것만으로는 부족하다(아래)
 ```
+
+`validate` 는 이 형상에서 경고를 찍고 rc 0 을 냅니다 — 선언을 지운 트리라 S 규칙군이 경고입니다.
+정상인 경고는 이것들입니다.
+
+```
+⚠️  [S3] app/layout.* · pages/_app.* 을 찾지 못했습니다 — 전역 CSS 를 실을 자리가 없습니다. …
+⚠️  [S5] src/app/(landing)/landing.css — 루트가 싣는 CSS 외의 CSS 파일. …
+⚠️  [S5] src/app/(template)/globals.css — 루트가 싣는 CSS 외의 CSS 파일. …
+```
+
+- `[S3]`·`[S5]` — 검사기가 라우트 그룹 안의 루트 레이아웃을 읽지 않아서 납니다. **루트 `layout.tsx` 를
+  만들어 경고를 없애려 하지 마십시오**(§2-1 ⑵).
+- `(landing)/page.tsx` 를 지목하는 `[S2]`(인라인 `style`)·`[S4]`(색 리터럴 클래스)·`[S6]`(남의 토큰 어휘) —
+  시안 마크업이 그런 것이므로 이 레인에서는 정상입니다. **시안을 고쳐 없애지 마십시오**(§2-2).
+
+그 밖의 경고가 나면 봐야 합니다.
+
+> ⚠ 이 통과는 검사기가 그룹 안 루트 레이아웃을 **읽지 않는 데** 기댑니다. `(template)/globals.css` 는 우리
+> 토큰 어휘(`--radius-knob`·`--color-surface` 등)를 그대로 갖고 있으므로, 검사기가 그것을 읽게 되면
+> `[EDECL]`(rc=7 — 선언 없이 우리 토큰을 쓴다)이 설 수 있습니다. 그때의 처방은 이 문서에 없습니다 —
+> 선언을 되살리면 S 규칙군이 error 로 올라오고, 토큰을 개명하면 시작 팩 파일을 고치는 일입니다.
+> 두 루트 레이아웃을 따로 재도록 검사기(`@zalkera/client`)를 고치는 것이 답입니다.
 
 ### 3-2. ⚠ `npm run build` 의 rc 0 을 믿지 마십시오
 
@@ -556,14 +667,15 @@ CSS 파싱 실패를 **경고로 찍고 rc 0** 을 냅니다. 개발 서버로 �
 ```bash
 npm run dev >/tmp/dev.log 2>&1 &
 for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:3000/ && break; sleep 1; done
-curl -s -o /dev/null -w '%{http_code}\n' http://localhost:3000/    # 200 이어야 한다
+curl -s -o /dev/null -w '%{http_code}\n' http://localhost:3000/          # 200 이어야 한다
+curl -s -o /dev/null -w '%{http_code}\n' http://localhost:3000/contact   # 200 — 템플릿 쪽도 산다
 kill %1
 ```
 
 > 뜰 때까지 기다리는 줄이 없으면 아직 안 뜬 서버에 물어 `000` 이 나옵니다.
 
-**500 이면** ⑴ `ZALKERA_TENANT` 를 넣었는지(§3-0) ⑵ CSS·모듈이 깨졌는지 순으로 보십시오.
-`/tmp/dev.log` 에 이유가 있습니다.
+**`/contact` 가 500 이면** ⑴ `ZALKERA_TENANT` 를 넣었는지(§3-0) ⑵ 모듈이 깨졌는지 순으로,
+**`/` 가 500 이면** 랜딩 CSS·`page.tsx` 가 깨진 것입니다. `/tmp/dev.log` 에 이유가 있습니다.
 
 **200 이어도 로그를 보십시오.** React 는 개발 빌드에서만 렌더 진단을 냅니다 — 상용 빌드에서는
 그 문구가 통째로 사라질 뿐 결함은 남습니다.
@@ -591,6 +703,7 @@ grep -nE "Invalid DOM property|Invalid event handler property|does not recognize
 서버가 200 이어도 **클라이언트에서만 터지는 오류**는 안 보입니다(§1-5 가 그 자리였습니다).
 브라우저로 열어 콘솔을 확인하십시오 — `pageerror` 와 `console.error` 가 **0건**이어야 합니다.
 페이지를 끝까지 스크롤해서 지연 실행되는 스크립트까지 깨우십시오.
+`/favicon.ico` 404 한 건은 집계에서 뺍니다(§2-5 — 파비콘은 발주처 자산). 그 외 404 는 결함입니다.
 
 두 가지를 반드시 지키십시오. 둘 다 **실제로 결함을 놓친 자리**입니다.
 
@@ -602,14 +715,20 @@ grep -nE "Invalid DOM property|Invalid event handler property|does not recognize
 React 의 개발 경고(중복 키·잘못된 prop 등)는 **상용 빌드에서 통째로 제거됩니다.**
 `next build` 산출물로 콘솔을 재면 그 부류가 **구조적으로 안 보입니다.**
 
+**⑶ `/contact` 에서 헤더의 홈 링크를 눌러 `/` 로 돌아와 보십시오**(`npm run dev` 에서). 두 루트
+레이아웃이 살아 있으면 전체 페이지 로드가 일어나고, 그 뒤 콘솔에서
+`document.querySelectorAll('link[rel=stylesheet]').length` 가 1 입니다. 2 이상이면 템플릿 CSS 가 같이
+실린 것 — 루트 레이아웃이 하나로 합쳐졌습니다(§2-1 ⑵).
+
 ### 시안과 대조
 
 | 무엇 | 기준 |
 | --- | --- |
 | **`<title>`** | 시안의 제목과 같아야 한다 — 자동 검사가 안 보는 자리다(§2-2) |
-| 본문 글자수 | 시안과 같아야 한다(`document.body.innerText` 길이) |
+| 본문 글자수 | 시안과 같아야 한다(`document.body.innerText` 길이). 시안이 `<title>`·`<meta>` 를 `<body>` 에 두었으면 그 문구를 빼고 견준다(§2-2) |
 | 전체 높이 | 시안과 같아야 한다 — **아래 촬영 조건을 맞춘 뒤에** 견주십시오 |
 | 외부 호스트 요청 | **0건** — 실패만 세지 말고 **호스트별로** 세십시오 |
+| 시안 `<html>` 에 `lang` 이 없을 때 | 대조용 **사본**에만 `lang="ko"` 를 보태 찍고 NOTE 에 적는다. Chrome 은 언어 정보가 없으면 공백 글자 폭을 달리 그려 줄바꿈·높이가 어긋난다 |
 
 > 스크린샷만 비교하면 **부가 연출이 죽어도 못 잡습니다** — 높이·글자수가 거의 안 변하기 때문입니다.
 > 콘솔 오류 감시가 그 자리를 봅니다.
@@ -698,7 +817,8 @@ with zipfile.ZipFile(dst, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
     for dirpath, dirnames, filenames in os.walk(src):
         dirnames[:] = [d for d in dirnames if d not in SKIP]
         for name in sorted(filenames):
-            if name.endswith(".tsbuildinfo"):
+            # .env.local 은 시크릿 · next-env.d.ts 는 Next 가 만드는 파일(.gitignore 와 같은 판단)
+            if name.endswith(".tsbuildinfo") or name in {".env.local", "next-env.d.ts"}:
                 continue
             full = os.path.join(dirpath, name)
             z.write(full, os.path.relpath(full, src))
@@ -728,17 +848,22 @@ node scripts/verify-zip.mjs ../pack-<이름>-<날짜>.zip     # rc 0
 | `Invalid or unexpected token` (런타임) | `String.raw` 로 넣음 | §1-5 |
 | `근거 없는 이름은 목록에 없다` | 라우트를 지움 | §1-2 |
 | `<파일> 가 없습니다 — 가드를 재는 자리입니다` | `src/lib/*.ts` 를 지움 | §1-2 |
-| `[EDECL]` rc=7 | 선언은 **없는데** `globals.css` 가 우리 토큰 이름을 쓴다(`--radius-knob`·`--color-surface` 등 다섯 중 둘 이상) | §1-3 |
+| `[EDECL]` rc=7 | 선언은 **없는데** 루트가 싣는 CSS 가 우리 토큰 이름을 쓴다(`--radius-knob`·`--color-surface` 등 다섯 중 둘 이상). 두 루트 레이아웃 형상에서는 검사기가 그 CSS 를 읽지 않아 서지 않는다 | §1-3 · §3-1 |
 | `[S2]`·`[S4]`·`[S8]`·N 이 error | `zalkera` 선언을 **안 지웠다** | §1-3 |
 | `pages 맵을 못 읽었습니다` | `content/index.ts` 를 `= {};` 한 줄로 쓰거나 축약 표기로 씀 | §2-1 |
-| 시안 제목이 안 뜬다(오류 없음) | `layout.tsx` 의 `generateMetadata()` 를 안 지웠다 | §2-2 |
-| 첫 화면이 500 인데 CSS 는 멀쩡 | `ZALKERA_TENANT` 미설정 | §3 |
+| 시안 제목이 안 뜬다(오류 없음) | 랜딩 레이아웃에 `generateMetadata()` 를 두었다 | §2-2 |
+| `/contact`·`/policies` 가 왼쪽에 붙고 여백·입력칸 테두리가 없다 | 루트 레이아웃이 하나다 — 시안 CSS 가 템플릿 페이지에 닿는다 | §2-1 ⑵ |
+| `[S3] app/layout.* … 을 찾지 못했습니다`(경고) | 두 루트 레이아웃 형상 — 정상. 루트 `layout.tsx` 를 만들지 않는다 | §3-1 |
+| `[D2] llms.txt 가 본보기로 지목한 …`(경고) | `package.json` 의 `name` 을 안 바꿨다 | §1-3 |
+| 콘솔에 `favicon.ico` 404 | 파비콘은 발주처 자산 — 집계에서 빼고 자리표시자로 | §2-5 |
+| `theme-color` 가 시안과 다르다 | 시안에 둘일 때 뒤의 값을 골랐다 — 브라우저는 첫 값을 쓴다 | §2-2 |
+| `/contact`·`/policies` 가 500 인데 CSS 는 멀쩡 | `ZALKERA_TENANT` 미설정 | §3 |
 | `--byo 선언이 zip 과 맞지 않습니다` | 템플릿 파생인데 `--byo` 를 붙임 | §3 |
 | SVG 가 안 보임 | `viewbox` 를 소문자로 둠 | §2-2 |
 | **Invalid DOM property** `stop-color` | 하이픈 SVG 속성 — `tsc` 가 안 잡는다 | §2-2 |
 | `[{…}] is not a function` | 데이터 섬을 실행 스크립트에 이어 붙임(ASI) | §2-4 |
 | `Uncaught SyntaxError` (스크립트 전체가 안 돎) | RSC 페이로드(`__next_f`)가 섞임 | §2-4 |
-| 화면이 시안과 미묘하게 다름(높이·여백) | `@import "tailwindcss"` 의 preflight | §2-3 |
+| 화면이 시안과 미묘하게 다름(높이·여백) | `landing.css` 에 Tailwind 를 들였다(preflight) | §2-3 |
 | 문단이 2줄→1줄 | `pre-line` 개행을 JSX 가 접음 | §2-2 |
 | 화면에 `&nbsp;` 가 글자로 보임 | 문자열로 감쌀 때 엔티티를 안 풂 | §2-2 |
 | `Encountered two children with the same key` | 내비 목록의 `key` 를 `href` 로 잡았다 | §2-1 |
@@ -756,4 +881,5 @@ zip 1개 + 그 안의 `NOTE.md`·`AGENTS.md`·`.zalkera/ASSETS-LICENSE.md`.
 본문 글자수(시안 대 팩) · `verify-zip` rc.
 
 **기계 검사 통과는 인수가 아닙니다.** 사람이 볼 것이 남습니다 —
-자산 출처 실제 대조 · 자리표시자 연락처 · 개시 후 화면 확인.
+자산 출처 실제 대조 · 자리표시자 연락처·파비콘 · NOTE 「추가한 것」의 발주처 확인 ·
+콘솔에서 `/policies` 의 정책·사업자 정보를 채웠는지 · 개시 후 화면 확인.
