@@ -30,8 +30,8 @@
 
 | | 어디서 오나 | 무엇 |
 | --- | --- | --- |
-| **얼굴** | **시안** | `src/app/(landing)/page.tsx` · `(landing)/landing.css` · `(landing)/layout.tsx` 의 `metadata`·`viewport` · `public/` 의 이미지·폰트 |
-| **기능** | 시작 팩에서 가져옴 | `src/lib/**`(가드) · `scripts/**`(검수) · `src/middleware.ts` · `robots.ts`·`sitemap.ts`·`not-found.tsx` · `next.config.ts`·`package.json`·`tsconfig.json` · `llms.txt` |
+| **얼굴** | **시안** | `src/app/(landing)/page.tsx` · `(landing)/landing.css` · `(landing)/layout.tsx` 의 `metadata`·`viewport`(시안 `<head>` 의 값 + `metadataBase`·canonical 배선, §2-2 ⑴) · `public/` 의 이미지·폰트 |
+| **기능** | 시작 팩에서 가져옴 | `src/lib/**`(가드) · `scripts/**`(검수) · `src/middleware.ts` · `robots.ts`·`sitemap.ts`·`not-found.tsx` · 홈의 `Organization` JSON-LD(`JsonLd.tsx` + 콘솔 설정, §2-2) · `next.config.ts`·`package.json`·`tsconfig.json` · `llms.txt` |
 | **템플릿 페이지** | 시작 팩 얼굴 **그대로** | `src/app/(template)/` 아래 `layout.tsx`·`globals.css`·`contact/`·`policies/` · `src/components/` 는 `sections/` 만 빼고 그대로 · `content/nav.json` |
 | 🔴 **안 가져옴** | — | `src/components/sections/**` · `content/pages/*.json` · `public/images/**` · 프리셋의 색·폰트·레이아웃 |
 
@@ -389,15 +389,92 @@ grep -oE '\s(stop|stroke|fill|flood|clip|marker|text|dominant|color|font|letter|
 빌드를 깨뜨리므로 걷어내십시오. 디자이너가 손으로 쓴 시안에는 없고, 라이브 사이트를 떠 온
 시안에만 나옵니다.
 
-`<head>` 의 `<title>`·`<meta name="description">`·`viewport`·`theme-color` 는
-`src/app/(landing)/layout.tsx` 의 정적 `metadata`·`viewport` 로 옮깁니다(§2-1 ⑵ 의 본보기).
-`og:*`·`twitter:*`·`canonical` 은 옮기지 않습니다 — 자리표시자 도메인이 박혀 있기 마련이고,
-canonical 은 레이아웃의 `alternates` 가 짓습니다.
+#### SEO·AEO 메타 — 시안의 것을 옮기고, 기계용 그래프 하나를 얹는다
+
+화면은 시안 그대로입니다. SEO·AEO 로 **이 레인이 새로 쓰는** 자리는 `<head>` 메타와 JSON-LD 입니다
+(robots·sitemap 은 시작 팩 것을 그대로 씁니다). 값은 **시안에 있던 문구**이거나 **콘솔에 입력된 사업자
+정보**이고, 예외는 아래 블록에 주석으로 적힌 기본값뿐입니다. 플랫폼의 AEO 보장표
+(`@zalkera/client/contracts/aeo-surface-guarantees.json`)가 재는 사이트 축은 robots · sitemap · sitemap 의 보장
+라우트 포함 · JSON-LD 의 절대 URL 이고, 「비즈니스 홍보(MARKETING)」 카테고리는 홈에 `Organization`
+(업종에 따라 `LocalBusiness`·`BeautySalon` 으로 좁혀도 통과) JSON-LD 를 요구합니다. 판정 지점은 소스가
+아니라 **개시된 산출물**입니다.
+
+**⑴ `<head>` → §2-1 ⑵ 에서 만든 `(landing)/layout.tsx` 의 `metadata` 를 이것으로 대체합니다**(`import` 와
+`viewport` 는 §2-1 ⑵ 그대로, `icons` 는 §2-5 가 여기에 더합니다). 값은 시안 `<head>` 에서 그대로 옮깁니다.
+
+```ts
+// src/app/(landing)/layout.tsx — §2-1 ⑵ 의 metadata 를 이것으로 바꾼다(import 는 그대로)
+export const metadata: Metadata = {
+    metadataBase: metadataBaseUrl(),
+    alternates: {canonical: "./"},                 // 두 호스트(플랫폼 서브도메인·커스텀 도메인)를 정본 하나로 모은다
+    title: "<시안 <title> 그대로>",
+    description: "<시안 <meta name=description> 그대로>",
+    keywords: ["<시안 <meta name=keywords> 를 쉼표로 나눈 그대로>"],   // 시안에 있을 때만
+    openGraph: {                                    // 시안에 og:* 가 있을 때만, 값은 그대로
+        type: "website",                            // og:type·og:locale 은 시안에 있으면 그 값, 없으면 이 기본값(문서 언어와 같다)
+        locale: "ko_KR",
+        url: "./",                                  // 시안의 자리표시자 호스트(https://….example.com/) 대신 canonical 과 같은 상대경로
+        siteName: "<og:site_name 그대로>",           // 있을 때만
+        title: "<og:title 그대로>",
+        description: "<og:description 그대로>",
+        // images: 시안의 og:image 가 없는 파일(자리표시자 호스트)을 가리키면 넣지 않는다 — 자리표시자 표에 올린다.
+    },
+    // twitter:card 는 summary·summary_large_image 만 그대로 옮긴다. 그 밖의 값이면 twitter 를 통째로 빼고 NOTE 에 적는다.
+    twitter: {card: "<twitter:card 그대로>", title: "<twitter:title>", description: "<twitter:description>"},   // 있을 때만
+    ...(process.env.NEXT_PUBLIC_NAVER_SITE_VERIFICATION?.trim()
+        ? {verification: {other: {"naver-site-verification": process.env.NEXT_PUBLIC_NAVER_SITE_VERIFICATION.trim()}}}
+        : {}),                                      // (template)/layout.tsx 와 같은 배선 — 콘솔 값이 env 로 들어온다
+};
+```
+
+넣지 않는 것 — `robots: {index: false}`(발견 경로를 우리 손으로 닫는 일) · 시안에 없던 문구·키워드 · 없는
+이미지 · `authors`·`publisher` 같은 창작 필드. 본문 쪽(제목 태그 구조·`alt`·문구)은 손대지 않습니다 —
+문제가 보이면 고치지 말고 NOTE 의 발주처 확인 항목에 적습니다.
+
+**⑵ 홈 JSON-LD — `Organization` 하나, 콘솔 데이터로.** `(landing)/page.tsx` 를 시작 팩 홈과 같은 방식으로
+씁니다(**`generateMetadata()` 는 옮기지 않습니다** — 아래 ⚠). 값은 콘솔의 사이트 설정(회사명·전화·이메일·주소)에서
+오고 비어 있으면 필드가 빠집니다.
+
+```tsx
+import {zalkera} from "@/lib/zalkera";
+import {siteUrl} from "@/lib/site";
+import {JsonLd, organizationJsonLd} from "@/components/JsonLd";
+import {MockupBehavior} from "@/components/MockupBehavior";   // 실행 스크립트가 있는 팩만(§2-4)
+
+export const dynamic = "force-static";
+export const revalidate = 600;                                  // 시작 팩 홈과 같은 ISR — 콘솔에서 고쳐도 이 주기가 지난 뒤 재생성된다(상한 1주기)
+
+export default async function Home() {
+    const config = await zalkera.getSiteConfig({tags: ["site-config"]}).catch(() => null);   // fail-soft
+    return (
+        <>
+            {/* … 시안 <body> 그대로 … */}
+            {config && <JsonLd data={organizationJsonLd(config, siteUrl())} />}
+            <MockupBehavior />
+        </>
+    );
+}
+```
+
+- `organizationJsonLd` 는 `@type` 을 콘솔의 업종으로 고르고 `url` 을 **절대 URL**(`siteUrl()`)로 냅니다 —
+  보장표의 「절대 URL」 항목이 이것입니다. 이로써 랜딩도 `ZALKERA_TENANT` 를 읽습니다(§3-0).
+- 이 팩은 「비즈니스 홍보」 **간판은 못 겁니다** — 그 카테고리는 CMS 페이지 라우트(`/{slug}`)의 SSR 도
+  요구하는데 §2-1 ⑴ 이 그 라우트를 지웁니다(콘텐츠 페이지가 없으므로). 간판과 무관하게 `Organization`
+  그래프는 답변 엔진이 사이트 주체를 읽는 자리라 넣습니다. 보장표대로 「못 거는 것은 간판뿐」입니다.
+- **만들지 않는 것**: 시안의 후기·별점·처리 건수는 시뮬레이션입니다 — `Review`·`AggregateRating` 을 내지
+  않습니다(보장표의 의도적 부정 보장). `Product`·`Offer` 도 내지 않습니다 — 이 팩은 상품을 팔지 않고, 그 둘은
+  쇼핑몰 칸의 required 표면이라 팔 것이 없는 사이트에서는 거짓 진술이 됩니다. 카카오 오픈채팅 주소는
+  `sameAs` 가 아닙니다(소셜 프로필이 아닙니다). 주소·이메일을 시안에서 지어 채우지 않습니다(콘솔 값만).
+- 선택: 시안에 FAQ 섹션이 있으면 `FAQPage` 를 더할 수 있습니다. 화면에 **정적으로 보이는** 질문·답을 한
+  글자도 바꾸지 않고 옮기고, 스크립트가 나중에 그리는 항목은 넣지 않으며, 팩당 하나입니다. 문구를 고칠 때
+  둘을 같이 고쳐야 하는 부담이 생기므로 발주처가 원치 않으면 생략합니다.
 
 > ⚠ **랜딩 레이아웃에는 정적 `metadata` 만 두십시오.** 시작 팩 루트 레이아웃의 `generateMetadata()`
 > 를 여기로 옮겨 오면 Next 는 그것만 읽고 정적 `metadata` 를 **아예 안 읽습니다.** 시안 제목이 안
 > 뜨는데도 화면은 멀쩡해 보여서 — 본문 글자수·높이·콘솔 오류 어느 것도 `<title>` 을 안 보므로 —
 > 검증을 그대로 통과합니다. §3 에서 제목을 눈으로 대조하십시오.
+> 랜딩 **페이지**에도 `generateMetadata()`(시작 팩 홈의 `pageMetadata`)를 두지 마십시오 — `openGraph` 는
+> 얕은 교체라 ⑴ 로 옮긴 시안 `og:*` 가 통째로 콘솔 회사명으로 바뀌고, `<title>` 은 멀쩡해서 눈에 안 띕니다.
 > `(template)/layout.tsx` 의 `generateMetadata()` 는 그대로입니다 — 그 문서의 제목은 콘솔의
 > 회사명이 정본입니다.
 
@@ -524,8 +601,8 @@ export function MockupBehavior() {
 }
 ```
 
-`(landing)/page.tsx` 끝에서 `<MockupBehavior />` 를 한 번 렌더합니다. 실행 스크립트가 0개로
-남았다면(트래커·런타임 잔재만 있던 시안) `mockup.js` 도 `MockupBehavior` 도 만들지 않습니다.
+`(landing)/page.tsx` 끝에서 `<MockupBehavior />` 를 한 번 렌더합니다(§2-2 ⑵ 의 본보기 자리). 실행
+스크립트가 0개로 남았다면(트래커·런타임 잔재만 있던 시안) `mockup.js` 도 `MockupBehavior` 도 만들지 않습니다.
 
 > **고전 스크립트로 실어야 합니다**(`type="module"` 금지). 시안이 `function f(){}` 을
 > 전역으로 선언하고 마크업이 그 이름을 부르기 때문입니다.
@@ -620,8 +697,8 @@ grep -ohE 'tel:[0-9+-]+|https://pf\.kakao\.com/[A-Za-z0-9_-]+|YOUR_[A-Z_]+' \
 
 ### 3-0. **환경변수를 먼저 넣으십시오** — 안 넣으면 첫 명령부터 섭니다
 
-소스가 시동 시점에 테넌트 코드를 읽고, 없으면 **던집니다**. 그 모듈을 `(template)/layout.tsx` 와
-BFF 라우트가 물기 때문에 그쪽이 500 이 됩니다 — **CSS 와 아무 상관 없는 500 입니다.**
+소스가 시동 시점에 테넌트 코드를 읽고, 없으면 **던집니다**. 그 모듈을 `(template)/layout.tsx`·BFF
+라우트·랜딩 홈(§2-2 ⑵ 의 JSON-LD)이 물기 때문에 라우트가 500 이 됩니다 — **CSS 와 아무 상관 없는 500 입니다.**
 
 ```bash
 cp .env.example .env.local
@@ -629,8 +706,8 @@ cp .env.example .env.local
 
 | 변수 | 안 넣으면 |
 | --- | --- |
-| `ZALKERA_TENANT` | `/contact`·`/policies`·`/sitemap.xml`·BFF 가 500 이고 `npm run build` 도 실패한다(「CSS 가 깨졌다」로 오진하기 쉬운 자리). 랜딩은 이 값을 안 읽어 200 이다 |
-| `ZALKERA_API_BASE` | 백엔드 왕복이 실패. 우리 템플릿은 fail-soft 라 화면은 서지만 진열이 빈다 |
+| `ZALKERA_TENANT` | `/`·`/contact`·`/policies`·`/sitemap.xml`·BFF 가 500 이고 `npm run build` 도 실패한다(「CSS 가 깨졌다」로 오진하기 쉬운 자리) |
+| `ZALKERA_API_BASE` | 백엔드 왕복이 실패. fail-soft 라 화면은 서지만 진열이 비고, 홈 JSON-LD 도 빠진다(§2-2 ⑵) |
 | `ZALKERA_SITE_URL` | `robots.txt`·`sitemap.xml`·JSON-LD 에 `http://localhost:3000` 이 **박힌 채로 배포**됩니다 |
 
 > ⚠ **`.env.local` 을 zip 에 넣지 마십시오.** 검수가 시크릿으로 반려합니다.
@@ -682,8 +759,8 @@ kill %1
 
 > 뜰 때까지 기다리는 줄이 없으면 아직 안 뜬 서버에 물어 `000` 이 나옵니다.
 
-**`/contact` 가 500 이면** ⑴ `ZALKERA_TENANT` 를 넣었는지(§3-0) ⑵ 모듈이 깨졌는지 순으로,
-**`/` 가 500 이면** 랜딩 CSS·`page.tsx` 가 깨진 것입니다. `/tmp/dev.log` 에 이유가 있습니다.
+**500 이면** ⑴ `ZALKERA_TENANT` 를 넣었는지(§3-0) ⑵ CSS·모듈이 깨졌는지 순으로 보십시오.
+`/tmp/dev.log` 에 이유가 있습니다.
 
 **200 이어도 로그를 보십시오.** React 는 개발 빌드에서만 렌더 진단을 냅니다 — 상용 빌드에서는
 그 문구가 통째로 사라질 뿐 결함은 남습니다.
@@ -706,6 +783,30 @@ grep -nE "Invalid DOM property|Invalid event handler property|does not recognize
 > ⚠ **검수기가 못 보는 것이 있습니다.** 하이드레이션 오류(`whitespace text nodes cannot be a
 > child of <table>`·`Hydration failed`)와 스크립트의 `Uncaught …` 는 **브라우저에서만** 찍힙니다.
 > 검수기는 `curl` 만 쓰므로 그 자리는 **아래 브라우저 확인이 유일한 그물**입니다.
+
+### 3-3. 메타·JSON-LD 확인
+
+개발 서버를 다시 띄우고 `<head>` 와 홈 그래프를 봅니다(§2-2 의 SEO·AEO 절).
+
+```bash
+npm run dev >/tmp/dev.log 2>&1 &
+for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:3000/ && break; sleep 1; done
+curl -s http://localhost:3000/ | grep -oE '<title>[^<]*</title>|<meta name="description"[^>]*>|<link rel="canonical"[^>]*>|<meta property="og:[a-z_:]+"[^>]*>'
+# 시안 <head> 의 값 그대로 · canonical 과 og:url 은 ZALKERA_SITE_URL 로 시작해야 한다
+curl -s http://localhost:3000/ | grep -oE '<script type="application/ld\+json">[^<]*</script>' | sed -E 's/<[^>]+>//g'
+# 백엔드가 이 테넌트의 설정을 돌려줄 때만 Organization 그래프가 나온다. 로컬에 백엔드·테넌트가 없으면 비어 있는 것이 정상이고, 그 자리는 개시 후 스모크가 본다
+ZALKERA_AEO_ALLOW_LOCAL=1 npm run check:aeo -- http://localhost:3000 --site-wide-only
+# ✅ siteWide/robots · ✅ siteWide/sitemap · ⏭️ siteWide/sitemap-covers-required-routes(무주장이라 SKIPPED) · ✅ siteWide/absolute-urls → rc 0
+kill %1
+```
+
+`ZALKERA_AEO_ALLOW_LOCAL=1` 이 없으면 검사기가 `내부 주소는 검사하지 않습니다` 로 rc=2 를 내고 멈춥니다 —
+로컬 주소를 여러 번 부르는 도구라 기본으로 막아 둔 것입니다.
+
+`--category MARKETING` 은 개시 후 스모크용입니다. 이 레인의 팩에서는 `required/cms-page-ssr: MISSING_ROUTE`
+가 나오고 판정은 FAIL·rc 1 입니다(§2-2 ⑵ — 간판은 못 겁니다). 이 레인에서는 예상된 결과이고, 그 스냅샷을
+promote 입력으로 넘기지 마십시오. 그 출력에서 볼 것은 `required/home-organization` 이 PASS 인지,
+`negative/no-Review`·`no-AggregateRating` 이 PASS 인지입니다.
 
 ### 브라우저 콘솔도 보십시오 — **모든 주소를, 개발 모드로**
 
@@ -860,13 +961,15 @@ node scripts/verify-zip.mjs ../pack-<이름>-<날짜>.zip     # rc 0
 | `[EDECL]` rc=7 | 선언은 **없는데** 루트가 싣는 CSS 가 우리 토큰 이름을 쓴다(`--radius-knob`·`--color-surface` 등 다섯 중 둘 이상). 두 루트 레이아웃 형상에서는 검사기가 그 CSS 를 읽지 않아 서지 않는다 | §1-3 · §3-1 |
 | `[S2]`·`[S4]`·`[S8]`·N 이 error | `zalkera` 선언을 **안 지웠다** | §1-3 |
 | `content/pages 가 없는데 매니페스트가 그 안을 가져옵니다` | ⑴ 로 `content/pages` 를 지우고 `content/index.ts` 의 `import … from "./pages/…"` 를 남겼다 | §2-1 ⑷ |
-| 시안 제목이 안 뜬다(오류 없음) | 랜딩 레이아웃에 `generateMetadata()` 를 두었다 | §2-2 |
+| 시안 제목이 안 뜬다(오류 없음) · 시안 `og:*` 가 회사명으로 바뀐다 | 랜딩 레이아웃 또는 페이지에 `generateMetadata()` 를 두었다 | §2-2 |
 | `/contact`·`/policies` 가 왼쪽에 붙고 여백·입력칸 테두리가 없다 | 루트 레이아웃이 하나다 — 시안 CSS 가 템플릿 페이지에 닿는다 | §2-1 ⑵ |
 | `[S3] app/layout.* … 을 찾지 못했습니다`(경고) | 두 루트 레이아웃 형상 — 정상. 루트 `layout.tsx` 를 만들지 않는다 | §3-1 |
 | `[D2] llms.txt 가 본보기로 지목한 …`(경고) | `package.json` 의 `name` 을 안 바꿨다 | §1-3 |
 | 콘솔에 `favicon.ico` 404 | 파비콘은 발주처 자산 — 집계에서 빼고 자리표시자로 | §2-5 |
 | `theme-color` 가 시안과 다르다 | 시안에 둘일 때 뒤의 값을 골랐다 — 브라우저는 첫 값을 쓴다 | §2-2 |
-| `/contact`·`/policies` 가 500 인데 CSS 는 멀쩡 | `ZALKERA_TENANT` 미설정 | §3 |
+| 어느 라우트든 500 인데 CSS 는 멀쩡 | `ZALKERA_TENANT` 미설정 | §3 |
+| 홈에 JSON-LD 가 안 나온다 | 백엔드에 못 닿아 `config` 가 `null`(로컬에 백엔드·테넌트가 없을 때) — 서빙에서 다시 본다 | §2-2 ⑵ |
+| `check:aeo` 가 `내부 주소는 검사하지 않습니다` 로 rc=2 | 로컬 주소 — `ZALKERA_AEO_ALLOW_LOCAL=1` 을 준다 | §3-3 |
 | `--byo 선언이 zip 과 맞지 않습니다` | 템플릿 파생인데 `--byo` 를 붙임 | §3 |
 | SVG 가 안 보임 | `viewbox` 를 소문자로 둠 | §2-2 |
 | **Invalid DOM property** `stop-color` | 하이픈 SVG 속성 — `tsc` 가 안 잡는다 | §2-2 |
@@ -888,7 +991,8 @@ zip 1개 + 그 안의 `NOTE.md`·`AGENTS.md`·`.zalkera/ASSETS-LICENSE.md`.
 `typecheck` rc · `validate` rc(경고 종류별 건수) · `npm test` rc · `build` rc ·
 `dev GET /`·`/contact` 상태코드 · `/contact`→`/` 이동 뒤 `link[rel=stylesheet]` 수 ·
 **주소별** 콘솔 오류 건수(어느 주소를 봤는지 같이) · 외부 호스트 건수 ·
-본문 글자수(시안 대 팩) · `verify-zip` rc.
+본문 글자수(시안 대 팩) · `<title>`·canonical·og 유무 · 홈 JSON-LD `@type`·`url`(로컬에서 `config`
+미도달이면 「0건 — 개시 후 스모크에서 확인」) · `check:aeo --site-wide-only` rc · `verify-zip` rc.
 
 **기계 검사 통과는 인수가 아닙니다.** 사람이 볼 것이 남습니다 —
 자산 출처 실제 대조 · 자리표시자 연락처·파비콘 · NOTE 「추가한 것」의 발주처 확인 ·
