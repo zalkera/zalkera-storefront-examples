@@ -76,9 +76,9 @@ Tailwind 가 랜딩에 닿으면 시안이 어긋납니다. 그래서 둘을 **�
 
 **입력** — 고객이 완성해 건넨 HTML 1장. 스타일은 인라인 `<style>`, 동작은 인라인 `<script>`.
 **출력** — 잘커라에 업로드해 서빙되는 Next.js 소스 zip 1개.
-**성질** — 랜딩은 **정적**입니다. 마크업·CSS·스크립트·메타가 소스에 하드코딩되고 백엔드를 부르지
-않습니다. 백엔드 연동은 템플릿 페이지(문의·정책)의 몫이고, 상품·글·콘텐츠 페이지 같은 동적 콘텐츠가
-생기는 날부터 헤드리스 연동이 들어옵니다.
+**성질** — 랜딩은 **정적**입니다. 마크업·CSS·스크립트가 소스에 하드코딩되고 **랜딩 페이지는** 백엔드를
+부르지 않습니다(메타의 절대 URL·검색엔진 인증값만 env 로 들어옵니다). 백엔드 연동은 템플릿 페이지(문의·정책)와
+`sitemap.ts` 의 몫이고, 상품·글·콘텐츠 페이지 같은 동적 콘텐츠가 생기는 날부터 헤드리스 연동이 들어옵니다.
 
 **이 레인이 아닌 것** — 아래를 하라고 시키지 않았다면 하지 마십시오.
 
@@ -719,7 +719,7 @@ cp .env.example .env.local
 | 변수 | 안 넣으면 |
 | --- | --- |
 | `ZALKERA_TENANT` | `/contact`·`/policies`·`/sitemap.xml`·BFF 가 500 이고 `npm run build` 도 실패한다(「CSS 가 깨졌다」로 오진하기 쉬운 자리). 랜딩은 이 값을 안 읽어 200 이다 |
-| `ZALKERA_API_BASE` | 백엔드 왕복이 실패. fail-soft 라 화면은 서지만 진열이 빈다. 랜딩은 무관하다 |
+| `ZALKERA_API_BASE` | 백엔드 왕복이 실패. fail-soft 라 화면은 서지만 `/policies` 본문이 비고 `/contact` 전송이 실패하며 `sitemap.xml` 에 상품·글 URL 이 안 실린다. 랜딩 화면은 무관하다 |
 | `ZALKERA_SITE_URL` | `robots.txt`·`sitemap.xml`·JSON-LD 에 `http://localhost:3000` 이 **박힌 채로 배포**됩니다 |
 
 > ⚠ **`.env.local` 을 zip 에 넣지 마십시오.** 검수가 시크릿으로 반려합니다.
@@ -772,7 +772,7 @@ kill %1
 > 뜰 때까지 기다리는 줄이 없으면 아직 안 뜬 서버에 물어 `000` 이 나옵니다.
 
 **`/contact` 가 500 이면** ⑴ `ZALKERA_TENANT` 를 넣었는지(§3-0) ⑵ 모듈이 깨졌는지 순으로,
-**`/` 가 500 이면** 랜딩 CSS·`page.tsx` 가 깨진 것입니다. `/tmp/dev.log` 에 이유가 있습니다.
+**`/` 가 500 이면** 랜딩 CSS·`(landing)/layout.tsx`·`page.tsx` 가 깨진 것입니다. `/tmp/dev.log` 에 이유가 있습니다.
 
 **200 이어도 로그를 보십시오.** React 는 개발 빌드에서만 렌더 진단을 냅니다 — 상용 빌드에서는
 그 문구가 통째로 사라질 뿐 결함은 남습니다.
@@ -818,7 +818,9 @@ kill %1
 `--category MARKETING` 은 개시 후 스모크용입니다. 이 레인의 팩에서는 `required/cms-page-ssr: MISSING_ROUTE`
 가 나오고 판정은 FAIL·rc 1 입니다(§2-2 ⑵ — 간판은 못 겁니다). 이 레인에서는 예상된 결과이고, 그 스냅샷을
 promote 입력으로 넘기지 마십시오. 그 출력에서 볼 것은 `required/home-organization` 이 PASS 인지
-(하드코딩 그래프라 로컬에서도 PASS 여야 합니다), `negative/no-Review`·`no-AggregateRating` 이 PASS 인지입니다.
+(그래프는 하드코딩이라 백엔드 없이도 나옵니다 — 그래도 `NOT_SSR` 이면 시안에 글자 있는 `<h1>` 이 없는
+것입니다. 본문은 고치지 말고 NOTE 의 발주처 확인 항목에 적으십시오), `negative/no-Review`·`no-AggregateRating`
+이 PASS 인지입니다.
 
 ### 브라우저 콘솔도 보십시오 — **모든 주소를, 개발 모드로**
 
