@@ -226,7 +226,7 @@ const access = {accessToken, phone, context: {clientIp: visitorIp(await headers(
 | CMS 고정 페이지 = `WebPage` + `BreadcrumbList` | `src/app/[slug]/page.tsx` · `webPageJsonLd` |
 | `FAQ_LIST` 섹션 = `FAQPage` 직접 산출 | `src/components/sections/FaqListSection.tsx` |
 | `sitemap.ts`·`robots.ts` 필수 · 목록 라우트 등재 · 빈 목록 미등재 | `src/app/sitemap.ts` · `src/app/robots.ts` |
-| sitemap 규모 — 열거 상한 상품·글 각 5,000건(`MAX_PAGES × PAGE_SIZE`) · 초과·백엔드 미도달은 서버 로그 경고 · 분할은 하위 라우트의 `generateSitemaps`(`app/sitemap.ts` 에는 금지) · `lastModified` 는 원본 시각 있을 때만 | `src/app/sitemap.ts` |
+| sitemap 규모 — 열거 상한 상품·글 각 5,000건(`MAX_PAGES × PAGE_SIZE`) · 초과·백엔드 미도달은 서버 로그 경고 · 분할은 하위 라우트의 `generateSitemaps`(루트 `src/app/sitemap.ts` 에는 금지) · `lastModified` 는 원본 시각 있을 때만 | `src/app/sitemap.ts` |
 | 절대 URL(JSON-LD·sitemap·robots) | `src/lib/site.ts` 의 `siteUrl()` — 모든 그래프가 이걸 통과한다 |
 | ISR 유지(그래프를 넣는다고 동적으로 만들지 않는다) | 각 공개 `page.tsx` 의 `force-static` + `revalidate` · validator **C1/C1b** 가 회귀를 막는다 |
 | 이미지는 `/media/{id}` 안정 URL · presigned 금지 | `src/app/media/[id]/route.ts`(302 Location 만 넘긴다 — 바이트를 런타임에 안 태운다) |
