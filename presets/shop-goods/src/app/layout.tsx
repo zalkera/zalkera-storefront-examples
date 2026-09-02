@@ -7,6 +7,7 @@ import {zalkera} from "@/lib/zalkera";
 import {parseSeo} from "@/lib/seo";
 import {fallbackSiteName, metadataBaseUrl} from "@/lib/site";
 import {SiteFooter} from "@/components/SiteFooter";
+import {Analytics} from "@/components/Analytics";
 
 // 콘솔 주입 축을 걷었으므로 배선이 **없는 것이 정상**이다 — 배선만 남기면 콘솔에서 색을 바꿔도
 // 화면이 안 움직여 거짓 성공이 된다. 색을 바꾸려면 `@theme` 의 토큰 값을 고친다.
@@ -87,6 +88,8 @@ export default async function RootLayout({children}: {children: ReactNode}) {
                     {children}
                     <SiteFooter menus={footerMenus} />
                 </div>
+                {/* 분석 태그 — env 에 측정 ID 가 있을 때만 실린다(없으면 null). 전 라우트 공통이라 루트에 둔다. */}
+                <Analytics />
             </body>
         </html>
     );
