@@ -21,9 +21,14 @@ export const revalidate = 3600;
 
 /**
  * 열거 상한 — 상품·글 각각 `MAX_PAGES × PAGE_SIZE` 건까지만 싣는다. 크롤 1회가 백엔드를 끝없이 훑지 않게
- * 하는 안전장치이고, 이 상한을 넘는 항목은 sitemap 에서 **빠진다**. 그래서 넘치면 아래가 서버 로그에 경고를
- * 남긴다 — 조용히 누락하지 않는다(llms.txt §5.1). 카탈로그가 여기 닿으면 `generateSitemaps` 로 인덱스 + 분할
- * 파일로 옮긴다. 한 sitemap 파일의 규격 상한은 URL 50,000건·비압축 50MB 라 이 상한 안에서는 한 파일로 충분하다.
+ * 하는 안전장치이고, 이 상한을 넘는 항목은 sitemap 에서 **빠진다**. 그래서 상한 초과와 백엔드 미도달은 아래가
+ * 서버 로그에 경고로 남긴다(llms.txt §5.1 — 조용히 누락하는 sitemap 은 「있는 것을 없다고 말하는」 거짓이다).
+ * 한 sitemap 파일의 규격 상한은 URL 50,000건·비압축 50MB 라 이 상한 안에서는 한 파일로 충분하다.
+ *
+ * 카탈로그가 여기 닿으면 **하위 라우트로** 나눈다 — `app/products/sitemap.ts` 에 `generateSitemaps` 를 두면
+ * `/products/sitemap/0.xml` 이 되고, 그 주소들을 `robots.ts` 의 `sitemap` 배열에 싣는다.
+ * ⚠ **이 파일에 `generateSitemaps` 를 넣지 마라** — 라우트가 `/sitemap/[id].xml` 로 바뀌어 `/sitemap.xml` 이
+ *   사라지고(Next 는 인덱스를 만들지 않는다) robots 가 가리키던 자리와 AEO 게이트가 같이 깨진다.
  */
 const MAX_PAGES = 50;
 const PAGE_SIZE = 100;
@@ -33,8 +38,14 @@ const ENUMERATION_CAP = MAX_PAGES * PAGE_SIZE;
 function warnTruncated(what: string): void {
     console.warn(
         `sitemap: ${what} ${ENUMERATION_CAP}건 상한에 걸렸다 — 그 뒤 항목은 sitemap 에서 빠진다. ` +
-            "generateSitemaps 로 인덱스+분할로 옮기라(llms.txt §5.1).",
+            "하위 라우트(app/products/sitemap.ts 등)의 generateSitemaps 로 나누고 robots.ts 의 sitemap 배열에 " +
+            "실으라 — 이 파일에 넣으면 /sitemap.xml 이 없어진다(llms.txt §5.1).",
     );
+}
+
+/** 백엔드에 못 닿아 한 축이 통째로 빠진 것을 남긴다 — fail-soft 로 축소된 sitemap 이 나갔다는 사실이다. */
+function warnFetchFailed(what: string): void {
+    console.warn(`sitemap: ${what} 목록을 못 읽었다 — 이 축이 통째로 빠진 sitemap 이 나간다(백엔드 미도달).`);
 }
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
@@ -42,9 +53,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
     const products: MetadataRoute.Sitemap = [];
     for (let page = 0; page < MAX_PAGES; page++) {
-        // 백엔드가 죽어도 sitemap 은 홈만이라도 내야 한다 — 500 보다 축소된 sitemap 이 낫다.
+        // 백엔드가 죽어도 sitemap 은 홈만이라도 내야 한다 — 500 보다 축소된 sitemap 이 낫다. 다만 말은 남긴다.
         const result = await zalkera.listProducts({page, size: PAGE_SIZE}).catch(() => null);
-        if (!result) break;
+        if (!result) {
+            warnFetchFailed("상품");
+            break;
+        }
 
         for (const p of result.content) {
             products.push({url: `${base}/products/${p.slug}`, changeFrequency: "daily", priority: 0.8});
@@ -84,7 +98,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     const posts: MetadataRoute.Sitemap = [];
     for (let page = 0; page < MAX_PAGES; page++) {
         const result = await zalkera.listPosts({page, size: PAGE_SIZE}).catch(() => null);
-        if (!result) break;
+        if (!result) {
+            warnFetchFailed("글");
+            break;
+        }
 
         for (const p of result.content) {
             posts.push({
