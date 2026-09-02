@@ -194,7 +194,8 @@ Google Fonts·CDN·트래커·분석 비콘은 전부 팩 안으로 내리거나
 그 대신 시작 팩의 `src/components/Analytics.tsx` 를 랜딩 레이아웃에 렌더합니다(§2-1 ⑵). 그 컴포넌트는
 `NEXT_PUBLIC_GA4_ID` 가 있을 때만 GA4 로더를 싣고 없으면 아무것도 내지 않습니다. ID 는 **소스에 박지 않습니다**
 — 관리형은 콘솔 「사이트 환경변수」, 자체 배포는 `.env.local` 에 둡니다. 시안 스크립트에서 발견한 컨테이너·측정
-ID 는 자리표시자 표에 올려 발주처에 확인하고, 확인된 값을 그 자리에 넣습니다.
+ID 는 자리표시자 표에 올려 발주처에 확인하고, 확인된 **GA4 측정 ID(`G-…`)** 를 그 자리에 넣습니다. GTM 컨테이너
+ID(`GTM-…`)는 그 자리에 안 들어갑니다(§2-4 ⑷).
 
 ---
 
@@ -586,8 +587,9 @@ js = "\n;\n".join(blocks)
 
 **⑷ 광고·분석 스니펫도 여기서 걷습니다.** Google Tag Manager 로더가 흔히 섞여 있고, 컨테이너
 주소가 상대경로로 바뀐 채라 **매 방문마다 404** 를 냅니다(`dataLayer`·`developer_id` 로 찾으십시오).
-거기 든 컨테이너·측정 ID(`GTM-…`·`G-…`)는 버리지 말고 자리표시자 표에 적습니다 — 발주처가 확인해 주면
-`NEXT_PUBLIC_GA4_ID` 로 들어갑니다(§1-6).
+거기 든 컨테이너·측정 ID(`GTM-…`·`G-…`)는 버리지 말고 자리표시자 표에 적습니다 — 발주처가 확인해 준
+**GA4 측정 ID(`G-` 로 시작)만** `NEXT_PUBLIC_GA4_ID` 로 들어갑니다. GTM 컨테이너(`GTM-`)는 이 자리로 안
+들어갑니다(형식이 달라 무시됩니다) — 필요하면 AGENTS.md 「분석 태그」 절대로 컴포넌트를 따로 둡니다(§1-6).
 
 **⑸ 다 이었으면 구문을 검사하십시오.**
 
@@ -699,7 +701,7 @@ woff2 를 `public/fonts/` 로 내린 뒤 `@font-face` 를 `landing.css` 의 **�
 | 파일 | 무엇을 적나 |
 | --- | --- |
 | `NOTE.md` | 시안 대비 **고친 것 전부**(§2-3 ⑴⑵·`data:` 추출 포함) · **「추가한 것」**(시안에 없던 파일이 하나라도 있으면 그 절을 둔다 — §2-5 의 폰트 추정이 여기 온다) · 자리표시자 목록 · 검증 결과 |
-| `AGENTS.md` | 다음 LLM 이 고칠 좌표와 **금지사항** — §1 의 요약에 더해 「루트 레이아웃은 둘이다, 루트 `layout.tsx` 를 만들지 마라」(§2-1 ⑵)와 「`landing.css` 에 Tailwind 를 들이지 마라」(§2-3) |
+| `AGENTS.md` | 다음 LLM 이 고칠 좌표와 **금지사항** — §1 의 요약에 더해 「루트 레이아웃은 둘이다, 루트 `layout.tsx` 를 만들지 마라」(§2-1 ⑵)와 「`landing.css` 에 Tailwind 를 들이지 마라」(§2-3), 그리고 「분석 태그는 `NEXT_PUBLIC_GA4_ID` 로만 — 콘솔 `analyticsConfig` 를 잇지 마라」(§1-6) |
 | `.zalkera/ASSETS-LICENSE.md` | 동봉 자산 출처·라이선스 |
 
 **시안 스크립트의 키·토큰을 눈으로 훑으십시오.** `public/mockup.js` 는 **공개 서빙되는 자리**라
@@ -822,8 +824,12 @@ curl -s http://localhost:3000/ | grep -oE '<script type="application/ld\+json">[
 # Organization 그래프 한 덩어리 — @type·name·url(절대 URL)·telephone(시안에 있을 때만). 백엔드 없이도 나와야 한다(하드코딩)
 ZALKERA_AEO_ALLOW_LOCAL=1 npm run check:aeo -- http://localhost:3000 --site-wide-only
 # ✅ siteWide/robots · ✅ siteWide/sitemap · ⏭️ siteWide/sitemap-covers-required-routes(무주장이라 SKIPPED) · ✅ siteWide/absolute-urls → rc 0
-curl -s http://localhost:3000/ | grep -c 'googletagmanager.com/gtag/js'
-# NEXT_PUBLIC_GA4_ID 가 비어 있으면 0 · 넣고 서버를 다시 띄우면 1 — 둘 다 확인해야 배선이 산 것이다
+curl -s http://localhost:3000/ | grep -c 'googletagmanager\.com/gtag/js'   # 0 이어야 한다(ID 미설정)
+kill %1
+NEXT_PUBLIC_GA4_ID=G-TEST1234 npm run dev >/tmp/dev-ga.log 2>&1 &
+for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:3000/ && break; sleep 1; done
+curl -s http://localhost:3000/ | grep -c 'googletagmanager\.com/gtag/js'   # 1 이상이어야 한다
+# 둘 다 봐야 배선이 산 것이다. 0→0 이면 <Analytics /> 가 레이아웃에 없다
 kill %1
 ```
 
