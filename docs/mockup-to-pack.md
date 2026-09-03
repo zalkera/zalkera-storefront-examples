@@ -436,11 +436,26 @@ export const metadata: Metadata = {
     },
     // twitter:card 는 summary·summary_large_image 만 그대로 옮긴다. 그 밖의 값이면 twitter 를 통째로 빼고 NOTE 에 적는다.
     twitter: {card: "<twitter:card 그대로>", title: "<twitter:title>", description: "<twitter:description>"},   // 있을 때만
-    ...(process.env.NEXT_PUBLIC_NAVER_SITE_VERIFICATION?.trim()
-        ? {verification: {other: {"naver-site-verification": process.env.NEXT_PUBLIC_NAVER_SITE_VERIFICATION.trim()}}}
-        : {}),                                      // (template)/layout.tsx 와 같은 배선 — 콘솔 값이 env 로 들어온다
+    // 검색엔진 소유 확인 메타 — 콘솔 「사이트 환경변수」 값이 env 로 들어온다. 비어 있으면 태그를 안 낸다(빈 content 는 검증 실패).
+    ...(process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION?.trim() ||
+    process.env.NEXT_PUBLIC_NAVER_SITE_VERIFICATION?.trim()
+        ? {
+              verification: {
+                  ...(process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION?.trim()
+                      ? {google: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION.trim()}
+                      : {}),
+                  ...(process.env.NEXT_PUBLIC_NAVER_SITE_VERIFICATION?.trim()
+                      ? {other: {"naver-site-verification": process.env.NEXT_PUBLIC_NAVER_SITE_VERIFICATION.trim()}}
+                      : {}),
+              },
+          }
+        : {}),
 };
 ```
+
+`verification.google` 은 `<meta name="google-site-verification">` 로, `other` 는 `<meta name="naver-site-verification">` 으로
+나갑니다. 값은 Search Console·서치어드바이저가 주는 확인 문자열이고 **소스에 박지 않습니다** — 두 콘솔에서 사이트를 등록해
+`/sitemap.xml` 을 제출하는 일은 개시 뒤 오너 몫입니다(§5).
 
 넣지 않는 것 — `robots: {index: false}`(발견 경로를 우리 손으로 닫는 일) · 시안에 없던 문구·키워드 · 없는
 이미지 · `authors`·`publisher` 같은 창작 필드. 본문 쪽(제목 태그 구조·`alt`·문구)은 손대지 않습니다 —
@@ -736,6 +751,8 @@ cp .env.example .env.local
 | `ZALKERA_API_BASE` | 백엔드 왕복이 실패. fail-soft 라 화면은 서지만 `/policies` 본문이 비고 `/contact` 전송이 실패하며 `sitemap.xml` 에 상품·글 URL 이 안 실린다. 랜딩 화면은 무관하다 |
 | `ZALKERA_SITE_URL` | `robots.txt`·`sitemap.xml`·JSON-LD 에 `http://localhost:3000` 이 **박힌 채로 배포**됩니다 |
 | `NEXT_PUBLIC_GA4_ID` | 비어 있으면 분석 태그가 안 실립니다 — 발주처가 ID 를 주기 전까지는 **비어 있는 것이 정상**입니다(§1-6) |
+| `NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION` | 비어 있으면 `<meta name="google-site-verification">` 이 안 나갑니다 — Search Console 소유 확인을 HTML 태그로 할 때만 필요하고, DNS 로 확인하면 비워 둡니다 |
+| `NEXT_PUBLIC_NAVER_SITE_VERIFICATION` | 비어 있으면 `<meta name="naver-site-verification">` 이 안 나갑니다 — 서치어드바이저 소유 확인을 HTML 태그로 할 때만 필요합니다 |
 
 > ⚠ **`.env.local` 을 zip 에 넣지 마십시오.** 검수가 시크릿으로 반려합니다.
 > 아래 `pack.py` 가 걸러 주지만, 트리 밖에 두는 편이 안전합니다.
@@ -825,11 +842,14 @@ curl -s http://localhost:3000/ | grep -oE '<script type="application/ld\+json">[
 ZALKERA_AEO_ALLOW_LOCAL=1 npm run check:aeo -- http://localhost:3000 --site-wide-only
 # ✅ siteWide/robots · ✅ siteWide/sitemap · ⏭️ siteWide/sitemap-covers-required-routes(무주장이라 SKIPPED) · ✅ siteWide/absolute-urls → rc 0
 curl -s http://localhost:3000/ | grep -c 'googletagmanager\.com/gtag/js'   # 0 이어야 한다(ID 미설정)
+curl -s http://localhost:3000/ | grep -c 'site-verification'                # 0 이어야 한다(env 미설정)
 kill %1
-NEXT_PUBLIC_GA4_ID=G-TEST1234 npm run dev >/tmp/dev-ga.log 2>&1 &
+NEXT_PUBLIC_GA4_ID=G-TEST1234 NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION=gtest NEXT_PUBLIC_NAVER_SITE_VERIFICATION=ntest npm run dev >/tmp/dev-ga.log 2>&1 &
 for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:3000/ && break; sleep 1; done
 curl -s http://localhost:3000/ | grep -c 'googletagmanager\.com/gtag/js'   # 1 이상이어야 한다
 # 둘 다 봐야 배선이 산 것이다. 0→0 이면 <Analytics /> 가 레이아웃에 없다
+curl -s http://localhost:3000/ | grep -oE '<meta name="(google|naver)-site-verification"[^>]*>'
+# 두 줄(content="gtest"·content="ntest")이어야 한다. 위 미설정 실행에서 0 → 여기서 2 여야 배선이 산 것이다
 kill %1
 ```
 
@@ -1006,6 +1026,7 @@ node scripts/verify-zip.mjs ../pack-<이름>-<날짜>.zip     # rc 0
 | 홈에 JSON-LD 가 안 나온다 | `(landing)/page.tsx` 에 `<JsonLd data={organization} />` 를 안 넣었다 | §2-2 ⑵ |
 | 홈 JSON-LD 의 `url` 이 `http://localhost:3000` | 빌드 때 `ZALKERA_SITE_URL` 이 없었다 | §3-0 |
 | 콘솔에 ID 를 넣었는데 GA 태그가 안 실린다 | 랜딩 레이아웃에 `<Analytics />` 가 없거나, 값이 `G-…` 형식이 아니거나, 값 변경 뒤 재빌드가 안 됐다 | §1-6 · §2-1 ⑵ |
+| Search Console·서치어드바이저가 소유 확인 태그를 못 찾는다 | 랜딩 `metadata.verification` 배선이 없거나 env 가 비었거나 값 변경 뒤 재빌드 전이다. 다른 루트 레이아웃(`/contact` 등)이 아니라 `/` 를 확인시켜야 한다 | §2-2 ⑴ · §3-0 |
 | 외부 호스트 요청에 `googletagmanager.com` 이 잡힌다 | `NEXT_PUBLIC_GA4_ID` 가 들어간 상태 — 발주처가 준 ID 면 정상, 아니면 env 를 비운다 | §1-6 |
 | `check:aeo` 가 `내부 주소는 검사하지 않습니다` 로 rc=2 | 로컬 주소 — `ZALKERA_AEO_ALLOW_LOCAL=1` 을 준다 | §3-3 |
 | `--byo 선언이 zip 과 맞지 않습니다` | 템플릿 파생인데 `--byo` 를 붙임 | §3 |
@@ -1034,4 +1055,7 @@ zip 1개 + 그 안의 `NOTE.md`·`AGENTS.md`·`.zalkera/ASSETS-LICENSE.md`.
 
 **기계 검사 통과는 인수가 아닙니다.** 사람이 볼 것이 남습니다 —
 자산 출처 실제 대조 · 자리표시자 연락처·파비콘 · NOTE 「추가한 것」의 발주처 확인 ·
-콘솔에서 `/policies` 의 정책·사업자 정보를 채웠는지 · 개시 후 화면 확인.
+콘솔에서 `/policies` 의 정책·사업자 정보를 채웠는지 · 개시 후 화면 확인 ·
+개시 후 Search Console·네이버 서치어드바이저에 사이트를 등록하고 `https://<사이트URL>/sitemap.xml` 을 제출(소유
+확인은 §3-0 의 `*_SITE_VERIFICATION` env — Search Console 은 DNS 레코드로도 된다. GA4 는 스트림 추가로 끝이고
+사이트맵을 받지 않는다).
