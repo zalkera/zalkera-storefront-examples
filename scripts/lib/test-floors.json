@@ -19,6 +19,7 @@
     "scripts/lib/floorGate.test.mjs": 11,
     "scripts/lib/contentRoutes.test.mjs": 12,
     "src/lib/preview.test.ts": 4,
+    "src/lib/siteVerification.test.ts": 6,
     "scripts/lib/packGate.test.mjs": 6,
     "scripts/lib/packManifest.test.mjs": 8,
     "scripts/lib/validateSeverity.test.mjs": 3,

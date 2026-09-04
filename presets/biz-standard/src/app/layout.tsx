@@ -5,7 +5,7 @@ import {SiteHeader} from "@/components/SiteHeader";
 import {loadNav} from "@/lib/content";
 import {zalkera} from "@/lib/zalkera";
 import {parseSeo} from "@/lib/seo";
-import {fallbackSiteName, metadataBaseUrl} from "@/lib/site";
+import {fallbackSiteName, metadataBaseUrl, siteVerification} from "@/lib/site";
 import {SiteFooter} from "@/components/SiteFooter";
 import {Analytics} from "@/components/Analytics";
 
@@ -44,10 +44,6 @@ export async function generateMetadata(): Promise<Metadata> {
     const config = await zalkera.getSiteConfig({tags: ["site-config"]}).catch(() => null);
     const seo = parseSeo(config?.seoDefaults);
     const siteName = seo.title ?? config?.companyName ?? fallbackSiteName();
-    // 네이버 서치어드바이저 소유확인 메타. 값은 테넌트별로 다르고 브라우저에 그대로 노출되는 공개 문자열이라
-    // `NEXT_PUBLIC_*` 로 주입한다 — 콘솔에서 테넌트가 자기 값을 넣으면
-    // 재빌드로 반영된다. 미설정이면 태그 자체를 내지 않는다(빈 content 는 검증 실패로 잡힌다).
-    const naver = process.env.NEXT_PUBLIC_NAVER_SITE_VERIFICATION?.trim();
     return {
         // canonical·og:url 의 상대 경로를 절대 URL 로 해석하는 기준점. 크롤러는 상대 canonical 을 신뢰하지
         // 않으므로 이게 없으면 아래 canonical 이 무의미해진다.
@@ -65,7 +61,9 @@ export async function generateMetadata(): Promise<Metadata> {
         title: {default: siteName, template: `%s | ${config?.companyName ?? siteName}`},
         // 없는 문구를 지어내지 않는다 — 생략이 낫다.
         description: seo.description,
-        ...(naver ? {verification: {other: {"naver-site-verification": naver}}} : {}),
+        // 구글 서치 콘솔·네이버 서치어드바이저·Bing 웹마스터 도구의 소유확인 메타.
+        // 값은 콘솔 「사이트 환경변수」에서 env 로 온다 — 셋 다 비면 키 자체가 없다(`@/lib/site`).
+        verification: siteVerification(),
     };
 }
 

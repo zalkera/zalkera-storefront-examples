@@ -405,6 +405,26 @@ npx prettier --list-different .
 - GTM 컨테이너·Meta 픽셀 등 다른 태그가 필요하면 같은 형태(env 조건부·형식 검증·`afterInteractive`)로 컴포넌트를 더한다.
   시안 HTML 에 박혀 온 로더 스니펫을 그대로 옮기지 않는다.
 
+## 검색엔진 소유확인 — env 로만, 세 도구 각각
+
+`src/lib/site.ts` 의 `siteVerification()` 이 세 env 를 읽어 루트 `layout.tsx` 의 `metadata.verification` 을 짓는다.
+
+| env | 나가는 태그 | 도구 |
+| --- | --- | --- |
+| `NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION` | `<meta name="google-site-verification">` | 구글 서치 콘솔 |
+| `NEXT_PUBLIC_NAVER_SITE_VERIFICATION` | `<meta name="naver-site-verification">` | 네이버 서치어드바이저 |
+| `NEXT_PUBLIC_BING_SITE_VERIFICATION` | `<meta name="msvalidate.01">` | Bing 웹마스터 도구 |
+
+- **셋 다 비면 `verification` 키 자체를 안 낸다.** 빈 `content` 는 각 도구의 검증에서 실패로 잡힌다.
+- **토큰 값만 받는다.** 각 도구는 `<meta … content="XXXX" />` 를 통째로 보여 주는데, 그것을 그대로 넣으면
+  버리고 경고를 남긴다 — 값이 틀린 태그는 「나갔는데 확인은 안 되는」 상태라 원인이 안 보인다.
+- **토큰을 소스에 박지 마라.** 관리형은 콘솔 「사이트 환경변수」, 자체 배포는 `.env.local`. 박으면 이 팩을
+  받아 쓰는 다음 사이트가 남의 속성을 자기 것이라 주장한다(`NEXT_PUBLIC_GA4_ID` 와 같은 이유).
+- Bing 의 meta 이름은 `msvalidate.01` 이다 — `bing-site-verification` 이 아니다. 틀리면 태그는 나가고 확인만 안 된다.
+- 다른 도구가 필요하면 `siteVerification()` 에 같은 형태(env 조건부·토큰 검증)로 더한다.
+
+판정은 `src/lib/siteVerification.test.ts` 가 함수를 실제로 불러 반환 형상으로 잠근다.
+
 ## 검증
 
 검사기가 **둘**이고, 재는 대상이 다르다. 하나로 합치지 마라 — 소스가 규약대로여도 산출물에 그래프가 안 나갈 수 있고, 그 반대도 가능하다.
