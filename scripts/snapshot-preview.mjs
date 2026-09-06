@@ -79,7 +79,7 @@ const IDENTITY_PATTERNS = [
  *
  * 사진에 남으면 그 토큰의 소유 계정이 우리 미리보기 경로의 웹마스터 소유권을 확인받는다
  * (URL 삭제 요청·크롤 제어·데이터 열람). 도구가 늘 때 `src/lib/site.ts` 만 고치고 여기를
- * 잊으면 그 도구만 조용히 샌다 — 실제로 Bing 이 그렇게 빠졌다(심의 실측).
+ * 잊으면 그 도구만 조용히 샌다.
  */
 const OWNERSHIP_META_NAMES = ["google-site-verification", "naver-site-verification", "msvalidate.01"];
 

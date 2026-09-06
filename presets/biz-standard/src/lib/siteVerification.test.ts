@@ -90,11 +90,11 @@ test("메타 태그 전문을 넣으면 버린다 — 값이 틀린 태그보다
 });
 
 test("꺾쇠 없이 내부 공백만 있어도 버린다 — 토큰에 공백은 없다", () => {
-    // 가드는 `/[<>\s]/` 인데, 붙여넣기 시험 문자열이 `<` 를 갖고 있어 `\s` 절이 단언에 안 걸려 있었다
-    // (심의 변이 M3: `\s` 를 지워도 6/6 초록). 꺾쇠가 없는 값으로 그 절만 따로 잠근다.
+    // 가드는 `/[<>\s]/` 다. 붙여넣기 시험은 `<` 로 잡히고 trim 시험은 `trim()` 이 먼저 먹으므로,
+    // `\s` 절을 잠그려면 **꺾쇠 없이 내부 공백만 있는** 값이 따로 필요하다.
     assert.equal(withEnv({NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION: "gtok abc"}), undefined);
     // ⚠ 가드가 잡지 못하는 것: `content="btok"` 처럼 **공백 없는 부분 붙여넣기**는 통과한다.
-    //   `=` 를 가드에 더하면 구글 토큰의 `=` 패딩을 오탐하므로(심의 실측) 일부러 두지 않았다.
+    //   `=` 를 가드에 더하면 구글 토큰의 `=` 패딩을 오탐하므로 일부러 두지 않았다.
     //   이 시험은 그 사실을 못 박는다 — 나중에 가드를 넓히면 여기가 먼저 빨개진다.
     assert.deepEqual(withEnv({NEXT_PUBLIC_BING_SITE_VERIFICATION: 'content="btok"'}), {
         other: {"msvalidate.01": 'content="btok"'},
@@ -136,8 +136,7 @@ function layoutSources(): {label: string; source: string}[] {
 }
 
 test("루트 layout 이 실제로 siteVerification() 을 metadata 에 싣는다", () => {
-    // 함수가 완벽해도 **아무도 안 부르면** 태그가 안 나간다. 그 형상이 그물 밖이었다
-    // (심의 변이 M7: 호출 지점과 import 를 지워도 `npm run verify` 가 rc=0 · 346/346).
+    // 함수가 완벽해도 **아무도 안 부르면** 태그가 안 나간다. 시험이 함수만 잠그면 그 형상이 그물 밖이다.
     // `NEXT_PUBLIC_*` 는 빌드 시 리터럴로 치환되므로 런타임 주입으로는 못 잰다 — 소스를 구문으로 본다
     // (`preview.test.ts` 와 같은 이유·같은 방식).
     const sources = layoutSources();
