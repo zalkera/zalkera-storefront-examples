@@ -15,6 +15,9 @@
  */
 import assert from "node:assert/strict";
 import test from "node:test";
+import {existsSync, readFileSync, readdirSync} from "node:fs";
+import {dirname, join} from "node:path";
+import {fileURLToPath} from "node:url";
 import {siteVerification} from "./site.ts";
 
 const NAMES = [
@@ -84,4 +87,62 @@ test("메타 태그 전문을 넣으면 버린다 — 값이 틀린 태그보다
         }),
         {other: {"naver-site-verification": "ntok"}},
     );
+});
+
+test("꺾쇠 없이 내부 공백만 있어도 버린다 — 토큰에 공백은 없다", () => {
+    // 가드는 `/[<>\s]/` 인데, 붙여넣기 시험 문자열이 `<` 를 갖고 있어 `\s` 절이 단언에 안 걸려 있었다
+    // (심의 변이 M3: `\s` 를 지워도 6/6 초록). 꺾쇠가 없는 값으로 그 절만 따로 잠근다.
+    assert.equal(withEnv({NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION: "gtok abc"}), undefined);
+    // ⚠ 가드가 잡지 못하는 것: `content="btok"` 처럼 **공백 없는 부분 붙여넣기**는 통과한다.
+    //   `=` 를 가드에 더하면 구글 토큰의 `=` 패딩을 오탐하므로(심의 실측) 일부러 두지 않았다.
+    //   이 시험은 그 사실을 못 박는다 — 나중에 가드를 넓히면 여기가 먼저 빨개진다.
+    assert.deepEqual(withEnv({NEXT_PUBLIC_BING_SITE_VERIFICATION: 'content="btok"'}), {
+        other: {"msvalidate.01": 'content="btok"'},
+    });
+});
+
+test("경고는 env 이름당 한 번만, 값은 싣지 않는다", () => {
+    const lines: string[] = [];
+    const saved = console.warn;
+    console.warn = (...args: unknown[]) => void lines.push(args.join(" "));
+    try {
+        // 같은 프로세스에서 여러 번 불러도(동적 라우트는 요청마다 돈다) 줄이 늘지 않아야 한다.
+        for (let i = 0; i < 5; i += 1) withEnv({NEXT_PUBLIC_NAVER_SITE_VERIFICATION: "<meta n>"});
+    } finally {
+        console.warn = saved;
+    }
+    assert.equal(lines.length, 1, `요청마다 경고가 늘면 로그가 폭주한다 — ${lines.length}줄`);
+    assert.match(lines[0], /NEXT_PUBLIC_NAVER_SITE_VERIFICATION/);
+    // 토큰이 로그로 새면 안 된다 — env 이름만 남긴다.
+    assert.ok(!lines[0].includes("<meta n>"), "경고에 값이 실렸다");
+});
+
+/** 이 시험 파일 옆의 `../app/layout.tsx` 와, 레포 루트에서 찾은 프리셋 사본 전부. */
+function layoutSources(): {label: string; source: string}[] {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const found: {label: string; source: string}[] = [];
+    const own = join(here, "..", "app", "layout.tsx");
+    if (existsSync(own)) found.push({label: "src/app/layout.tsx", source: readFileSync(own, "utf8")});
+    // 고객 zip 에는 `presets/` 가 없다 — 없으면 조용히 건너뛴다(결여를 실패로 만들지 않는다).
+    const presets = join(here, "..", "..", "..", "presets");
+    if (existsSync(presets)) {
+        for (const code of readdirSync(presets)) {
+            const f = join(presets, code, "src", "app", "layout.tsx");
+            if (existsSync(f)) found.push({label: `presets/${code}/src/app/layout.tsx`, source: readFileSync(f, "utf8")});
+        }
+    }
+    return found;
+}
+
+test("루트 layout 이 실제로 siteVerification() 을 metadata 에 싣는다", () => {
+    // 함수가 완벽해도 **아무도 안 부르면** 태그가 안 나간다. 그 형상이 그물 밖이었다
+    // (심의 변이 M7: 호출 지점과 import 를 지워도 `npm run verify` 가 rc=0 · 346/346).
+    // `NEXT_PUBLIC_*` 는 빌드 시 리터럴로 치환되므로 런타임 주입으로는 못 잰다 — 소스를 구문으로 본다
+    // (`preview.test.ts` 와 같은 이유·같은 방식).
+    const sources = layoutSources();
+    assert.ok(sources.length > 0, "layout.tsx 를 하나도 못 찾았다 — 시험이 아무것도 안 재고 있다");
+    for (const {label, source} of sources) {
+        assert.match(source, /import\s*\{[^}]*\bsiteVerification\b[^}]*\}\s*from\s*"@\/lib\/site"/, `${label}: siteVerification 를 import 하지 않는다`);
+        assert.match(source, /\bverification:\s*siteVerification\(\)/, `${label}: metadata.verification 에 배선되지 않았다`);
+    }
 });

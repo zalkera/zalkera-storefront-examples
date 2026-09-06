@@ -61,13 +61,26 @@ export function fallbackSiteName(): string {
  * 그래서 태그 조각(`<`·`>`)이나 공백이 든 값은 **버리고 경고를 남긴다**: 태그가 아예 없으면 각 도구가
  * 「확인 실패」로 말해 주므로, 있는데 값이 틀린 것보다 낫다.
  */
+/**
+ * 이미 경고한 env 이름. 루트 layout 의 `generateMetadata` 는 빌드 1회로 끝나지 않는다 —
+ * 동적 라우트(`/cart`·`/mypage`·`/orders/[orderNo]`)에서는 **요청마다** 돌고 ISR 재생성마다 다시 돈다.
+ * 잘못된 값은 빌드 시점에 고정되므로 요청마다 재판정할 새 정보가 없는데, 그대로 두면 같은 답을
+ * 요청당 최대 3줄씩 영구히 찍는다(심의 실측: `/cart` 지연 +3~8 ms · 요청당 489 B).
+ * 프로세스 수명 동안 env 이름별 한 번만 남긴다 — 진단 가치는 첫 줄에 다 있다.
+ */
+const warnedEnvNames = new Set<string>();
+
 function verificationToken(envName: string, raw: string | undefined): string | undefined {
     const value = raw?.trim();
     if (!value) return undefined;
     if (/[<>\s]/.test(value)) {
-        console.warn(
-            `${envName} 값에 태그·공백이 들어 있어 무시한다 — 메타 태그 전문이 아니라 content 의 토큰 값만 넣으라.`,
-        );
+        if (!warnedEnvNames.has(envName)) {
+            warnedEnvNames.add(envName);
+            // 값은 싣지 않는다 — 토큰이 로그로 새면 안 된다.
+            console.warn(
+                `${envName} 값에 태그·공백이 들어 있어 무시한다 — 메타 태그 전문이 아니라 content 의 토큰 값만 넣으라.`,
+            );
+        }
         return undefined;
     }
     return value;
@@ -78,7 +91,9 @@ function verificationToken(envName: string, raw: string | undefined): string | u
  *
  * 값은 테넌트마다 다르고 브라우저에 그대로 노출되는 공개 문자열이라 `NEXT_PUBLIC_*` 로 주입한다.
  * 관리형은 콘솔 「사이트 환경변수」에 넣으면 재빌드로 반영되고, BYO 는 `.env.local` 에 둔다.
- * **소스에 박지 않는다** — 박으면 이 팩을 받아 쓰는 다음 사이트가 남의 속성을 자기 것이라 주장한다.
+ * **소스에 박지 않는다** — 박힌 토큰을 다른 사이트가 서빙하면, 그 토큰을 발급받은 **원래 계정이 그 사이트의**
+ * **소유권을 확인받는다**(데이터 열람·사이트맵 제출·URL 삭제 요청·사용자 추가). 물려받은 쪽이 가해자가
+ * 아니라 피해자다 — 그래서 팩에 실값이 한 톨도 있으면 안 된다.
  *
  * 셋 다 비면 `undefined` 를 내 **`verification` 키 자체를 만들지 않는다** — 빈 `content` 는 각 도구의
  * 검증에서 실패로 잡히고, 없는 것만 못하다.

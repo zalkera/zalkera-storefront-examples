@@ -836,7 +836,7 @@ curl -s http://localhost:3000/ | grep -oE '<script type="application/ld\+json">[
 ZALKERA_AEO_ALLOW_LOCAL=1 npm run check:aeo -- http://localhost:3000 --site-wide-only
 # ✅ siteWide/robots · ✅ siteWide/sitemap · ⏭️ siteWide/sitemap-covers-required-routes(무주장이라 SKIPPED) · ✅ siteWide/absolute-urls → rc 0
 curl -s http://localhost:3000/ | grep -c 'googletagmanager\.com/gtag/js'   # 0 이어야 한다(ID 미설정)
-curl -s http://localhost:3000/ | grep -c 'site-verification'                # 0 이어야 한다(env 미설정)
+curl -s http://localhost:3000/ | grep -cE 'site-verification|msvalidate\.01'  # 0 이어야 한다(env 미설정)
 kill %1
 NEXT_PUBLIC_GA4_ID=G-TEST1234 NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION=gtest NEXT_PUBLIC_NAVER_SITE_VERIFICATION=ntest NEXT_PUBLIC_BING_SITE_VERIFICATION=btest npm run dev >/tmp/dev-ga.log 2>&1 &
 for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:3000/ && break; sleep 1; done
