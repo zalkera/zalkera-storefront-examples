@@ -128,7 +128,8 @@ function layoutSources(): {label: string; source: string}[] {
     if (existsSync(presets)) {
         for (const code of readdirSync(presets)) {
             const f = join(presets, code, "src", "app", "layout.tsx");
-            if (existsSync(f)) found.push({label: `presets/${code}/src/app/layout.tsx`, source: readFileSync(f, "utf8")});
+            if (existsSync(f))
+                found.push({label: `presets/${code}/src/app/layout.tsx`, source: readFileSync(f, "utf8")});
         }
     }
     return found;
@@ -142,7 +143,15 @@ test("루트 layout 이 실제로 siteVerification() 을 metadata 에 싣는다"
     const sources = layoutSources();
     assert.ok(sources.length > 0, "layout.tsx 를 하나도 못 찾았다 — 시험이 아무것도 안 재고 있다");
     for (const {label, source} of sources) {
-        assert.match(source, /import\s*\{[^}]*\bsiteVerification\b[^}]*\}\s*from\s*"@\/lib\/site"/, `${label}: siteVerification 를 import 하지 않는다`);
-        assert.match(source, /\bverification:\s*siteVerification\(\)/, `${label}: metadata.verification 에 배선되지 않았다`);
+        assert.match(
+            source,
+            /import\s*\{[^}]*\bsiteVerification\b[^}]*\}\s*from\s*"@\/lib\/site"/,
+            `${label}: siteVerification 를 import 하지 않는다`,
+        );
+        assert.match(
+            source,
+            /\bverification:\s*siteVerification\(\)/,
+            `${label}: metadata.verification 에 배선되지 않았다`,
+        );
     }
 });
