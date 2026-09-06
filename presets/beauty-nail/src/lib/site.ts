@@ -65,7 +65,7 @@ export function fallbackSiteName(): string {
  * 이미 경고한 env 이름. 루트 layout 의 `generateMetadata` 는 빌드 1회로 끝나지 않는다 —
  * 동적 라우트(`/cart`·`/mypage`·`/orders/[orderNo]`)에서는 **요청마다** 돌고 ISR 재생성마다 다시 돈다.
  * 잘못된 값은 빌드 시점에 고정되므로 요청마다 재판정할 새 정보가 없는데, 그대로 두면 같은 답을
- * 요청당 최대 3줄씩 영구히 찍는다.
+ * 요청당 3줄씩 영구히 찍는다(리다이렉트·오류 경로는 generateMetadata 가 2회 돌아 6줄).
  * 프로세스 수명 동안 env 이름별 한 번만 남긴다 — 진단 가치는 첫 줄에 다 있다.
  */
 const warnedEnvNames = new Set<string>();

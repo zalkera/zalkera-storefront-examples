@@ -183,6 +183,9 @@ const SOURCE_EXCLUDES = [
     // ⚠ **그 픽스처도 함께 뺀다.** 본체만 빼고 시험을 실으면 고객 트리에서 단독 실행 시
     // `ERR_MODULE_NOT_FOUND` 로 죽는다 — 형제 `visitor-ip-parity` 가 그렇게 한 번 나갔다.
     "scripts/lib/wiringParity.test.mjs",
+    // 소유확인 배선의 정본 전용 불변식. `snapshot-preview.mjs` 가 zip 에 없으므로 그 목록을
+    // 검사하는 이 시험도 고객 트리에서는 「모듈 없음」이 된다.
+    "scripts/lib/seoWiring.test.mjs",
     // 시험용 zip 작성기와 그 시험 — 검사기가 아니라 도구다. 고객이 부를 표면이 없다.
     "scripts/lib/miniZip.mjs",
     "scripts/lib/verifyZipJudgments.test.mjs",

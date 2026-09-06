@@ -117,15 +117,35 @@ test("경고는 env 이름당 한 번만, 값은 싣지 않는다", () => {
     assert.ok(!lines[0].includes("<meta n>"), "경고에 값이 실렸다");
 });
 
-/** 이 시험 파일 옆의 `../app/layout.tsx` 와, 레포 루트에서 찾은 프리셋 사본 전부. */
+/**
+ * 이 시험 파일 옆의 `../app/layout.tsx` 와, **정본 레포일 때만** 프리셋 사본 전부.
+ *
+ * 정본 판별은 `scripts/pack-preset.mjs` 의 존재로 한다(`ci.yml` 이 쓰는 것과 같은 표식) —
+ * 그 파일은 고객 zip 에 구조적으로 안 실린다. 홉 수를 세지 않고 **위로 훑어 찾는다**:
+ * `join(here, "..", "..")` 처럼 칸을 세면 한 칸 틀렸을 때 그냥 「없음」이 되어 조용히 건너뛴다.
+ *
+ * ⚠ 여기서 「정본이면 N벌이어야 한다」를 단언하지 않는다 — 그 조건절은 표식을 깨는 것으로 꺼진다.
+ *   5벌 강제는 배송되지 않는 `scripts/lib/seoWiring.test.mjs` 가 **조건 없이** 진다.
+ */
 function layoutSources(): {label: string; source: string}[] {
     const here = dirname(fileURLToPath(import.meta.url));
     const found: {label: string; source: string}[] = [];
     const own = join(here, "..", "app", "layout.tsx");
     if (existsSync(own)) found.push({label: "src/app/layout.tsx", source: readFileSync(own, "utf8")});
-    // 고객 zip 에는 `presets/` 가 없다 — 없으면 조용히 건너뛴다(결여를 실패로 만들지 않는다).
-    const presets = join(here, "..", "..", "..", "presets");
-    if (existsSync(presets)) {
+
+    let dir = here;
+    let canonicalRoot: string | null = null;
+    for (let hop = 0; hop < 6; hop += 1) {
+        if (existsSync(join(dir, "scripts", "pack-preset.mjs")) && existsSync(join(dir, "presets"))) {
+            canonicalRoot = dir;
+            break;
+        }
+        const up = dirname(dir);
+        if (up === dir) break;
+        dir = up;
+    }
+    if (canonicalRoot !== null) {
+        const presets = join(canonicalRoot, "presets");
         for (const code of readdirSync(presets)) {
             const f = join(presets, code, "src", "app", "layout.tsx");
             if (existsSync(f))
