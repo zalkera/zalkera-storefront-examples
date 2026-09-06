@@ -66,6 +66,11 @@ export const WIRING_FILES = [
     "src/lib/previewGuard.ts",
     "src/app/robots.ts",
     "src/app/sitemap.ts",
+    // ⚠ 위 둘이 부르는 본체다. `siteUrl()` 이 한 벌만 갈리면 그 팩의 sitemap 이 localhost 를 가리키고,
+    //   `siteVerification()` 이 갈리면 그 팩만 소유확인 태그를 안 낸다(둘 다 화면은 멀쩡하다).
+    //   시험 사본을 같이 잠그는 이유: 본체와 시험을 **함께** 고치는 편집은 하한표도 통과한다.
+    "src/lib/site.ts",
+    "src/lib/siteVerification.test.ts",
     // 잠근 판정의 **뜻**을 잠그는 회귀 픽스처. 규칙은 한 줄만 흔들려도 조용히 열리고,
     // `npm test` 는 레포 루트에서만 도니까 사본이 갈리면 아무도 모른다.
     "src/lib/crossOrigin.test.ts",

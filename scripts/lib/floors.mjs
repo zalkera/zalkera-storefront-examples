@@ -42,6 +42,7 @@ export const REQUIRED_FLOORS = {
     "scripts/lib/floorGate.test.mjs": 11,
     "scripts/lib/contentRoutes.test.mjs": 12,
     "src/lib/preview.test.ts": 4,
+    "src/lib/siteVerification.test.ts": 9,
 };
 
 /**

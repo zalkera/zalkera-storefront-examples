@@ -74,6 +74,15 @@ const IDENTITY_PATTERNS = [
     {label: "이메일", re: /[A-Za-z0-9._%+-]+(?:@|\s*[\[(]at[\])]\s*)[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g},
 ];
 
+/**
+ * 검색엔진 소유확인 meta 의 `name` — **이 목록 하나를 transform 과 verify 가 같이 본다.**
+ *
+ * 사진에 남으면 그 토큰의 소유 계정이 우리 미리보기 경로의 웹마스터 소유권을 확인받는다
+ * (URL 삭제 요청·크롤 제어·데이터 열람). 도구가 늘 때 `src/lib/site.ts` 만 고치고 여기를
+ * 잊으면 그 도구만 조용히 샌다 — 실제로 Bing 이 그렇게 빠졌다(심의 실측).
+ */
+const OWNERSHIP_META_NAMES = ["google-site-verification", "naver-site-verification", "msvalidate.01"];
+
 const REDACTED = "[가려짐]";
 
 // ── 인자 ─────────────────────────────────────────────────────────────────────
@@ -293,7 +302,8 @@ function dropsIdentityHead(tag, attrs) {
         const name = (attrOf(attrs, "name") ?? "").toLowerCase();
         if (prop.startsWith("og:")) return true;
         if (name.startsWith("twitter:")) return true;
-        if (name === "description" || name === "author" || name === "naver-site-verification" || name === "google-site-verification") return true;
+        if (name === "description" || name === "author") return true;
+        if (OWNERSHIP_META_NAMES.includes(name)) return true;
         if (name === "robots") return true; // 우리 noindex 로 교체한다
     }
     if (tag === "link") {
@@ -507,6 +517,12 @@ function verify(dir) {
         // 검사 범위가 처리 범위보다 좁으면 그 차이만큼 회귀가 조용히 산다.
         ok(!/<meta[^>]+name="twitter:/i.test(html), `${rel}: twitter:* meta 가 남아 있습니다(실사이트 신원)`);
         ok(!/<meta[^>]+name="description"/i.test(html), `${rel}: description meta 가 남아 있습니다(실사이트 소개문)`);
+        for (const vName of OWNERSHIP_META_NAMES) {
+            ok(
+                !new RegExp(`<meta[^>]+name="${vName.replace(/\./g, "\\.")}"`, "i").test(html),
+                `${rel}: ${vName} meta 가 남아 있습니다(실사이트 소유확인 토큰)`,
+            );
+        }
         ok(!/rel="canonical"/i.test(html), `${rel}: canonical 이 남아 있습니다(실사이트를 가리킵니다)`);
         // 재작성 대상이 아닌 속성으로 루트 절대경로가 새면 CDN 하위 프리픽스에서 404 가 된다.
         ok(!/\b(?:srcset|poster)\s*=\s*"[^"]*(?:https?:\/\/|\s\/|^\/)/i.test(html), `${rel}: srcset/poster 에 절대 URL·루트 절대경로가 남아 있습니다`);

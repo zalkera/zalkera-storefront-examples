@@ -436,25 +436,18 @@ export const metadata: Metadata = {
     },
     // twitter:card 는 summary·summary_large_image 만 그대로 옮긴다. 그 밖의 값이면 twitter 를 통째로 빼고 NOTE 에 적는다.
     twitter: {card: "<twitter:card 그대로>", title: "<twitter:title>", description: "<twitter:description>"},   // 있을 때만
-    // 검색엔진 소유 확인 메타 — 콘솔 「사이트 환경변수」 값이 env 로 들어온다. 비어 있으면 태그를 안 낸다(빈 content 는 검증 실패).
-    ...(process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION?.trim() ||
-    process.env.NEXT_PUBLIC_NAVER_SITE_VERIFICATION?.trim()
-        ? {
-              verification: {
-                  ...(process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION?.trim()
-                      ? {google: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION.trim()}
-                      : {}),
-                  ...(process.env.NEXT_PUBLIC_NAVER_SITE_VERIFICATION?.trim()
-                      ? {other: {"naver-site-verification": process.env.NEXT_PUBLIC_NAVER_SITE_VERIFICATION.trim()}}
-                      : {}),
-              },
-          }
-        : {}),
+    // 검색엔진 소유 확인 메타 — 시작 팩의 `src/lib/site.ts` 가 세 env 를 읽어 짓는다.
+    // 셋 다 비면 `undefined` 라 `verification` 키 자체가 안 나간다(빈 content 는 검증 실패).
+    verification: siteVerification(),
 };
 ```
 
-`verification.google` 은 `<meta name="google-site-verification">` 로, `other` 는 `<meta name="naver-site-verification">` 으로
-나갑니다. 값은 Search Console·서치어드바이저가 주는 확인 문자열이고 **소스에 박지 않습니다** — 두 콘솔에서 사이트를 등록해
+`siteVerification()` 은 `@/lib/site` 에서 가져옵니다 — 랜딩 레이아웃에도 `import {siteVerification} from "@/lib/site";`
+를 넣으십시오. **소유 확인 로직을 이 파일에 손으로 다시 쓰지 마십시오**: 토큰 검증(메타 태그 전문을 붙여넣은 값을
+버리는 자리)이 한 벌만 있어야 하고, 그 판정은 `src/lib/siteVerification.test.ts` 가 잠급니다.
+
+세 env 가 각각 `<meta name="google-site-verification">` · `<meta name="naver-site-verification">` ·
+`<meta name="msvalidate.01">`(Bing) 으로 나갑니다. 값은 Search Console·서치어드바이저가 주는 확인 문자열이고 **소스에 박지 않습니다** — 두 콘솔에서 사이트를 등록해
 `/sitemap.xml` 을 제출하는 일은 개시 뒤 오너 몫입니다(§5).
 
 넣지 않는 것 — `robots: {index: false}`(발견 경로를 우리 손으로 닫는 일) · 시안에 없던 문구·키워드 · 없는
@@ -753,6 +746,7 @@ cp .env.example .env.local
 | `NEXT_PUBLIC_GA4_ID` | 비어 있으면 분석 태그가 안 실립니다 — 발주처가 ID 를 주기 전까지는 **비어 있는 것이 정상**입니다(§1-6) |
 | `NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION` | 비어 있으면 `<meta name="google-site-verification">` 이 안 나갑니다 — Search Console 소유 확인을 HTML 태그로 할 때만 필요하고, DNS 로 확인하면 비워 둡니다 |
 | `NEXT_PUBLIC_NAVER_SITE_VERIFICATION` | 비어 있으면 `<meta name="naver-site-verification">` 이 안 나갑니다 — 서치어드바이저 소유 확인을 HTML 태그로 할 때만 필요합니다 |
+| `NEXT_PUBLIC_BING_SITE_VERIFICATION` | 비어 있으면 `<meta name="msvalidate.01">` 이 안 나갑니다 — Bing 웹마스터 도구 소유 확인을 Meta 태그로 할 때만 필요하고, Search Console 에서 가져오면 비워 둡니다 |
 
 > ⚠ **`.env.local` 을 zip 에 넣지 마십시오.** 검수가 시크릿으로 반려합니다.
 > 아래 `pack.py` 가 걸러 주지만, 트리 밖에 두는 편이 안전합니다.
@@ -842,14 +836,14 @@ curl -s http://localhost:3000/ | grep -oE '<script type="application/ld\+json">[
 ZALKERA_AEO_ALLOW_LOCAL=1 npm run check:aeo -- http://localhost:3000 --site-wide-only
 # ✅ siteWide/robots · ✅ siteWide/sitemap · ⏭️ siteWide/sitemap-covers-required-routes(무주장이라 SKIPPED) · ✅ siteWide/absolute-urls → rc 0
 curl -s http://localhost:3000/ | grep -c 'googletagmanager\.com/gtag/js'   # 0 이어야 한다(ID 미설정)
-curl -s http://localhost:3000/ | grep -c 'site-verification'                # 0 이어야 한다(env 미설정)
+curl -s http://localhost:3000/ | grep -cE 'site-verification|msvalidate\.01'  # 0 이어야 한다(env 미설정)
 kill %1
-NEXT_PUBLIC_GA4_ID=G-TEST1234 NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION=gtest NEXT_PUBLIC_NAVER_SITE_VERIFICATION=ntest npm run dev >/tmp/dev-ga.log 2>&1 &
+NEXT_PUBLIC_GA4_ID=G-TEST1234 NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION=gtest NEXT_PUBLIC_NAVER_SITE_VERIFICATION=ntest NEXT_PUBLIC_BING_SITE_VERIFICATION=btest npm run dev >/tmp/dev-ga.log 2>&1 &
 for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:3000/ && break; sleep 1; done
 curl -s http://localhost:3000/ | grep -c 'googletagmanager\.com/gtag/js'   # 1 이상이어야 한다
 # 둘 다 봐야 배선이 산 것이다. 0→0 이면 <Analytics /> 가 레이아웃에 없다
-curl -s http://localhost:3000/ | grep -oE '<meta name="(google|naver)-site-verification"[^>]*>'
-# 두 줄(content="gtest"·content="ntest")이어야 한다. 위 미설정 실행에서 0 → 여기서 2 여야 배선이 산 것이다
+curl -s http://localhost:3000/ | grep -oE '<meta name="(google-site-verification|naver-site-verification|msvalidate\.01)"[^>]*>'
+# 세 줄(content="gtest"·"ntest"·"btest")이어야 한다. 위 미설정 실행에서 0 → 여기서 3 이어야 배선이 산 것이다
 kill %1
 ```
 
