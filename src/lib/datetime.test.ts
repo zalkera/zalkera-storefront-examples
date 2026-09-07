@@ -34,7 +34,9 @@ function underTz(tz: string, expr: string): string {
     }).trim();
 }
 
-const ZONES = ["UTC", "Asia/Seoul", "Pacific/Kiritimati", "Pacific/Honolulu", "America/New_York"];
+/** 대조 기준 — 가게 시계. 이 값이 `ZONES` 에 없으면 기준선을 못 잡는다(아래 단언이 잠근다). */
+const STORE_ZONE = "Asia/Seoul";
+const ZONES = ["UTC", STORE_ZONE, "Pacific/Kiritimati", "Pacific/Honolulu", "America/New_York"];
 
 /**
  * 씨앗 기준일. **어느 날이든 되지만 셋의 «성질»은 지켜야 한다** —
@@ -48,30 +50,51 @@ const PREV = `${YEAR}-09-10`;
 /** 낮 14:00 KST · 자정 00:00 KST · 늦은 밤 22:00 KST (전부 UTC 로 적는다) */
 const SEEDS = [`${DAY}T05:00:00Z`, `${PREV}T15:00:00Z`, `${DAY}T13:00:00Z`];
 
+/**
+ * **자식을 존마다 «한 번만» 띄운다.**
+ *
+ * ⚠ **자식 spawn 이 이 파일 소요의 거의 전부다.** 시험마다 존을 따로 돌면 spawn 이 배로 늘고,
+ * 코어가 적은 기계에서는 다른 시험 뒤에 숨지 못해 `npm test` 벽시계에 그대로 실린다.
+ * 한 자식이 두 payload 를 같이 찍으면 존 수만큼만 띄우면 되고 **커버리지는 같다**
+ * (같은 변이가 그대로 red 다 — 아래 두 단언이 같은 관측을 나눠 쓴다).
+ *
+ * ⛔ 단언을 더할 때도 **자식을 새로 띄우지 마라** — `OBSERVED` 에 필드를 더해라.
+ */
+const OBSERVED: Map<string, {display: string; dayLabel: string}> = new Map(
+    ZONES.map((tz) => {
+        const raw = underTz(
+            tz,
+            `
+            const m = await import("./datetime.ts");
+            const seeds = ${JSON.stringify(SEEDS)};
+            console.log(JSON.stringify({
+                display: seeds.map((s) => [m.formatDate(s), m.formatDateTime(s), m.formatTime(s), m.dayKey(s)]),
+                dayLabel: m.formatDayKey("${DAY}", {month: "numeric", day: "numeric", weekday: "short"}),
+            }));
+        `,
+        );
+        const parsed = JSON.parse(raw) as {display: unknown; dayLabel: string};
+        return [tz, {display: JSON.stringify(parsed.display), dayLabel: parsed.dayLabel}];
+    }),
+);
+
+/** 기준선은 가게 시계다 — 나머지 존이 이것과 같아야 한다. */
+const BASELINE = OBSERVED.get(STORE_ZONE)!;
+
 test("표시 함수 넷이 기계 시간대와 무관하게 같은 답을 낸다", () => {
-    const expr = `
-        const m = await import("./datetime.ts");
-        const seeds = ${JSON.stringify(SEEDS)};
-        console.log(JSON.stringify(seeds.map((s) => [m.formatDate(s), m.formatDateTime(s), m.formatTime(s), m.dayKey(s)])));
-    `;
-    const baseline = underTz("Asia/Seoul", expr);
-    for (const tz of ZONES) {
-        assert.equal(underTz(tz, expr), baseline, `TZ=${tz} 에서 답이 갈렸다 — timeZone 이 안 박혔다`);
+    for (const [tz, seen] of OBSERVED) {
+        assert.equal(seen.display, BASELINE.display, `TZ=${tz} 에서 답이 갈렸다 — timeZone 이 안 박혔다`);
     }
     // 통제군 — 자식이 실제로 값을 냈는가(빈 출력이면 위 단언이 공허참이다).
-    assert.ok(baseline.includes("2026"), `자식이 값을 못 냈다: ${baseline}`);
+    assert.ok(BASELINE.display.includes("2026"), `자식이 값을 못 냈다: ${BASELINE.display}`);
+    assert.ok(OBSERVED.size >= 5, `존을 ${OBSERVED.size}개만 돌았다 — 대조 분모가 무너졌다`);
 });
 
 test("달력 칸 라벨도 기계 시간대와 무관하다 — 키를 되읽는 자리가 동쪽 끝에서 밀리지 않는다", () => {
-    const expr = `
-        const m = await import("./datetime.ts");
-        console.log(m.formatDayKey("${DAY}", {month: "numeric", day: "numeric", weekday: "short"}));
-    `;
-    const baseline = underTz("Asia/Seoul", expr);
-    for (const tz of ZONES) {
-        assert.equal(underTz(tz, expr), baseline, `TZ=${tz} 에서 달력 라벨이 갈렸다`);
+    for (const [tz, seen] of OBSERVED) {
+        assert.equal(seen.dayLabel, BASELINE.dayLabel, `TZ=${tz} 에서 달력 라벨이 갈렸다`);
     }
-    assert.match(baseline, /9\. 11\./, `라벨이 기대 모양이 아니다: ${baseline}`);
+    assert.match(BASELINE.dayLabel, /9\. 11\./, `라벨이 기대 모양이 아니다: ${BASELINE.dayLabel}`);
 });
 
 test("가게 시계로 말한다 — KST 자정 마감은 그 날짜로 찍힌다(값 단언)", () => {
@@ -124,55 +147,12 @@ test("연중 어느 날이든 오프셋이 맞는다 — 서머타임을 쓰는 
 });
 
 /**
- * **소유자가 하나임을 강제한다.**
+ * **소유자가 하나임을 강제하는 그물은 `astGuards.test.ts` 에 있다.**
  *
- * 위 시험들은 이 파일의 함수가 옳다는 것만 잰다 — 누가 그 함수를 **안 쓰고** `toLocale*` 을
- * 직접 부르면 아무 데서도 안 걸린다. 실제로 그렇게 5곳이 시간대 없이 배송됐다(3.5.0 심의).
+ * ⚠ 여기 있던 정규식 판은 세 모양을 놓쳤다(`const d = new Date(…); d.toLocale…` ·
+ * `Intl.DateTimeFormat` · `getMonth()` 같은 로컬 getter) — 셋 다 **방문자 브라우저 시간대**로
+ * 계산하므로 그물이 잡겠다던 바로 그 버그다. 게다가 **주석 안의 예시 코드**까지 위반으로 셌다.
  *
- * 그래서 트리를 훑어 **소유자 밖의 Date 포맷 호출**을 센다. 금액(`Number.toLocaleString`)은
- * 시간대와 무관하므로 `new Date(...)` 에 붙은 것만 본다.
+ * 그래서 문면이 아니라 **TypeScript 타입 체커**에 묻는 판으로 옮겼다. 수신자가 `Date` 인가는
+ * 컴파일러가 아는 사실이지 우리가 문자열로 추측할 것이 아니다.
  */
-test("Date 를 포맷하는 자리가 이 파일 밖에 없다 — 시간대는 한 곳이 정한다", async () => {
-    const {readdirSync, readFileSync, statSync} = await import("node:fs");
-    const {join, relative} = await import("node:path");
-    const {fileURLToPath} = await import("node:url");
-
-    const SRC = join(fileURLToPath(new URL("../..", import.meta.url)), "src");
-    /** 소유자와 그 시험만 면제한다. 면제를 늘리려면 **왜 그 파일이 시간대를 스스로 정하는지** 적어라. */
-    const OWNERS = new Set(["lib/datetime.ts", "lib/datetime.test.ts"]);
-
-    const files: string[] = [];
-    const walk = (dir: string) => {
-        for (const name of readdirSync(dir)) {
-            const full = join(dir, name);
-            if (statSync(full).isDirectory()) walk(full);
-            else if (/\.(ts|tsx)$/.test(name)) files.push(full);
-        }
-    };
-    walk(SRC);
-
-    // 통제군 — 트리를 못 읽으면 아래 단언이 공허참이다.
-    assert.ok(files.length > 40, `소스를 ${files.length}개만 찾았다 — 훑기가 죽었다`);
-
-    const offenders: string[] = [];
-    for (const file of files) {
-        const rel = relative(SRC, file).split("\\").join("/");
-        if (OWNERS.has(rel)) continue;
-        const text = readFileSync(file, "utf8");
-        // `new Date(...)` 와 `.toLocale…` 가 **같은 식**에 붙은 자리(줄바꿈 허용).
-        for (const m of text.matchAll(/new Date\([^;]*?\.toLocale(Date|Time)?String/gs)) {
-            offenders.push(`${rel}: ${m[0].replace(/\s+/g, " ").slice(0, 80)}`);
-        }
-    }
-
-    expectEmpty(offenders);
-});
-
-/** 목록이 비었는지 이름을 대고 말한다 — `deepEqual([], …)` 는 무엇이 걸렸는지 안 보여 준다. */
-function expectEmpty(offenders: string[]): void {
-    assert.deepEqual(
-        offenders,
-        [],
-        `시간대를 스스로 정하는 자리가 있다 — \`src/lib/datetime.ts\` 의 함수를 써라:\n  ${offenders.join("\n  ")}`,
-    );
-}

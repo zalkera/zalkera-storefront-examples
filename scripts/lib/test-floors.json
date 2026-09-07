@@ -34,6 +34,7 @@
     "src/lib/logoutCart.test.ts": 4,
     "src/lib/docsRev.test.ts": 1,
     "scripts/lib/rendererCoverage.test.mjs": 2,
-    "src/lib/datetime.test.ts": 9,
-    "src/lib/bankTransferPolicy.test.ts": 14
+    "src/lib/datetime.test.ts": 8,
+    "src/lib/bankTransferPolicy.test.ts": 14,
+    "src/lib/astGuards.test.ts": 5
 }
