@@ -4,9 +4,6 @@ import {useState, useTransition} from "react";
 import type {PaymentMethod} from "@zalkera/client";
 import {Button} from "@/components/ui/Button";
 
-/** 무통장 선택지를 낼지 결정하는 값 — 테넌트가 계좌를 채웠을 때만 온다(`page.tsx` 가 판정). */
-export type BankTransferOffer = {bankName: string; accountNo: string; holder?: string};
-
 /**
  * 결제 폼. 구매자 연락처는 게스트 주문 조회 크리덴셜이라 필수.
  *
@@ -26,7 +23,7 @@ export type BankTransferOffer = {bankName: string; accountNo: string; holder?: s
  * ⛔ **선택지는 테넌트가 계좌를 채웠을 때만 낸다.** 안 채웠는데 고르게 두면 고객이 정보를 다 넣고
  * 제출한 뒤에야 409 `BANK_TRANSFER_NOT_CONFIGURED` 를 본다.
  */
-export function CheckoutForm({bankTransfer}: {bankTransfer: BankTransferOffer | null}) {
+export function CheckoutForm({bankTransferAvailable}: {bankTransferAvailable: boolean}) {
     const [form, setForm] = useState({buyerName: "", buyerPhone: "", buyerEmail: "", address1: ""});
     const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("PG");
     const [error, setError] = useState("");
@@ -50,7 +47,7 @@ export function CheckoutForm({bankTransfer}: {bankTransfer: BankTransferOffer | 
                         ? {name: form.buyerName, phone: form.buyerPhone, address1: form.address1}
                         : undefined,
                     // 계좌를 안 채운 테넌트에서는 선택지 자체가 없으므로 늘 "PG" 다.
-                    paymentMethod: bankTransfer ? paymentMethod : undefined,
+                    paymentMethod: bankTransferAvailable ? paymentMethod : undefined,
                 }),
             });
             const data = await res.json();
@@ -90,7 +87,7 @@ export function CheckoutForm({bankTransfer}: {bankTransfer: BankTransferOffer | 
             <input placeholder="이메일 (선택)" value={form.buyerEmail} onChange={set("buyerEmail")} />
             <input placeholder="배송지 주소 (재화면)" value={form.address1} onChange={set("address1")} />
 
-            {bankTransfer && (
+            {bankTransferAvailable && (
                 <fieldset className="grid gap-1 border-0 p-0">
                     <legend className="text-sm font-semibold">결제수단</legend>
                     <label className="flex items-center gap-2 text-sm">

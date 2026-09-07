@@ -3,6 +3,7 @@
 import Link from "next/link";
 import {useEffect, useMemo, useState, useTransition} from "react";
 import type {AvailabilitySlot, ProductDetail} from "@zalkera/client";
+import {dayKey, formatDayKey, formatTime as siteTime} from "@/lib/datetime";
 import {notifyAuthHintChange, useAuthHint} from "@/lib/useAuthHint";
 import {buttonClasses, cn} from "@/components/ui/Button";
 
@@ -238,15 +239,20 @@ export function BookingPanel({product}: {product: ProductDetail}) {
 function groupByDate(slots: AvailabilitySlot[]): Record<string, AvailabilitySlot[]> {
     const out: Record<string, AvailabilitySlot[]> = {};
     for (const s of slots) {
-        const key = new Date(s.startAt).toLocaleDateString("sv-SE"); // YYYY-MM-DD
+        // ⛔ **가게 시계로 묶는다.** 이 파일은 클라이언트 아일랜드라 그냥 두면 **방문자 브라우저**
+        //    시간대로 묶인다 — 늦은 밤 슬롯이 동쪽 끝 브라우저에서 **다음 날 칸**으로 간다.
+        //    재현: `npm test` → `달력 칸 라벨도 기계 시간대와 무관하다` · `dayKey` 의 timeZone 을
+        //    지우면 red 다(그 시험이 자식을 다섯 시간대로 띄워 대조한다).
+        const key = dayKey(s.startAt);
         (out[key] ??= []).push(s);
     }
     return out;
 }
 
-const formatDate = (ymd: string) =>
-    new Date(`${ymd}T00:00:00`).toLocaleDateString("ko-KR", {month: "numeric", day: "numeric", weekday: "short"});
-const formatTime = (iso: string) => new Date(iso).toLocaleTimeString("ko-KR", {hour: "2-digit", minute: "2-digit"});
+/** 달력 칸 라벨. 키를 되읽는 자리라 오프셋을 못박아야 동쪽 끝 브라우저에서 안 밀린다. */
+const formatDate = (ymd: string) => formatDayKey(ymd, {month: "numeric", day: "numeric", weekday: "short"});
+/** 슬롯 시각. **가게 시계**다 — 14:00 슬롯은 어디서 보든 14:00 이어야 방문자가 제 시간에 온다. */
+const formatTime = (iso: string) => siteTime(iso);
 
 /** 백엔드 1회 예약 수량 한도(BookingService.MAX_QUANTITY) — 넘기면 QUANTITY_EXCEEDED. */
 const MAX_QUANTITY = 10;

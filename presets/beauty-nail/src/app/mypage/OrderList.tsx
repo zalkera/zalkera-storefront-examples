@@ -2,6 +2,7 @@
 
 import {useEffect, useState, useTransition} from "react";
 import type {OrderStatus, OrderSummary} from "@zalkera/client";
+import {formatDate as siteDate} from "@/lib/datetime";
 import {notifyAuthHintChange} from "@/lib/useAuthHint";
 import {buttonClasses} from "@/components/ui/Button";
 
@@ -121,8 +122,8 @@ export function OrderList() {
     );
 }
 
-const formatDate = (iso: string) =>
-    new Date(iso).toLocaleDateString("ko-KR", {year: "numeric", month: "numeric", day: "numeric"});
+/** 주문일. 가게 시계로 말한다 — `src/lib/datetime.ts` 가 그 값의 주인이다. */
+const formatDate = (iso: string) => siteDate(iso, {year: "numeric", month: "numeric", day: "numeric"});
 
 const STATUS_LABEL: Record<OrderStatus, string> = {
     PENDING_PAYMENT: "결제 대기",

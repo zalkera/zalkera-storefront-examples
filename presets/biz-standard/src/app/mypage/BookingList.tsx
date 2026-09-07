@@ -2,6 +2,7 @@
 
 import {useEffect, useState, useTransition} from "react";
 import type {Booking} from "@zalkera/client";
+import {formatDateTime} from "@/lib/datetime";
 import {notifyAuthHintChange} from "@/lib/useAuthHint";
 import {buttonClasses} from "@/components/ui/Button";
 
@@ -108,9 +109,10 @@ export function BookingList() {
     );
 }
 
+/** 예약 시각. **가게 시계**로 말한다 — 방문자 브라우저 시간대로 미끄러지면 다른 시각에 온다. */
 const formatWhen = (iso: string | null) =>
     iso
-        ? new Date(iso).toLocaleString("ko-KR", {
+        ? formatDateTime(iso, {
               month: "numeric",
               day: "numeric",
               weekday: "short",

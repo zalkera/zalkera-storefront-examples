@@ -1,7 +1,7 @@
 import type {Metadata} from "next";
 import {zalkera} from "@/lib/zalkera";
 import {pageMetadata, withSiteName} from "@/lib/metadata";
-import {parsePolicies} from "@/components/JsonLd";
+import {parsePolicies} from "@/lib/commercePolicies";
 
 /**
  * 구매 정책 페이지 (RSC · ISR) — 환불·교환·배송·A/S.

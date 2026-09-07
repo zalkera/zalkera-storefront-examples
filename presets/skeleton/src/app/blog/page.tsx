@@ -3,6 +3,7 @@ import type {Metadata} from "next";
 import {zalkera} from "@/lib/zalkera";
 import {siteUrl} from "@/lib/site";
 import {JsonLd, breadcrumbJsonLd, itemListJsonLd} from "@/components/JsonLd";
+import {formatDate} from "@/lib/datetime";
 
 /**
  * 블로그/공지 목록 (RSC · ISR). 발행글은 세션 무관 읽기라 요청마다 SSR 하지 않는다: 첫 요청에
@@ -44,11 +45,7 @@ export default async function BlogPage() {
                                 {p.title}
                             </a>
                             {p.summary && <p className="my-1 text-muted">{p.summary}</p>}
-                            {p.publishedAt && (
-                                <time className="text-xs text-muted">
-                                    {new Date(p.publishedAt).toLocaleDateString("ko-KR", {timeZone: "Asia/Seoul"})}
-                                </time>
-                            )}
+                            {p.publishedAt && <time className="text-xs text-muted">{formatDate(p.publishedAt)}</time>}
                         </li>
                     ))}
                 </ul>

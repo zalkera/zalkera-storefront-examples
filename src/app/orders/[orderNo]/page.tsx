@@ -1,6 +1,7 @@
 import {ZalkeraError, type ShipmentInfo, visitorIp} from "@zalkera/client";
 import {headers} from "next/headers";
-import {parsePolicies} from "@/components/JsonLd";
+import {parsePolicies} from "@/lib/commercePolicies";
+import {formatDateTime} from "@/lib/datetime";
 import {zalkera} from "@/lib/zalkera";
 import {getAccessToken} from "@/lib/session";
 import {OrderActions} from "./OrderActions";
@@ -89,7 +90,7 @@ export default async function OrderPage({
                             {order.paymentDueAt && (
                                 <>
                                     <dt className="text-muted">입금 기한</dt>
-                                    <dd className="m-0">{new Date(order.paymentDueAt).toLocaleString("ko-KR")}</dd>
+                                    <dd className="m-0">{formatDateTime(order.paymentDueAt)}</dd>
                                 </>
                             )}
                         </dl>

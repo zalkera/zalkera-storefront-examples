@@ -33,5 +33,7 @@
     "scripts/pack-version.test.mjs": 13,
     "src/lib/logoutCart.test.ts": 4,
     "src/lib/docsRev.test.ts": 1,
-    "scripts/lib/rendererCoverage.test.mjs": 2
+    "scripts/lib/rendererCoverage.test.mjs": 2,
+    "src/lib/datetime.test.ts": 9,
+    "src/lib/bankTransferPolicy.test.ts": 14
 }

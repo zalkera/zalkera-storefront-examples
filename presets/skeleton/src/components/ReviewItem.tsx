@@ -1,4 +1,5 @@
 import type {Review} from "@zalkera/client";
+import {formatDate} from "@/lib/datetime";
 
 /**
  * 후기 1건 표시 — **순수 컴포넌트(표시 전용, "use client" 아님)**.
@@ -31,11 +32,7 @@ export function ReviewItem({review}: {review: Review}) {
                     ))}
                 </div>
             )}
-            {r.createdAt && (
-                <time className="text-xs text-muted">
-                    {new Date(r.createdAt).toLocaleDateString("ko-KR", {timeZone: "Asia/Seoul"})}
-                </time>
-            )}
+            {r.createdAt && <time className="text-xs text-muted">{formatDate(r.createdAt)}</time>}
         </li>
     );
 }

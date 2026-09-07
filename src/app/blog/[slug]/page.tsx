@@ -7,6 +7,7 @@ import {siteUrl} from "@/lib/site";
 import {JsonLd, blogPostingJsonLd, breadcrumbJsonLd} from "@/components/JsonLd";
 import {ViewBeacon} from "./ViewBeacon";
 import {routeParam} from "@/lib/routeParam";
+import {formatDate} from "@/lib/datetime";
 
 /**
  * 블로그/공지 상세 (RSC · ISR). 발행글은 세션 무관 읽기라 상품 상세와 같은 사상으로 굽는다:
@@ -65,11 +66,7 @@ export default async function BlogPostPage({params}: {params: Promise<{slug: str
                 ])}
             />
             <h1>{post.title}</h1>
-            {post.publishedAt && (
-                <time className="text-sm text-muted">
-                    {new Date(post.publishedAt).toLocaleDateString("ko-KR", {timeZone: "Asia/Seoul"})}
-                </time>
-            )}
+            {post.publishedAt && <time className="text-sm text-muted">{formatDate(post.publishedAt)}</time>}
             {/* 커버 이미지 — /media/{id} 안정 URL(W4). next/image 는 바이트를 Next 런타임에 태우므로
                 쓰지 않는다. 없으면 아무것도 안 그린다. */}
             {post.coverAssetId != null && (
