@@ -1122,6 +1122,35 @@ try {
             //   `--ignore-scripts` 를 빼면 postinstall 산출에 기대는 소스가 여기서만 통과한다.
             if (!run("npm ci", "npm", ["ci", "--ignore-scripts", "--include=dev", "--no-audit", "--no-fund"])) failed = true;
             else {
+                // ⑥-a **갓 푼 팩이 자기 포맷 규약을 지키는가**(우리 카탈로그 팩에 한한다).
+                //
+                //    ⚠ **고객 CI 를 대신 재는 것이 아니다.** `AGENTS.md` 는 「이 규약은 CI 가 재지
+                //    않는다 — 네가 돌려야 한다」를 **의도**로 적고 있고 그것은 그대로 둔다(포맷 하나로
+                //    사이트 배포를 막는 대가가 이득보다 크다). 여기서 재는 것은 **우리가 굽는 물건이
+                //    태어날 때부터 더러운가**이고, 그것은 배포 게이트가 아니라 납품 검수의 물음이다.
+                //
+                //    실측 사고(팩 3.4.0 성능 축 🟠): `src/lib/preview.test.ts` 한 벌이 2칸 들여쓰기라
+                //    갓 푼 팩이 `npm run format:check` 에서 rc 1 이었다. 같은 zip 안 `AGENTS.md` 가
+                //    고객 LLM 에게 **바로 그 명령**을 시키므로, 시키는 대로 하면 **손대지도 않은 파일에
+                //    첫 diff 가 생긴다**(`npm run format` 이 그 파일을 다시 쓴다). 3.3.5 에도 있었다.
+                //
+                //    ⛔ `--byo` 는 제외한다 — 남의 트리에 우리 `.prettierrc` 를 요구할 근거가 없다.
+                //    스크립트가 없으면 **미검사**로 찍는다(통과가 아니다).
+                if (packMode) {
+                    // 여기서 다시 읽는다 — `:186` 의 `pkg` 는 혈통 판정 스코프 안이라 여기 안 온다.
+                    let scripts = {};
+                    try {
+                        scripts = JSON.parse(readFileSync(join(root, "package.json"), "utf8")).scripts ?? {};
+                    } catch {
+                        // 파싱 불가는 위 `npm ci` 가 이미 잡았다 — 여기서 두 번 말하지 않는다.
+                    }
+                    if (typeof scripts["format:check"] !== "string") {
+                        recordSkip("배송 포맷 규약", "`format:check` 스크립트가 없습니다");
+                    } else if (!run("배송 포맷 규약", "npm", ["run", "format:check"])) {
+                        failed = true;
+                    }
+                }
+
                 // ⑥-b **개발 서버가 첫 화면을 컴파일하는가.**
                 //
                 //    `next build` 는 CSS 파싱 실패를 **경고로 찍고 rc 0 을 낸다** — `next dev` 는 같은

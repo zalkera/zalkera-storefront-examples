@@ -32,6 +32,21 @@ export function CallbackHandler({
         if (ran.current) return;
         ran.current = true;
 
+        // ⛔ **주소창에서 `code`·`state` 를 지운다 — 갈래를 타기 «전에».**
+        //    값은 이미 props 로 손에 있으므로(서버가 `searchParams` 에서 읽어 넘긴다) 여기서 지워도
+        //    아래 로직이 멀쩡하다. 성공 갈래는 어차피 `router.replace` 로 빠지지만 **실패 갈래는
+        //    이 화면에 머문다** — 그때 주소가 그대로면 `code`·`state` 가 히스토리·리퍼러에 남는다.
+        //
+        //    ⚠ **이것으로 다 막히지 않는다**(`llms.txt` 의 유출 통로 표). 이 줄이 닫는 것은
+        //    히스토리·공유 링크뿐이고, **서버 액세스 로그와 제3자 분석 태그는 이미 그 URL 을 봤다** —
+        //    JS 가 돌기 전에 기록·전송되기 때문이다. 완전히 닫으려면 서버가 쿼리를 받아 쿠키로
+        //    옮기고 쿼리 없는 주소로 리다이렉트해야 한다.
+        //    여기서 그렇게 안 하는 이유: OAuth `code` 는 교환에 **client secret**(백엔드 보유)이
+        //    필요하고, 우리 `/api/auth/social` 로 되먹여도 httpOnly `state` 쿠키 대조에서 막힌다.
+        //    ⚠ **재설정·인증 메일 토큰은 사정이 다르다** — 그것 하나면 계정이 넘어가므로
+        //    이 형태로 끝내지 말고 서버 리다이렉트를 써라.
+        stripSensitiveQuery();
+
         void (async () => {
             if (providerError) {
                 setError(`소셜 로그인이 취소되었거나 실패했습니다 (${providerError}).`);
@@ -94,6 +109,20 @@ export function CallbackHandler({
         );
     }
     return <p className="text-muted">잠시만 기다려 주세요…</p>;
+}
+
+/**
+ * 주소창에서 쿼리를 떼어 낸다 — **경로는 그대로 두고 쿼리만**.
+ *
+ * `router.replace` 를 쓰지 않는 이유: 그것은 라우팅이라 렌더를 한 번 더 돌리고, 이 시점에는
+ * 아직 교환 중이라 화면이 깜빡인다. `history.replaceState` 는 현재 히스토리 항목만 갈아 끼운다.
+ */
+function stripSensitiveQuery(): void {
+    // 서버 렌더 중에는 `window` 가 없다. `useEffect` 안이라 없을 수 없지만, 이 함수가 다른 데서
+    // 불릴 때를 위해 지킨다 — 없으면 조용히 아무것도 안 한다.
+    if (typeof window === "undefined" || !window.history?.replaceState) return;
+    const {pathname, hash} = window.location;
+    window.history.replaceState(null, "", `${pathname}${hash}`);
 }
 
 /** 로그인 시작 때 sessionStorage 에 심은 동의 목록을 읽어 소비(제거)한다. 없거나 깨졌으면 undefined. */

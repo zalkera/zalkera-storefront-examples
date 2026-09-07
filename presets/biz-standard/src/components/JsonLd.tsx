@@ -118,6 +118,15 @@ export type CommercePolicies = {
     exchange?: {notes?: string};
     shipping?: {notes?: string};
     as?: {notes?: string};
+    /**
+     * 무통장입금 수취 계좌. **이 절이 있어야 무통장 주문이 성립한다** — 없으면 백엔드가
+     * `checkout({paymentMethod: "BANK_TRANSFER"})` 를 409 `BANK_TRANSFER_NOT_CONFIGURED` 로 막는다.
+     * 그래서 화면은 이 절의 유무로 결제수단 선택지를 낸다.
+     *
+     * ⚠ `dueDays` 는 **참고값**이다. 마감의 정본은 주문이 들고 오는 `paymentDueAt` 이고,
+     * 백엔드가 1~7일로 조여 적용한다 — 화면에 마감을 적을 때는 반드시 `paymentDueAt` 을 써라.
+     */
+    bankTransfer?: {bankName?: string; accountNo?: string; holder?: string; dueDays?: number};
 };
 
 /**
@@ -177,7 +186,27 @@ export function parsePolicies(raw: string | null): CommercePolicies {
         exchange: notesSection(root.exchange),
         shipping: notesSection(root.shipping),
         as: notesSection(root.as),
+        bankTransfer: bankTransferSection(root.bankTransfer),
     };
+}
+
+/**
+ * 계좌 절. **은행·계좌번호가 둘 다 있어야 절이 성립한다** — 하나만 있는 계좌는 입금할 수 없고,
+ * 그 반쪽으로 결제수단 선택지를 내면 고객이 고른 뒤에 막힌다.
+ *
+ * `dueDays` 는 정수 1~7 만 받는다(백엔드가 그 범위로 조인다). 밖이면 그 필드만 버린다 —
+ * 절을 통째로 버리면 계좌가 멀쩡한데 무통장이 안 뜬다.
+ */
+function bankTransferSection(value: unknown): CommercePolicies["bankTransfer"] {
+    const obj = asPlainObject(value);
+    if (!obj) return undefined;
+    const bankName = asNotes(obj.bankName)?.trim();
+    const accountNo = asNotes(obj.accountNo)?.trim();
+    if (!bankName || !accountNo) return undefined;
+    const holder = asNotes(obj.holder)?.trim() || undefined;
+    const raw = obj.dueDays;
+    const dueDays = typeof raw === "number" && Number.isInteger(raw) && raw >= 1 && raw <= 7 ? raw : undefined;
+    return {bankName, accountNo, holder, dueDays};
 }
 
 /**

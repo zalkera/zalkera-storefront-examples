@@ -37,6 +37,24 @@ export async function POST(req: Request) {
             session,
             session.cartSessionKey ? `co-${session.cartSessionKey}` : undefined,
         );
+        // ⛔ **무통장은 결제창을 안 연다.** `startPayment` 를 태우면 백엔드가 409 `NOT_PG_ORDER` 로
+        //    막는다 — 그 주문은 운영자가 입금을 확인해 `PAID` 로 올린다. 화면은 주문 상세로 가서
+        //    계좌와 `paymentDueAt` 을 본다.
+        //    ⚠ 판정은 **주문이 돌려준 값**으로 한다(요청 값이 아니라) — 백엔드가 조여서 다르게
+        //      선 경우에도 화면과 원장이 안 갈린다.
+        if (order.paymentMethod === "BANK_TRANSFER") {
+            const bankResponse = NextResponse.json({
+                orderNo: order.orderNo,
+                status: order.status,
+                paymentMethod: order.paymentMethod,
+                paymentDueAt: order.paymentDueAt,
+                paymentUrl: null,
+                widget: null,
+            });
+            rotateCartSessionKey(bankResponse);
+            return bankResponse;
+        }
+
         const payment = await zalkera.startPayment(order.orderNo, {
             accessToken: session.accessToken,
             phone: input.buyerPhone,
@@ -45,6 +63,7 @@ export async function POST(req: Request) {
         const response = NextResponse.json({
             orderNo: order.orderNo,
             status: order.status,
+            paymentMethod: order.paymentMethod,
             paymentUrl: payment.paymentUrl,
             // 위젯형이면 결제창을 띄울 값(clientKey 등 — 브라우저 노출 전제값만 온다). 리다이렉트형은 없다.
             widget: payment.widget ?? null,

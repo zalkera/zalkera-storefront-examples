@@ -4,6 +4,7 @@ import {zalkera} from "@/lib/zalkera";
 import {getAccessToken} from "@/lib/session";
 import {LogoutButton} from "@/components/LogoutButton";
 import {MarketingConsent} from "@/components/MarketingConsent";
+import {AccountSettings} from "./AccountSettings";
 import {OrderList} from "./OrderList";
 import {BookingList} from "./BookingList";
 
@@ -58,6 +59,10 @@ export default async function MyPage({searchParams}: {searchParams: Promise<{r?:
             <BookingList />
 
             <MarketingConsent />
+
+            {/* 가입을 받는 사이트에는 나갈 문도 있어야 한다 — 프로필 수정과 탈퇴. */}
+            <AccountSettings me={me} />
+
             <div className="mt-4">
                 <LogoutButton />
             </div>
