@@ -20,7 +20,7 @@
  */
 import assert from "node:assert/strict";
 import test from "node:test";
-import {existsSync, readFileSync, readdirSync} from "node:fs";
+import {existsSync, readFileSync, readdirSync, statSync} from "node:fs";
 import {dirname, join} from "node:path";
 import {fileURLToPath} from "node:url";
 
@@ -37,13 +37,49 @@ function emittedMetaNames() {
     return names;
 }
 
+/**
+ * `appDir` 에서 **`<html>` 을 여는 레이아웃** 파일들 — 배송본 `src/lib/siteVerification.test.ts` 의
+ * `rootLayoutFilesIn` 과 **같은 규칙**이다(처음 만나는 `layout.<pageExtensions>` · 세 겹 · `_`/`@` 제외).
+ *
+ * ⚠ **사본인 이유**: 저쪽은 `.ts` 라 `tsconfig` 의 `allowJs: false` 때문에 이 `.mjs` 를 import 할 수
+ *   없고, 이 파일은 배송되지 않아 저쪽이 이것을 import 할 수도 없다. 규칙을 고치면 **둘 다** 고쳐라 —
+ *   한쪽만 고치면 배송본과 정본 강제자가 갈려 어느 쪽이 참인지 알 수 없게 된다.
+ */
+function rootLayoutFilesIn(dir, depth = 0) {
+    const statOf = (p) => {
+        try {
+            const st = statSync(p);
+            return {isDir: st.isDirectory(), isFile: st.isFile()};
+        } catch {
+            return {isDir: false, isFile: false};
+        }
+    };
+    for (const ext of ["tsx", "ts", "jsx", "js"]) {
+        const f = join(dir, `layout.${ext}`);
+        if (statOf(f).isFile) return [f];
+    }
+    if (depth >= 3 || !statOf(dir).isDir) return [];
+    const out = [];
+    for (const name of readdirSync(dir)) {
+        if (name.startsWith("_") || name.startsWith("@")) continue;
+        out.push(...rootLayoutFilesIn(join(dir, name), depth + 1));
+    }
+    return out;
+}
+
 test("루트와 프리셋 전부가 metadata.verification 에 siteVerification() 을 싣는다", () => {
-    const layouts = [{label: "src/app/layout.tsx", file: join(ROOT, "src", "app", "layout.tsx")}];
+    const collect = (base, prefix) =>
+        rootLayoutFilesIn(join(base, "src", "app")).map((file) => ({
+            label: `${prefix}src/app/${file.slice(join(base, "src", "app").length + 1)}`,
+            file,
+        }));
+    // 루트가 문서를 가르면(라우트 그룹 둘) 여기서 2벌이 나온다 — 고정 경로로 읽으면 ENOENT 로
+    // **판정이 아니라 크래시**가 났다.
+    const layouts = collect(ROOT, "");
     const presets = join(ROOT, "presets");
     assert.ok(existsSync(presets), "정본 레포에 presets/ 가 없다");
     for (const code of readdirSync(presets)) {
-        const f = join(presets, code, "src", "app", "layout.tsx");
-        if (existsSync(f)) layouts.push({label: `presets/${code}/src/app/layout.tsx`, file: f});
+        layouts.push(...collect(join(presets, code), `presets/${code}/`));
     }
     // 팩이 늘면 이 수도 늘어야 한다. 「있으면 잰다」로 두면 0벌을 재도 통과한다.
     assert.ok(layouts.length >= 5, `layout 을 ${layouts.length}벌만 찾았다 — 루트 + 프리셋 4벌이어야 한다`);

@@ -42,7 +42,7 @@ export const REQUIRED_FLOORS = {
     "scripts/lib/floorGate.test.mjs": 11,
     "scripts/lib/contentRoutes.test.mjs": 12,
     "src/lib/preview.test.ts": 4,
-    "src/lib/siteVerification.test.ts": 20,
+    "src/lib/siteVerification.test.ts": 23,
 };
 
 /**
@@ -180,7 +180,14 @@ export function judgeFloors(floors, exists) {
             continue;
         }
         if (f in required && min < required[f]) {
-            bad.push(`${f} 하한을 낮췄습니다 ${min} < ${required[f]}`);
+            // ⚠ **「낮췄다」로 단정하지 않는다.** 여기서 보이는 것은 «표의 값이 요구보다 작다»
+            //   하나뿐이고, 원인은 둘이다 — 손으로 낮췄거나, **표가 러너보다 낡았거나**.
+            //   뒤쪽은 옛 시작 팩에서 갈라진 납품물에서 늘 일어나고, 그 외주사는 낮춘 적이 없다.
+            //   구분할 정보가 없으므로 둘을 같이 말하고 고치는 길을 준다.
+            bad.push(
+                `${f} 하한 ${min} < 요구 ${required[f]} — 낮췄거나 표가 러너보다 낡았습니다. ` +
+                    `낡은 것이면 최신 시작 팩의 ${f}·scripts/lib/test-floors.json·scripts/lib/floors.mjs 를 가져오십시오.`,
+            );
             continue;
         }
         effective[f] = Math.max(effective[f] ?? 0, min);

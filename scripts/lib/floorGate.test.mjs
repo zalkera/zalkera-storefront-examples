@@ -121,7 +121,9 @@ test("하한을 낮춘 표는 반려한다", () => {
     const lowered = {...REQUIRED_FLOORS, "scripts/lib/floors.test.mjs": 1};
     const {rc, out} = runGate(tree({table: JSON.stringify(lowered)}));
     assert.equal(rc, 1, out.slice(-600));
-    assert.match(out, /하한을 낮췄습니다/);
+    assert.match(out, /scripts\/lib\/floors\.test\.mjs 하한 1 < 요구/);
+    // 원인을 단정하지 않고 고치는 길을 준다 — `floors.test.mjs` 의 같은 이름 시험 참조.
+    assert.match(out, /낮췄거나 표가 러너보다 낡았습니다/);
 });
 
 test("시험이 실패하면 하한을 재기 전에 선다", () => {
