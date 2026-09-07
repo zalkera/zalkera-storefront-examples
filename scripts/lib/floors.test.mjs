@@ -55,10 +55,17 @@ test("항목을 줄이면 반려한다", () => {
     assert.ok(bad.some((b) => b.includes("하한표 항목이")));
 });
 
-test("하한을 낮추면 그 스위트를 지목해 반려한다", () => {
+test("표의 값이 요구보다 작으면 그 스위트를 지목해 반려한다", () => {
     const f = {...ok(), "src/lib/crossOrigin.test.ts": 1};
     const {bad} = judgeFloors(f, allExist);
-    assert.ok(bad.some((b) => b.includes("하한을 낮췄습니다 1 < 18")), JSON.stringify(bad));
+    const line = bad.find((b) => b.startsWith("src/lib/crossOrigin.test.ts"));
+    assert.ok(line, JSON.stringify(bad));
+    assert.match(line, /1 < 요구 18/);
+    // ⚠ **원인을 단정하지 않는지 잰다.** `judgeFloors` 는 「낮췄다」와 「표가 낡았다」를 구분할
+    //   정보가 없다. 옛 시작 팩에서 갈라진 납품물은 늘 뒤쪽인데, 앞쪽으로 단정하면 낮춘 적 없는
+    //   외주사가 **틀린 사유**를 받는다. 고치는 길(어느 파일을 가져오는가)까지 말해야 한다.
+    assert.match(line, /낮췄거나 표가 러너보다 낡았습니다/);
+    assert.match(line, /scripts\/lib\/test-floors\.json/);
 });
 
 test("하한을 올리는 것은 허용한다 — zip 은 요구를 강화할 수 있다", () => {

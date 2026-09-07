@@ -294,7 +294,8 @@ export default function LandingLayout({children}: {children: ReactNode}) {
 
 > ⚠ **루트 `src/app/layout.tsx` 를 남기지 마십시오.** 그 파일이 있으면 그룹의 `layout.tsx` 는 중첩
 > 레이아웃이 되어 `<html>` 이 겹치고, 두 CSS 가 한 문서에 실려 위의 깨짐이 그대로 돌아옵니다.
-> 라우트 그룹은 `reservedSegments.test.ts` 와 `verify-zip` 의 라우트 도출이 둘 다 이해합니다.
+> 라우트 그룹은 팩의 가드 시험과 `verify-zip` 의 라우트 도출이 이해합니다 — 루트 레이아웃을
+> 그룹으로 가른 형상도 그대로 잽니다.
 
 **⑶ 라우트를 지웠으면 셋을 같이 움직입니다**(§1-2). 남은 라우트가 `contact`·`policies` 뿐이면:
 

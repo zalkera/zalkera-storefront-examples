@@ -17,15 +17,16 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
     existsSync,
-    lstatSync,
     mkdirSync,
     mkdtempSync,
     readFileSync,
     readdirSync,
     rmSync,
+    statSync,
     symlinkSync,
     writeFileSync,
 } from "node:fs";
+import {inspect} from "node:util";
 import {tmpdir} from "node:os";
 import {dirname, join} from "node:path";
 import {fileURLToPath} from "node:url";
@@ -129,58 +130,67 @@ test("경고는 env 이름당 한 번만, 값은 싣지 않는다", () => {
 });
 
 /**
- * 신뢰 밖 트리에서도 도는 시험이라 **심링크를 따라가지 않는다.** 표적을 물으면 검수자
- * 파일시스템에 대한 존재 오라클이 되고, 읽으면 그 내용이 반려문으로 나간다
- * (`scripts/lib/routes.mjs` 머리말·`scripts/verify-zip.mjs` 의 lstat 봉쇄와 같은 판단).
- * 그 대가로 **심링크 뒤에 숨긴 레이아웃은 세지 않는다** — 아래 픽스처가 그 성질을 못 박는다.
+ * `dir` 아래에서 **`<html>` 을 여는 레이아웃** 파일들.
+ *
+ * Next 의 규칙 그대로다 — `app/` 에서 페이지로 내려가며 **처음 만나는 `layout`** 이 그 경로의
+ * 루트 레이아웃이다. 근거는 `next-app-loader` 의 `if (!rootLayout) rootLayout = layoutPath` 한 줄이고,
+ * 그 자리는 세그먼트가 라우트 그룹인지도 깊이가 몇인지도 보지 않는다.
+ * 파일 이름은 `layout.<pageExtensions>` 다 — 기본값 `tsx`·`ts`·`jsx`·`js` 를 그 순서로 찾는다.
+ *
+ * 그래서 **루트 레이아웃은 하나가 아닐 수 있다.** 시안 한 장을 옮기는 팩은 시안 CSS 와 시작 팩
+ * Tailwind 를 한 문서에 둘 수 없어 `src/app/(landing)`·`(template)` 로 문서를 가르고 루트
+ * `layout.tsx` 를 두지 않는다(`docs/mockup-to-pack.md` §2-1 ⑵). 그때는 그 둘이 각각 문서를 연다.
+ *
+ * ⚠ **세 겹까지만 내려간다** — 형제 `reservedSegments.test.ts` 와 같은 한계다. 그보다 깊게
+ *   중첩된 레이아웃은 이 시험이 못 본다.
+ * ⚠ **심링크를 따라간다**(`statSync`). 형제 `reservedSegments.test.ts` 와 같은 처리다.
+ *   `lstatSync` 는 **마지막 성분만** 안 따라가므로 둘의 차이는 두 자리에서만 난다 —
+ *   레이아웃 «파일» 자체가 심링크일 때와, 심링크 «폴더»를 재귀로 내려갈 때. 아래 픽스처가
+ *   그 둘을 각각 잰다(폴더 심링크 아래 레이아웃을 바로 묻는 형상은 `lstat` 으로도 통과한다).
+ *   여기서 심링크를 «막아» 봐야 지키는 것이 없다: 이 파일은 검수 도구가 아니라 **팩이 싣고 나가는
+ *   것**이고, `scripts/lib/floor-gate.mjs` 가 **그 트리의** 시험을 그대로 실행한다. 즉 시험 본문을
+ *   쓰는 주체와 트리를 쓰는 주체가 같다. 신뢰 밖 아티팩트에 대한 방어는 러너가 **자기 사본**으로
+ *   도는 검사기(`gate-behavior.mjs`·`content-routes.mjs`)와 검수자의 격리가 진다.
  */
-function realFile(path: string): boolean {
+const MAX_DEPTH = 3;
+/** Next 의 `pageExtensions` 기본값 그대로. `layout.tsx` 만 보면 `layout.js` 루트를 통째로 놓친다. */
+const LAYOUT_EXTS = ["tsx", "ts", "jsx", "js"];
+function statOf(path: string): {isDir: boolean; isFile: boolean} {
     try {
-        return lstatSync(path).isFile();
+        const st = statSync(path);
+        return {isDir: st.isDirectory(), isFile: st.isFile()};
     } catch {
-        return false;
+        // 끊어진 심링크·ELOOP·권한 — 없는 것으로 친다. 여기서 던지면 판정이 아니라 크래시다.
+        return {isDir: false, isFile: false};
     }
 }
-function realDir(path: string): boolean {
-    try {
-        return lstatSync(path).isDirectory();
-    } catch {
-        return false;
+/** `dir` 자신의 레이아웃 파일. Next 와 같은 순서로 먼저 맞는 것을 쓴다. */
+function layoutFileIn(dir: string): string | null {
+    for (const ext of LAYOUT_EXTS) {
+        const f = join(dir, `layout.${ext}`);
+        // `existsSync` 로 물으면 `layout.tsx/` 디렉터리도 참이라 뒤에서 `readFileSync` 가 EISDIR 로 죽는다.
+        if (statOf(f).isFile) return f;
     }
+    return null;
 }
-
-/** 라우트 그룹 판별 — 형제 그물과 **같은 식**이다(`scripts/lib/routes.mjs`·`reservedSegments.test.ts`). */
-const GROUP_DIR = /^\(.*\)$/;
-
-/**
- * `appDir`(= `src/app`) 에서 **`<html>` 을 여는 레이아웃** 파일 경로.
- *
- * 루트 `layout.tsx` 가 있으면 **그것 하나다.** 그때 라우트 그룹의 `layout.tsx` 는 중첩
- * 레이아웃이라 `<html>` 을 열지 않는다(`docs/mockup-to-pack.md` §2-1 ⑵) — 거기까지 배선을
- * 요구하면 조직용 그룹을 쓰는 보통의 트리가 거짓 적색을 낸다.
- *
- * 루트가 없으면 **문서를 가른 것**이다. 시안 한 장을 옮기는 팩은 시안 CSS 와 시작 팩
- * Tailwind 를 한 문서에 둘 수 없어 `(landing)`·`(template)` 로 가르고 루트를 두지 않는다.
- * 그때는 `src/app` **직속** 그룹들이 각각 문서를 여니 전부 센다.
- */
-function rootLayoutFilesIn(appDir: string): string[] {
-    // `src/app` 자체가 심링크면 여기서 멈춘다 — 순서가 뒤면 아래 루트 파일 검사가 먼저
-    // 통과해 트리 밖을 읽는다(`lstat` 은 **마지막 성분**만 안 따라간다).
-    if (!realDir(appDir)) return [];
-    const own = join(appDir, "layout.tsx");
-    if (realFile(own)) return [own];
+function rootLayoutFilesIn(dir: string, depth = 0): string[] {
+    const own = layoutFileIn(dir);
+    if (own !== null) return [own];
+    if (depth >= MAX_DEPTH || !statOf(dir).isDir) return [];
     const out: string[] = [];
-    for (const entry of readdirSync(appDir, {withFileTypes: true})) {
-        // dirent 의 `isDirectory()` 는 lstat 의미다 — 심링크 디렉터리에 false 이고, 그것이 위 정책이다.
-        if (!entry.isDirectory() || !GROUP_DIR.test(entry.name)) continue;
-        const f = join(appDir, entry.name, "layout.tsx");
-        if (realFile(f)) out.push(f);
+    for (const name of readdirSync(dir)) {
+        // `_` 는 Next 규칙이다(`route-discovery` 의 `ignorePartFilter` 가 걷는다).
+        // `@`(병렬 슬롯)는 **우리 선택**이다 — 조상 레이아웃이 없으면 슬롯이 루트가 될 수는 있으나
+        // 스토어프론트에 그 형상이 없고, 세면 슬롯마다 배선을 요구하게 된다.
+        if (name.startsWith("_") || name.startsWith("@")) continue;
+        // 하위가 파일이면 다음 재귀의 `statOf(dir).isDir` 이 걷는다 — 여기서 또 묻지 않는다.
+        out.push(...rootLayoutFilesIn(join(dir, name), depth + 1));
     }
     return out;
 }
 
 /**
- * 위 스캔의 픽스처. **정본 레포에는 라우트 그룹이 없어** 새 가지가 한 번도 안 돈다 —
+ * 위 스캔의 픽스처. **정본 레포에는 루트 레이아웃이 하나뿐**이라 나머지 가지가 한 번도 안 돈다 —
  * 그물 없이 두면 지워도 초록이라, 합성 트리로 여기서 잠근다.
  */
 const madeDirs: string[] = [];
@@ -223,59 +233,76 @@ test("라우트 그룹이 루트 레이아웃을 나눠 가지면 둘 다 센다
     assert.deepEqual(relNames(app), ["(landing)/layout.tsx", "(template)/layout.tsx"]);
 });
 
-test("루트가 있으면 그룹의 레이아웃은 중첩이라 안 센다", () => {
-    // 조직용 라우트 그룹은 보통의 구성이다. 중첩 레이아웃에까지 배선을 요구하면 거짓 적색이 난다.
-    const app = appTree(["layout.tsx", "(marketing)/layout.tsx"]);
+test("루트가 있으면 더 안 내려간다 — 그 아래는 전부 중첩 레이아웃이다", () => {
+    const app = appTree(["layout.tsx", "(marketing)/layout.tsx", "blog/layout.tsx"]);
     assert.deepEqual(relNames(app), ["layout.tsx"]);
 });
 
-test("레이아웃이 없는 그룹은 안 센다", () => {
-    assert.deepEqual(relNames(appTree(["(empty)/page.tsx"])), []);
-});
-
-test("그룹 안쪽의 중첩 레이아웃은 안 센다 — `<html>` 을 열지 않는다", () => {
+test("문서를 연 레이아웃 아래로는 안 내려간다", () => {
     const app = appTree(["(shop)/layout.tsx", "(shop)/cart/layout.tsx"]);
     assert.deepEqual(relNames(app), ["(shop)/layout.tsx"]);
 });
 
-test("그룹이 아닌 보통 디렉터리의 레이아웃은 안 센다", () => {
-    assert.deepEqual(relNames(appTree(["blog/layout.tsx"])), []);
+test("중첩 라우트 그룹의 레이아웃도 문서를 연다", () => {
+    // Next 는 처음 만나는 `layout` 을 루트로 잡는다 — 깊이도 그룹 여부도 안 본다.
+    const app = appTree(["(site)/(landing)/layout.tsx"]);
+    assert.deepEqual(relNames(app), ["(site)/(landing)/layout.tsx"]);
 });
 
-test("인터셉트 라우트는 그룹이 아니다 — 여는 괄호만 보지 않는다", () => {
-    // `(.)photo`·`(..)photo` 는 URL 세그먼트다. 여는 괄호만 보면 그룹으로 오인해 거짓 적색이 난다.
-    assert.deepEqual(relNames(appTree(["(.)photo/layout.tsx", "(..)photo/layout.tsx"])), []);
+test("루트가 없으면 보통 디렉터리의 레이아웃도 문서를 연다", () => {
+    // `blog/layout.tsx` 위에 아무 레이아웃도 없으면 `/blog` 아래 페이지의 루트 레이아웃이다.
+    assert.deepEqual(relNames(appTree(["blog/layout.tsx"])), ["blog/layout.tsx"]);
 });
 
-test("`src/app` 이 없으면 빈 목록 — 던지지 않는다", () => {
+test("사설 폴더(`_`)와 병렬 슬롯(`@`)은 문서를 열지 않는다", () => {
+    const app = appTree(["_internal/layout.tsx", "@modal/layout.tsx", "(landing)/layout.tsx"]);
+    assert.deepEqual(relNames(app), ["(landing)/layout.tsx"]);
+});
+
+test("레이아웃이 하나도 없으면 빈 목록 — 던지지 않는다", () => {
+    assert.deepEqual(relNames(appTree(["(empty)/page.tsx"])), []);
     assert.deepEqual(relNames(appTree([])), []);
 });
 
-test("`src/app` 자체가 심링크면 훑지 않는다", () => {
-    // 이 갈래를 안 막으면 신뢰 밖 zip 이 `src/app` 을 검수자 트리로 걸어 **트리 밖 디렉터리를
-    // 열거**시킬 수 있다(`scripts/lib/routes.mjs` 머리말의 위협모델).
-    const outside = mkdtempSync(join(tmpdir(), "zalkera-rootlayout-outside-"));
-    madeDirs.push(outside);
-    mkdirSync(join(outside, "app", "(g)"), {recursive: true});
-    writeFileSync(join(outside, "app", "layout.tsx"), "export default function L() {}\n");
-    writeFileSync(join(outside, "app", "(g)", "layout.tsx"), "export default function L() {}\n");
-    const root = mkdtempSync(join(tmpdir(), "zalkera-rootlayout-"));
-    madeDirs.push(root);
-    symlinkSync(join(outside, "app"), join(root, "app"), "dir");
-    assert.deepEqual(rootLayoutFilesIn(join(root, "app")), []);
+test("`layout.js` 도 루트 레이아웃이다 — Next 의 pageExtensions 기본값", () => {
+    // `layout.tsx` 만 보면 진짜 루트를 놓치고, 재귀가 그 아래 중첩 레이아웃을 끌어와
+    // **틀린 사유로** 반려한다. 종전 규칙은 그 자리에서 「하나도 못 찾았다」로 정직하게 죽었다.
+    assert.deepEqual(relNames(appTree(["layout.js", "blog/layout.tsx"])), ["layout.js"]);
+    assert.deepEqual(relNames(appTree(["(landing)/layout.jsx"])), ["(landing)/layout.jsx"]);
 });
 
-test("심링크는 따라가지 않는다 — 디렉터리도 파일도", () => {
-    // 신뢰 밖 트리가 표적을 고르게 두면 존재 오라클이 된다(위 `realFile` 머리말).
-    const app = appTree(["(real)/layout.tsx"]);
+test("`layout.tsx` 라는 이름의 디렉터리는 레이아웃이 아니다", () => {
+    // `existsSync` 로 물으면 참이 되고, 뒤에서 `readFileSync` 가 EISDIR 로 죽어 사유가 틀린 반려가 된다.
+    const app = appTree(["layout.tsx/inner.txt", "(landing)/layout.tsx"]);
+    assert.deepEqual(relNames(app), ["(landing)/layout.tsx"]);
+});
+
+test("심링크 너머의 레이아웃도 센다 — 따라가는 것이 성질이다", () => {
+    // 이 파일은 검수 도구가 아니라 팩이 싣고 나가는 것이라 심링크를 막아도 지키는 것이 없다.
+    // 정책이 「따라간다」이므로 부정이 아니라 **양성**으로 잰다.
+    //
+    // ⚠ `lstat` 은 **마지막 성분만** 안 따라간다 — 폴더 심링크 아래 레이아웃을 «바로» 묻는
+    //   형상은 `lstat` 으로도 통과하므로 그것만 두면 이 성질이 안 잠긴다. 두 자리를 다 잰다.
     const outside = mkdtempSync(join(tmpdir(), "zalkera-rootlayout-outside-"));
     madeDirs.push(outside);
-    mkdirSync(join(outside, "group"));
-    writeFileSync(join(outside, "group", "layout.tsx"), "export default function L() {}\n");
-    symlinkSync(join(outside, "group"), join(app, "(linkdir)"), "dir");
-    mkdirSync(join(app, "(linkfile)"));
-    symlinkSync(join(outside, "group", "layout.tsx"), join(app, "(linkfile)", "layout.tsx"));
-    assert.deepEqual(relNames(app), ["(real)/layout.tsx"]);
+    mkdirSync(join(outside, "deep", "inner"), {recursive: true});
+    writeFileSync(join(outside, "deep", "inner", "layout.tsx"), "export default function L() {}\n");
+    writeFileSync(join(outside, "lone.tsx"), "export default function L() {}\n");
+
+    // ⑴ 레이아웃 «파일»이 심링크 — `lstatSync(...).isFile` 은 여기서 false 다.
+    const one = appTree(["(direct)/page.tsx"]);
+    symlinkSync(join(outside, "lone.tsx"), join(one, "(direct)", "layout.tsx"));
+    assert.deepEqual(relNames(one), ["(direct)/layout.tsx"]);
+
+    // ⑵ 심링크 «폴더»를 재귀로 내려간다 — `statOf(dir).isDir` 이 실제로 걸리는 자리다.
+    const two = appTree(["(other)/page.tsx"]);
+    symlinkSync(join(outside, "deep"), join(two, "(linked)"), "dir");
+    assert.deepEqual(relNames(two), ["(linked)/inner/layout.tsx"]);
+});
+
+test("세 겹보다 깊은 레이아웃은 못 본다 — 알고 있는 한계다", () => {
+    assert.deepEqual(relNames(appTree(["a/b/c/d/layout.tsx"])), []);
+    assert.deepEqual(relNames(appTree(["a/b/c/layout.tsx"])), ["a/b/c/layout.tsx"]);
 });
 
 /**
@@ -314,9 +341,15 @@ function layoutSources(appDirOverride?: string): {label: string; source: string}
     if (canonicalRoot !== null) {
         const presets = join(canonicalRoot, "presets");
         for (const code of readdirSync(presets)) {
-            const f = join(presets, code, "src", "app", "layout.tsx");
-            if (existsSync(f))
-                found.push({label: `presets/${code}/src/app/layout.tsx`, source: readFileSync(f, "utf8")});
+            // 프리셋도 **같은 스캔**을 쓴다 — 여기만 `src/app/layout.tsx` 로 고정하면 프리셋이
+            // 문서를 가르는 날 이 가지가 조용히 0벌을 넣는다.
+            const presetApp = join(presets, code, "src", "app");
+            for (const file of rootLayoutFilesIn(presetApp)) {
+                found.push({
+                    label: `presets/${code}/src/app/${file.slice(presetApp.length + 1)}`,
+                    source: readFileSync(file, "utf8"),
+                });
+            }
         }
     }
     return found;
@@ -333,18 +366,46 @@ test("layoutSources 가 그룹 레이아웃을 실제로 집어 온다 — 호�
     );
 });
 
-/** 배선 판정 — `assert.match` 를 쓰면 실패 시 `actual` 에 **파일 원문**이 실려 반려문으로 나간다. */
 const IMPORTS_HELPER = /import\s*\{[^}]*\bsiteVerification\b[^}]*\}\s*from\s*"@\/lib\/site"/;
 const WIRES_METADATA = /\bverification:\s*siteVerification\(\)/;
+/**
+ * 배선 판정 한 자리. **`assert.match` 를 쓰지 않는다** — 실패하면 `actual` 에 파일 원문이 담겨
+ * 반려문으로 나간다. `assert.ok(RE.test(...))` 는 `actual` 이 `false` 다(아래 시험이 잠근다).
+ */
+function assertWired(label: string, source: string): void {
+    assert.ok(IMPORTS_HELPER.test(source), `${label}: siteVerification 를 import 하지 않는다`);
+    assert.ok(WIRES_METADATA.test(source), `${label}: metadata.verification 에 배선되지 않았다`);
+}
 
 test("루트 layout 이 실제로 siteVerification() 을 metadata 에 싣는다", () => {
     // 함수가 완벽해도 **아무도 안 부르면** 태그가 안 나간다. 시험이 함수만 잠그면 그 형상이 그물 밖이다.
     // `NEXT_PUBLIC_*` 는 빌드 시 리터럴로 치환되므로 런타임 주입으로는 못 잰다 — 소스를 구문으로 본다
     // (`preview.test.ts` 와 같은 이유·같은 방식).
     const sources = layoutSources();
-    assert.ok(sources.length > 0, "layout.tsx 를 하나도 못 찾았다 — 시험이 아무것도 안 재고 있다");
-    for (const {label, source} of sources) {
-        assert.ok(IMPORTS_HELPER.test(source), `${label}: siteVerification 를 import 하지 않는다`);
-        assert.ok(WIRES_METADATA.test(source), `${label}: metadata.verification 에 배선되지 않았다`);
+    assert.ok(sources.length > 0, "루트 레이아웃을 하나도 못 찾았다 — 시험이 아무것도 안 재고 있다");
+    for (const {label, source} of sources) assertWired(label, source);
+});
+
+test("배선 판정이 실패해도 파일 원문이 오류에 안 실린다", () => {
+    // `assert.match(source, RE, msg)` 로 되돌리면 `actual` 에 **파일 원문**이 담기고,
+    // `scripts/verify-zip.mjs` 가 그 꼬리를 떠서 반려문에 싣는다. 주석으로만 적어 두면
+    // 되돌려도 초록이라, 여기서 행위로 잠근다.
+    const sentinel = "SENTINEL_이_문자열이_새면_안_된다";
+    // ⚠ **두 단언을 각각 지나가야 한다.** 첫 단언에서만 실패시키면 둘째를 `assert.match` 로
+    //   되돌려도 초록이다(실제로 그렇게 새어 이 주석이 생겼다).
+    const probes: [string, string][] = [
+        ["import 판정", sentinel],
+        ["배선 판정", `import {siteVerification} from "@/lib/site";\n${sentinel}`],
+    ];
+    for (const [which, source] of probes) {
+        let caught: (Error & {actual?: unknown}) | undefined;
+        try {
+            assertWired("probe", source);
+        } catch (e) {
+            caught = e as Error & {actual?: unknown};
+        }
+        assert.ok(caught, `${which}: 배선이 없는 원문인데 판정이 통과했다`);
+        assert.notEqual(typeof caught.actual, "string", `${which}: 실패 오류의 actual 에 원문이 실렸다`);
+        assert.ok(!inspect(caught).includes(sentinel), `${which}: 실패 오류를 찍으면 원문이 나온다`);
     }
 });
