@@ -324,9 +324,11 @@ test("🔴 예산 — 상한 안의 표를 100개 쌓아도 즉시 끝난다", (
     const blocks = parseMarkdown(source);
     const ms = Number(process.hrtime.bigint() - started) / 1e6;
 
-    strictEqual(blocks.length, 100);
-    // 셀 총수가 **본문에 실제로 적힌 칸**을 넘지 않는다 — 모자란 칸을 채우면 여기서 32배가 된다.
-    const cells = blocks.reduce((sum, b) => sum + (b as {rows: unknown[][]}).rows.reduce((n, r) => n + r.length, 0), 0);
-    ok(cells <= 100 * 500, `셀이 ${cells}개 — 없는 칸을 채우고 있다`);
+    // 문서 예산(2,000행)을 쓰고 나면 그 뒤 표는 문단이다 — 글자는 안 사라진다.
+    strictEqual(blocks.filter((b) => b.kind === "table").length, 4);
+    strictEqual(blocks.filter((b) => b.kind === "paragraph").length, 96);
+    // 행 총수가 문서 예산에서 멈춘다 — 표당 상한만으로는 여기서 5만 행이 된다.
+    const rows = blocks.reduce((sum, b) => sum + (b.kind === "table" ? (b as {rows: unknown[][]}).rows.length : 0), 0);
+    strictEqual(rows, 2_000, `표 행이 ${rows}개 — 문서 예산이 안 걸렸다`);
     ok(ms < 500, `${ms.toFixed(0)}ms 걸렸다 — 본문 바이트당 비용이 열 수만큼 곱해진다`);
 });

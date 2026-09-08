@@ -214,9 +214,28 @@ function tableStartsAt(lines: string[], index: number): string[] | null {
 const MAX_TABLE_COLUMNS = 32;
 const MAX_TABLE_ROWS = 500;
 
+/**
+ * 한 **문서**의 표 행 총수 상한.
+ *
+ * 🔴 표 하나의 상한은 표 **개수**를 안 묶는다. 본문 길이에는 상한이 없으므로, 상한 안의 표를
+ * 이어 붙이는 것만으로 행이 무한히 는다 — 행 하나가 `<tr><td>` 를 내므로 산출 HTML 이 본문의
+ * 수백 배가 되고(실측: 128KB 본문 → 5만 행 → **18MB 응답**), 그 크기는 ISR 캐시 한도를 넘어
+ * **방문자가 매 요청 재생성**시킨다. 서빙 박스에는 테넌트가 여럿 산다.
+ *
+ * 넘으면 그 뒤의 표는 표로 그리지 않는다(문단으로 남아 **글자는 안 사라진다**).
+ */
+const MAX_TABLE_ROWS_PER_DOCUMENT = 2_000;
+
 export function parseMarkdown(source: string): Block[] {
     const blocks: Block[] = [];
     const usedIds = new Map<string, number>();
+    let tableRows = 0;
+    /**
+     * 표 판정의 **단 하나의 자리** — 문서 예산까지 여기서 본다. 문단 경계도 이것을 쓴다:
+     * 두 술어가 갈리면 표를 거절한 줄에서 문단도 끊겨 진행이 멈춘다(같은 줄을 영원히 다시 본다).
+     */
+    const startsTable = (index: number): string[] | null =>
+        tableRows < MAX_TABLE_ROWS_PER_DOCUMENT ? tableStartsAt(lines, index) : null;
     const lines = source.replace(/\r\n?/g, "\n").split("\n");
 
     let i = 0;
@@ -258,7 +277,7 @@ export function parseMarkdown(source: string): Block[] {
         //    조금 더 키우면 서빙 프로세스가 힙에서 죽는다 — 그 글은 공개 URL 이고 크기가 커서
         //    ISR 이 캐시를 거부하므로, 비용을 **익명 방문자가 반복해서** 유발한다.
         //    상한을 넘는 표는 표로 그리지 않는다(그 줄들은 문단으로 남는다 — 글자는 안 사라진다).
-        const tableHead = tableStartsAt(lines, i);
+        const tableHead = startsTable(i);
         if (tableHead) {
             i += 2;
             const rows: Inline[][][] = [];
@@ -266,13 +285,15 @@ export function parseMarkdown(source: string): Block[] {
                 i < lines.length &&
                 lines[i]!.includes("|") &&
                 lines[i]!.trim() !== "" &&
-                rows.length < MAX_TABLE_ROWS
+                rows.length < MAX_TABLE_ROWS &&
+                tableRows < MAX_TABLE_ROWS_PER_DOCUMENT
             ) {
                 // 🔴 **없는 칸을 채우지 않는다.** 머리줄 칸 수만큼 채우면 `|` 한 글자짜리 행이
                 //    32개 셀을 만들어 **본문 바이트당 비용**이 열 수만큼 곱해진다(실측: 바이트당
                 //    14.2셀 · 113KB 본문이 서빙 프로세스를 죽였다). 넘치는 칸만 버린다.
                 const cells = tableCells(lines[i]!).slice(0, tableHead.length);
                 rows.push(cells.map((cell) => parseInline(cell)));
+                tableRows += 1;
                 i += 1;
             }
             blocks.push({kind: "table", head: tableHead.map((cell) => parseInline(cell)), rows});
@@ -336,7 +357,7 @@ export function parseMarkdown(source: string): Block[] {
                 /^ {0,3}(-{3,}|\*{3,}|_{3,})\s*$/.test(next) ||
                 // 🔴 **표로 그릴 때만** 끊는다 — 「표처럼 보이나」로 끊으면 표가 거절된 줄에서
                 //    문단도 끊겨 그 자리를 영원히 다시 본다(위 `tableStartsAt` 의 ⚠).
-                tableStartsAt(lines, i) !== null
+                startsTable(i) !== null
             ) {
                 break;
             }
