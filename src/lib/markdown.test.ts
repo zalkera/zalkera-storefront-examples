@@ -292,3 +292,20 @@ test("앵커는 «이미 만들어 낸 id» 와도 안 겹친다 — 반대 순�
         .map((b) => (b as {id: string}).id);
     strictEqual(new Set(ids).size, ids.length, `앵커가 겹쳤다: ${JSON.stringify(ids)}`);
 });
+
+test("🔴 예산 — 행 상한: 501행째부터는 표가 아니다", () => {
+    // 칸 상한만으로는 못 막는다. 32칸 표는 행이 늘수록 비용이 곱으로 는다 — 977KB 본문이
+    // 654MB·2.3초, 3.9MB 면 2.6GB(심의 실측). 본문 길이에 상한이 없으므로 행에도 상한이 있어야 한다.
+    const head = `|${Array.from({length: 32}, (_, c) => ` c${c} `).join("|")}|`;
+    const delim = `|${"---|".repeat(32)}`;
+    const row = `|${Array.from({length: 32}, () => " v ").join("|")}|`;
+    const started = process.hrtime.bigint();
+    const blocks = parseMarkdown([head, delim, ...Array(5_000).fill(row)].join("\n"));
+    const ms = Number(process.hrtime.bigint() - started) / 1e6;
+
+    strictEqual(blocks[0]?.kind, "table");
+    strictEqual((blocks[0] as {rows: unknown[]}).rows.length, 500, "행 상한이 안 걸렸다");
+    // 넘친 줄은 사라지지 않는다 — 문단으로 남는다.
+    strictEqual(blocks[1]?.kind, "paragraph");
+    ok(ms < 500, `${ms.toFixed(0)}ms 걸렸다 — 행 상한이 비용을 못 묶는다`);
+});

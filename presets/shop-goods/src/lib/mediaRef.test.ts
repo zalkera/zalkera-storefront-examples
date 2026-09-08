@@ -1,6 +1,6 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
-import {bodyMediaSrc, resolveMediaRef} from "./mediaRef.ts";
+import {bodyMediaSrc, bodyVideoSrc, resolveMediaRef} from "./mediaRef.ts";
 import {parseMarkdown} from "./markdown.ts";
 
 /**
@@ -92,4 +92,20 @@ test("저작기 삽입 문자열이 본문 파이프라인을 끝까지 통과�
     assert.equal(image?.kind, "image");
     assert.equal(image!.kind === "image" ? image.alt : "", name, "alt 가 색인되려면 이름이 남아야 한다");
     assert.equal(bodyMediaSrc(image!.kind === "image" ? image.src : ""), `/media/${id}`);
+});
+
+test("🔴 자체 영상은 불변 참조만 받는다 — 외부 주소는 «없음» 이다", () => {
+    // 이 그물이 없으면 본체를 `bodyMediaSrc` 위임으로 바꿔 외부 https 를 되살려도 초록이다
+    // (AST 시험은 **함수 이름**만 잠근다). 그 형상에서는 방문자가 아무 조작도 안 했는데
+    // `preload="metadata"` 가 그 호스트로 나가 IP·UA 가 제3자에게 간다.
+    assert.equal(bodyVideoSrc("media:34"), "/media/34");
+    for (const external of [
+        "https://cdn.example/clip.mp4",
+        "http://cdn.example/clip.mp4",
+        "/uploads/clip.mp4",
+        "media:abc",
+        null,
+    ]) {
+        assert.equal(bodyVideoSrc(external), null, `${JSON.stringify(external)} 가 영상 주소가 됐다`);
+    }
 });
