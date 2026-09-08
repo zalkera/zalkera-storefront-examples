@@ -5,6 +5,7 @@ import {zalkera} from "@/lib/zalkera";
 import {parseSeo} from "@/lib/seo";
 import {siteUrl} from "@/lib/site";
 import {JsonLd, blogPostingJsonLd, breadcrumbJsonLd} from "@/components/JsonLd";
+import {Markdown} from "@/components/Markdown";
 import {ViewBeacon} from "./ViewBeacon";
 import {routeParam} from "@/lib/routeParam";
 import {formatDate} from "@/lib/datetime";
@@ -78,8 +79,10 @@ export default async function BlogPostPage({params}: {params: Promise<{slug: str
                     className="my-4 h-auto max-w-full rounded-lg"
                 />
             )}
-            {/* 본문 — 마크다운 렌더러를 붙이지 않는다(D5). 백엔드가 준 문자열 그대로 pre-wrap. */}
-            {post.content && <div className="whitespace-pre-wrap">{post.content}</div>}
+            {/* 본문 — 저작이 마크다운이므로 **구조로** 그린다(`h2`·`a`·`img`). 평문으로 내면 답변
+                엔진이 인용할 청크 경계도, 크롤러가 따라갈 내부 링크도 안 생긴다.
+                🔴 원시 HTML 을 만들지 않는다 — 파서가 데이터를 내고 렌더러가 요소를 만든다. */}
+            {post.content && <Markdown source={post.content} />}
             {/* 조회수 비콘 — RSC 에서 recordPostView 를 직접 부르면 ISR 프리렌더가 조회를 세므로 금지.
                 브라우저 아일랜드가 BFF(/api/posts/{slug}/view)를 친다. */}
             <ViewBeacon slug={slug} />

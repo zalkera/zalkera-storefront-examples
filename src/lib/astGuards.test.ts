@@ -205,3 +205,38 @@ test("CheckoutForm 은 «계좌가 있다»만 받는다 — 계좌 문자열을
         "폼의 props 형상이 바뀌었다. 계좌 문자열을 넘기면 정적 프리렌더에 구워져 모든 방문자에게 나간다",
     );
 });
+
+/**
+ * **글 본문은 구조로 그린다** — 평문으로 되돌리는 회귀를 판정 층에서 잡는다.
+ *
+ * 🔴 저작이 마크다운인데 문자열을 그대로 내면 `h2`·`a`·`img` 가 하나도 안 생긴다. 답변 엔진이
+ *    인용할 청크 경계도, 크롤러가 따라갈 내부 링크도 없는 문서가 된다(그 상태로 배송돼 있었다).
+ * ⚠ 문면이 아니라 **AST** 로 본다 — 주석 안의 예시나 다른 파일의 같은 문자열에 안 걸린다.
+ */
+test("블로그 상세가 본문을 `Markdown` 으로 그린다 — 평문 복귀를 잡는다", () => {
+    const detail = ourSourceFiles().filter((f) => relPath(f).endsWith("app/blog/[slug]/page.tsx"));
+    assert.ok(detail.length > 0, "블로그 상세 쪽을 못 찾았다 — 이 시험이 아무것도 안 본다");
+
+    for (const sf of detail) {
+        let rendered = false;
+        const visit = (node: TS.Node): void => {
+            if (
+                (ts.isJsxSelfClosingElement(node) || ts.isJsxOpeningElement(node)) &&
+                node.tagName.getText(sf) === "Markdown"
+            ) {
+                rendered = true;
+            }
+            ts.forEachChild(node, visit);
+        };
+        visit(sf);
+        assert.ok(rendered, `${relPath(sf)}: 본문을 «Markdown» 으로 안 그린다`);
+    }
+});
+
+test("양성 통제군 — 그 그물이 실제로 «없음» 을 구분한다", () => {
+    // 소스에 `Markdown` 이 아예 없는 파일(이 시험 파일 자신을 제외한 아무 lib 파일)에서는
+    // 위 판정이 거짓이어야 한다. 늘 참인 판정이면 위 시험은 공허하다.
+    const other = ourSourceFiles().find((f) => relPath(f) === "lib/datetime.ts");
+    assert.ok(other, "통제군 파일을 못 찾았다");
+    assert.ok(!other!.getFullText().includes("<Markdown"), "통제군이 오염됐다 — 다른 파일을 고르라");
+});

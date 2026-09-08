@@ -36,5 +36,6 @@
     "scripts/lib/rendererCoverage.test.mjs": 2,
     "src/lib/datetime.test.ts": 8,
     "src/lib/bankTransferPolicy.test.ts": 14,
-    "src/lib/astGuards.test.ts": 5
+    "src/lib/astGuards.test.ts": 7,
+    "src/lib/markdown.test.ts": 13
 }
