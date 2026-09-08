@@ -11,8 +11,8 @@ import {formatDate} from "@/lib/datetime";
 
 /**
  * 블로그/공지 상세 (RSC · ISR). 발행글은 세션 무관 읽기라 상품 상세와 같은 사상으로 굽는다:
- * 첫 요청에 렌더한 뒤 `revalidate` 주기로 캐시. posts 는 태그 무효화가 없어(SDK 가 ReadOptions 를
- * 안 받는다) 시간 기반 revalidate 만 건다. generateStaticParams 는 두지 않는다(글이 유동적 → on-demand ISR).
+ * 첫 요청에 렌더한 뒤 `revalidate` 주기로 캐시. `listPosts`·`getPost` 는 0.32.0 부터 [ReadOptions] 를 받지만,
+ * 태그는 캐시가 아니고 무효화 도달도 빌드마다 다르다(`llms.txt`) — 갱신은 **시간 기반**이 진다.
  */
 export const dynamic = "force-static";
 export const revalidate = 300;

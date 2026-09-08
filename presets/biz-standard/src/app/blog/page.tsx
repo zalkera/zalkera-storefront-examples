@@ -7,8 +7,11 @@ import {formatDate} from "@/lib/datetime";
 
 /**
  * 블로그/공지 목록 (RSC · ISR). 발행글은 세션 무관 읽기라 요청마다 SSR 하지 않는다: 첫 요청에
- * 렌더한 뒤 `revalidate` 주기로 캐시한다(상품 상세와 같은 사상). 백엔드 posts 는 태그 무효화가
- * 없어(SDK listPosts 는 ReadOptions 를 안 받는다) **시간 기반 revalidate 만** 건다.
+ * 렌더한 뒤 `revalidate` 주기로 캐시한다(상품 상세와 같은 사상).
+ *
+ * ⚠ `listPosts` 는 0.32.0 부터 [ReadOptions] 를 받는다 — 태그를 달 수 있다. 다만 **태그는 캐시가
+ * 아니고**(왕복을 안 줄인다) 무효화 도달도 빌드마다 다르다(`llms.txt` 의 「ISR 캐시 태그」 절).
+ * 그래서 이 쪽의 갱신은 **시간 기반 `revalidate` 가 지고**, 태그는 그 위의 최선 노력이다.
  */
 export const dynamic = "force-static";
 export const revalidate = 300;

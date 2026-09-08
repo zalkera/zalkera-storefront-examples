@@ -264,10 +264,20 @@ function reachableHost(raw) {
 /** AWS 가 자기 문서에서 쓰는 자리표시자. GitHub 의 스캐너도 비-비밀로 안다. */
 const AWS_DOC_PLACEHOLDER = /\bAKIA[0-9A-Z]{9}EXAMPLE\b/;
 
-const SECRET_TEXTUAL = /\.(m?[jt]sx?|cjs|json|md|txt|ya?ml|sh|html?|css|toml|ini|conf|env|example|sample|template)$/i;
+const SECRET_TEXTUAL =
+    /\.(m?[jt]sx?|cjs|json|jsonc|md|mdx|txt|ya?ml|sh|bash|zsh|html?|css|scss|toml|ini|cfg|conf|env|example|sample|template|csv|tsv|sql|svg|xml|properties|log|har|patch|diff|bak|orig|tmpl)$/i;
+/**
+ * **내용을 안 봐도 되는 확장자** — 글자가 아닌 것. 여기 해당하면 «건너뛴 것을 적지 않는다».
+ *
+ * ⛔ 이 목록에 없는 확장자를 조용히 건너뛰지 마라. 종전에는 `SECRET_TEXTUAL` 에 없으면 전부
+ *    무기록으로 빠졌는데, 같은 함수의 다른 세 스킵 갈래(심링크·크기 초과·디코딩 실패)는 전부
+ *    `unread` 에 적어 반려로 문다. **가장 큰 갈래만 그 장치를 안 탔다** — `.csv`·`.sql`·`.har`
+ *    같은 것이 「시크릿 0」 아래에 숨었다(심의 실측).
+ */
+const SECRET_BINARY = /\.(png|jpe?g|gif|webp|avif|ico|bmp|tiff?|pdf|zip|gz|tgz|bz2|xz|7z|rar|woff2?|ttf|otf|eot|mp[34]|mov|webm|wasm|node|so|dylib|dll|exe|class|jar)$/i;
 /** 확장자가 없는데 자격증명이 앉는 이름들. `.git/config` 이 이 그물 밖이라 통과한 전례가 있다. */
 const SECRET_EXTENSIONLESS =
-    /^(config|credentials|\.git-credentials|\.netrc|_netrc|\.npmrc|\.pgpass|authorized_keys|known_hosts|id_rsa|id_dsa|id_ecdsa|id_ed25519)$/i;
+    /^(config|credentials|\.git-credentials|\.netrc|_netrc|\.npmrc|\.pgpass|authorized_keys|known_hosts|id_rsa|id_dsa|id_ecdsa|id_ed25519|\.gitignore|\.gitattributes|\.npmignore|\.dockerignore|\.prettierignore|\.eslintignore|\.editorconfig|\.nvmrc|\.node-version|\.tool-versions|Dockerfile|Makefile|Procfile|LICENSE|NOTICE|CHANGELOG)$/i;
 /**
  * 내용을 훑을 최대 크기.
  *
@@ -355,10 +365,18 @@ function scanSecrets(dir) {
             if ((/(^|\/)\.env/i.test(`/${r}`) || /\.env$/i.test(e.name)) && !ENV_KEEP.test(e.name)) {
                 hits.push(r);
             }
-            if (/\.(pem|key|p12|pfx)$/.test(e.name)) hits.push(r);
+            // ⚠ **대소문자를 무시한다.** `/i` 가 없어 `server.PEM` 이 이름축을 통과했고,
+            //   `SECRET_TEXTUAL` 에도 `pem` 이 없어 내용축까지 함께 빠졌다(심의 실측).
+            if (/\.(pem|key|crt|cer|p12|pfx|jks|keystore)$/i.test(e.name)) hits.push(r);
             // 확장자 없는 자격증명 파일(`.git/config`·`.git/credentials`·`.netrc` 등)도 본다 —
             // 위 정크 반려가 1차 방어이고 이것이 2차다.
-            if (!SECRET_TEXTUAL.test(e.name) && !SECRET_EXTENSIONLESS.test(e.name)) continue;
+            if (!SECRET_TEXTUAL.test(e.name) && !SECRET_EXTENSIONLESS.test(e.name)) {
+                // 글자가 아닌 것은 안 봐도 된다 — 그 사실은 목록으로 선언돼 있다.
+                if (SECRET_BINARY.test(e.name)) continue;
+                // 그 밖은 **안 본 것**이다. 적어서 반려에 물린다 — 「시크릿 0」이 미측정을 덮지 않게.
+                unread.push(`${r} — 아는 확장자가 아니라 내용을 안 봤습니다(텍스트면 확장자를 바꾸거나 SECRET_TEXTUAL 에 더하십시오)`);
+                continue;
+            }
             // ⚠ **심링크는 따라가지 않는다.** 신뢰 밖 zip 이라 `docs/harmless.md → /검수자/사설파일`
             //   하나로 검수자 파일을 읽고 그 내용이 반려문에 실린다. 못 읽은 것으로 적어
             //   "시크릿 0" 이 미측정을 덮지 않게 한다.

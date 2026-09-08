@@ -42,8 +42,10 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function Home() {
     // ISR 캐시 태그 — site-config: 사이트 설정·테마·레이아웃(전 페이지 영향) · products: 카탈로그 변경.
     //
-    // ⚠ **`/` 는 빌드 프리렌더라 `revalidateTag` 로 안 풀린다.** 그 엔트리에는 소프트 태그가 안
-    //   실린다(`cat .next/server/app/page.meta` 로 확인된다). 개시 직후 콘솔에서 설정을 고쳐도 아래 `revalidate` 주기가
+    // ⚠ **`/` 는 빌드 프리렌더라 `revalidateTag` 에 기대면 안 된다.** 그 엔트리에 태그가 붙는지가
+    //   빌드마다 다르다(12회전 실측에서 0~12로 갈렸다).
+    //   ⛔ 확인은 `find .next/server/app -name '*.meta'` 로 하라 — 홈의 엔트리 이름은 `page.meta` 가
+    //   아니라 **`index.meta`** 이고, 깊이 1 글롭은 중첩 라우트를 놓친다. 개시 직후 콘솔에서 설정을 고쳐도 아래 `revalidate` 주기가
     //   지나야 반영된다 — 자가치유이고 상한은 1주기다. 태그는 런타임에 생성된 ISR 엔트리
     //   (`/products/[slug]`·`/c/[slug]`·`/blog/[slug]`)에서 듣는다.
     const config = await zalkera.getSiteConfig({tags: ["site-config"]}).catch(() => null);

@@ -17,12 +17,15 @@ import {Analytics} from "@/components/Analytics";
  *
  * 빌드가 백엔드에 못 닿으면 폴백 제목이 산출물에 박히는데, revalidate 가 없으면 **영구 고정**된다.
  *
- * ⚠ **`revalidateTag` 는 이 자리를 안 푼다.** 빌드가 프리렌더한 엔트리에는 소프트 태그가 안 실린다 —
- *   빌드가 낸 `.next/server/app/*.meta` 의 `x-next-cache-tags` 에는 `_N_T_/…` 경로 태그만 있고
- *   `site-config`·`products` 같은 소프트 태그가 없다. 직접 보려면 빌드 후 그 파일을 열면 된다:
- *   `cat .next/server/app/products.meta`.
+ * ⚠ **`revalidateTag` 에 기대지 마라 — 붙는지가 빌드마다 다르다.** 프리렌더 엔트리에 소프트 태그
+ *   (`site-config`·`products`)가 실릴 때도 있고 안 실릴 때도 있다. 같은 코드·같은 백엔드로
+ *   `rm -rf .next` 후 12회 클린 빌드한 실측에서 소프트 태그 총수가 **0·2·10·12** 로 갈렸다.
+ *   ⛔ **깊이 1 글롭으로 재지 마라** — `.next/server/app/*.meta` 는 중첩 라우트를 통째로 놓친다.
+ *   재현: `for f in $(find .next/server/app -name '*.meta'); do node -p "JSON.parse(require('fs').readFileSync('$f','utf8')).headers['x-next-cache-tags']"; done`
+ *   ⚠ 백엔드가 200 을 주는 상태에서 재라 — fetch 가 실패하면 캐시 항목이 안 생겨 태그 0건으로
+ *   나오는데 그것은 빈 측정이다.
  *
- *   그래서 이 값이 **유일한 회복 경로**다 — 첫 시간기반 재생성이 지나면 그때부터 태그도 듣는다.
+ *   그래서 이 값이 **가장 넓게 듣는 회복 경로**다 — 첫 시간기반 재생성이 지나면 그때부터 태그도 듣는다.
  *   즉시 반영이 필요하면 `revalidatePath` 를 써야 하고, `/api/revalidate` 가 이미 `paths` 를 받는다. 자체 revalidate 를 가진 라우트(홈 600 · [slug] 300)는 더 낮은 값이 이기므로 무영향이고,
  * `cookies()` 를 쓰는 동적 라우트(cart·mypage·orders·login)에는 애초에 적용되지 않는다.
  */
