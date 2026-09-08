@@ -8,6 +8,7 @@ import {JsonLd, blogPostingJsonLd, breadcrumbJsonLd} from "@/components/JsonLd";
 import {Markdown} from "@/components/Markdown";
 import {ViewBeacon} from "./ViewBeacon";
 import {routeParam} from "@/lib/routeParam";
+import {pageMetadata, withSiteName} from "@/lib/metadata";
 import {formatDate} from "@/lib/datetime";
 
 /**
@@ -35,9 +36,21 @@ export async function generateMetadata({params}: {params: Promise<{slug: string}
         throw error;
     });
     const seo = parseSeo(post.seo);
+    const title = seo.title ?? post.title;
+    const description = seo.description ?? post.summary ?? undefined;
+    // 상호는 공유 카드에만. layout 과 같은 인자라 fetch 는 1회로 합쳐진다(상품 상세와 같은 관례).
+    const config = await zalkera.getSiteConfig({tags: ["site-config"]}).catch(() => null);
     return {
-        title: seo.title ?? post.title,
-        description: seo.description ?? post.summary ?? undefined,
+        title,
+        description,
+        ...pageMetadata({
+            ogTitle: withSiteName(title, config?.companyName),
+            description,
+            path: `/blog/${post.slug}`,
+            siteName: config?.companyName,
+            // 쪽이 **실제로 그리는** 커버. 없으면 필드를 뺀다 — 없는 이미지를 약속하지 않는다.
+            image: post.coverAssetId != null ? `/media/${post.coverAssetId}` : undefined,
+        }),
     };
 }
 

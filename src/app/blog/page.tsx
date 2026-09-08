@@ -2,6 +2,7 @@
 import type {Metadata} from "next";
 import {zalkera} from "@/lib/zalkera";
 import {siteUrl} from "@/lib/site";
+import {pageMetadata, withSiteName} from "@/lib/metadata";
 import {JsonLd, breadcrumbJsonLd, itemListJsonLd} from "@/components/JsonLd";
 import {formatDate} from "@/lib/datetime";
 
@@ -16,7 +17,26 @@ import {formatDate} from "@/lib/datetime";
 export const dynamic = "force-static";
 export const revalidate = 300;
 
-export const metadata: Metadata = {title: "블로그"};
+const TITLE = "블로그";
+const DESCRIPTION = "새 소식과 안내를 모았습니다.";
+
+/**
+ * ⚠ **정적 `metadata` 가 아니라 `generateMetadata` 다** — 상호(`site_config`)가 서버에서 와야
+ * 공유 카드에 상호를 넣고 canonical 을 낼 수 있다(형제 목록 쪽들과 같은 형태).
+ */
+export async function generateMetadata(): Promise<Metadata> {
+    const config = await zalkera.getSiteConfig({tags: ["site-config"]}).catch(() => null);
+    return {
+        title: TITLE,
+        description: DESCRIPTION,
+        ...pageMetadata({
+            ogTitle: withSiteName(TITLE, config?.companyName),
+            description: DESCRIPTION,
+            path: "/blog",
+            siteName: config?.companyName,
+        }),
+    };
+}
 
 export default async function BlogPage() {
     // 백엔드가 죽어도 셸은 살아야 한다 — 실패는 삼키고 빈 목록으로 강하한다.
