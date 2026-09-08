@@ -65,7 +65,7 @@ export const REPO_ONLY_FLOORS = {
     "scripts/lib/packManifest.test.mjs": 8,
     "scripts/lib/validateSeverity.test.mjs": 3,
     "scripts/lib/visitor-ip-parity.test.mjs": 32,
-    "scripts/lib/wiringParity.test.mjs": 10,
+    "scripts/lib/wiringParity.test.mjs": 11,
     "scripts/lib/seoWiring.test.mjs": 2,
     "scripts/lib/verifyZipSignal.test.mjs": 1,
     "scripts/lib/verifyZipJudgments.test.mjs": 24,

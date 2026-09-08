@@ -14,7 +14,7 @@
  */
 import {test} from "node:test";
 import assert from "node:assert/strict";
-import {mkdtempSync, mkdirSync, writeFileSync, rmSync, unlinkSync} from "node:fs";
+import {mkdtempSync, mkdirSync, readdirSync, writeFileSync, rmSync, unlinkSync} from "node:fs";
 import {dirname, join} from "node:path";
 import {tmpdir} from "node:os";
 import {checkWiringParity, WIRING_DIRS, WIRING_FILES} from "./wiring-parity.mjs";
@@ -127,4 +127,24 @@ test("목록이 비지 않았다 — 비면 위 시험이 전부 공허하게 �
     assert.ok(WIRING_DIRS.length >= 3, `배선 디렉터리 ${WIRING_DIRS.length}개`);
     assert.ok(WIRING_FILES.includes("src/middleware.ts"), "미리보기 쓰기 차단의 집행 지점이 빠졌다");
     assert.ok(WIRING_DIRS.includes("src/app/api/"), "BFF 전량이 빠졌다");
+});
+
+/**
+ * **이 레포 자신을 잰다.**
+ *
+ * 🔴 위 시험들은 전부 임시 디렉터리의 픽스처를 잰다 — 판정 함수가 옳은지는 증명하지만 **이
+ * 레포가 지금 그 규칙을 지키는지는 아무도 안 본다.** 실제로 `checkWiringParity()` 를 레포에
+ * 대고 부르는 자리는 팩을 구울 때(`pack-preset.mjs`)뿐이었고, 그래서 프리셋 한 벌의 파서가
+ * 갈려도 `npm run verify` 와 CI 가 통과했다(심의 실측).
+ *
+ * ⚠ 소스가 한 벌뿐이면 판정 함수는 조용히 통과한다(고객 zip 이 그 형상이다). 정본에서는 그것이
+ * 공허참이므로 **대조한 벌 수를 먼저 단언한다.**
+ */
+test("🔴 이 레포의 배선이 실제로 동일하다 — 픽스처가 아니라 자기 자신을 잰다", () => {
+    const root = join(dirname(new URL(import.meta.url).pathname), "..", "..");
+    const trees = readdirSync(join(root, "presets"), {withFileTypes: true}).filter((e) => e.isDirectory());
+    assert.ok(trees.length >= 2, `프리셋을 ${trees.length}벌만 찾았다 — 이 시험이 공허해진다`);
+
+    const problems = checkWiringParity(root);
+    assert.deepEqual(problems, [], `배선이 갈렸다:\n  ${problems.join("\n  ")}`);
 });
