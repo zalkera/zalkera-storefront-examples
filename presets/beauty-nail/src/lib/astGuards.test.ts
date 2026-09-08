@@ -416,3 +416,55 @@ test("양성 통제군 — 그 판정이 «맨 값» 을 구분한다", () => {
     );
     assert.deepEqual(urlWiring(sf), ["a.href ← safeLinkUrl()", "img.src ← 식(node.src)"]);
 });
+
+/**
+ * **소독기 이름이 «어디서» 오는가.**
+ *
+ * 🔴 배선 그물은 호출식의 **이름**만 본다. 그래서 import 를 지우고 같은 이름의 통과 함수를 같은
+ *    파일에 심으면 배선 문자열이 그대로라 전 게이트가 초록이다 — 실제로 그 형상에서 본문의
+ *    `media:13` 이 해석·소독을 통째로 우회해 원문 그대로 나갔다(심의 실측).
+ *    그래서 **이름의 출처**를 값으로 못박는다.
+ */
+const SANITIZER_NAMES = ["bodyMediaSrc", "bodyVideoSrc", "safeLinkUrl"];
+
+/** `이름 ← 출처` — import 면 모듈 이름, 같은 파일이 만들었으면 «지역 선언». */
+function nameSources(sf: TS.SourceFile): string[] {
+    const out: string[] = [];
+    const note = (name: string, origin: string): void => {
+        if (SANITIZER_NAMES.includes(name)) out.push(`${name} ← ${origin}`);
+    };
+
+    const visit = (node: TS.Node): void => {
+        if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)) {
+            const bindings = node.importClause?.namedBindings;
+            if (bindings && ts.isNamedImports(bindings)) {
+                for (const element of bindings.elements) note(element.name.text, node.moduleSpecifier.text);
+            }
+        }
+        // 같은 파일이 그 이름을 만들면 import 를 가린다 — 그것이 이 규칙이 잡는 형상이다.
+        if (ts.isFunctionDeclaration(node) && node.name) note(node.name.text, "지역 선언");
+        if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name)) note(node.name.text, "지역 선언");
+        if (ts.isClassDeclaration(node) && node.name) note(node.name.text, "지역 선언");
+        ts.forEachChild(node, visit);
+    };
+    visit(sf);
+    return out.sort();
+}
+
+test("본문 렌더러 5벌이 소독기를 «정본 모듈에서» 가져온다 — 동명 지역함수로 못 가린다", () => {
+    const expected = ["bodyMediaSrc ← @/lib/mediaRef", "bodyVideoSrc ← @/lib/mediaRef", "safeLinkUrl ← @/lib/safeUrl"];
+    for (const {label, sf} of packCopies("components/Markdown.tsx")) {
+        assert.deepEqual(nameSources(sf), expected, `${label}: 소독기 이름의 출처가 다르다`);
+    }
+});
+
+test("양성 통제군 — 그 판정이 «자기가 만든 이름» 을 구분한다", () => {
+    const sf = ts.createSourceFile(
+        "shadow.tsx",
+        'const bodyMediaSrc = (s: string) => s;\nimport {safeLinkUrl} from "@/lib/safeUrl";',
+        ts.ScriptTarget.Latest,
+        true,
+        ts.ScriptKind.TSX,
+    );
+    assert.deepEqual(nameSources(sf), ["bodyMediaSrc ← 지역 선언", "safeLinkUrl ← @/lib/safeUrl"]);
+});

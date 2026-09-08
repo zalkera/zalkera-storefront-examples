@@ -167,15 +167,16 @@ test("표는 머리와 행으로 갈린다 — 셀 안의 인라인도 산다", 
     strictEqual(table.rows[0]![1]![0]!.kind, "link");
 });
 
-test("열 수는 머리줄이 정한다 — 저작자의 오타가 열을 어긋내지 않는다", () => {
+test("열 수의 상한은 머리줄이 정한다 — 넘치면 버리고, 모자라면 «채우지 않는다»", () => {
+    // 모자란 칸을 채우면 `|` 한 글자짜리 행이 머리줄 칸 수만큼 셀을 만든다 — 본문 바이트당
+    // 비용이 열 수만큼 곱해져, 상한 안의 표를 여러 개 쌓는 것만으로 서버가 죽는다(심의 실측).
     const [block] = parseMarkdown("| a | b |\n|---|---|\n| 하나 |\n| 하나 | 둘 | 셋 |");
     const {rows} = block as {rows: unknown[][]};
     deepStrictEqual(
         rows.map((r) => r.length),
-        [2, 2],
+        [1, 2],
     );
 });
-
 test("음성 짝 — 구분줄이 없으면 표가 아니다(파이프 든 문장이 표가 되면 안 된다)", () => {
     strictEqual(parseMarkdown("| 이건 표가 아니다 | 그냥 문장 |")[0]?.kind, "paragraph");
     strictEqual(parseMarkdown("가격은 1,000|2,000 사이입니다")[0]?.kind, "paragraph");
@@ -310,4 +311,22 @@ test("🔴 예산 — 행 상한: 501행째부터는 표가 아니다", () => {
     // 넘친 줄은 사라지지 않는다 — 문단으로 남는다.
     strictEqual(blocks[1]?.kind, "paragraph");
     ok(ms < 500, `${ms.toFixed(0)}ms 걸렸다 — 행 상한이 비용을 못 묶는다`);
+});
+
+test("🔴 예산 — 상한 안의 표를 100개 쌓아도 즉시 끝난다", () => {
+    // 표 하나의 상한은 표 «개수» 를 안 묶는다. 비용은 본문 바이트에 비례해야 한다.
+    const head = `|${Array.from({length: 32}, (_, c) => ` c${c} `).join("|")}|`;
+    const delim = `|${"---|".repeat(32)}`;
+    const table = [head, delim, ...Array(500).fill("|")].join("\n");
+    const source = Array(100).fill(table).join("\n\n");
+
+    const started = process.hrtime.bigint();
+    const blocks = parseMarkdown(source);
+    const ms = Number(process.hrtime.bigint() - started) / 1e6;
+
+    strictEqual(blocks.length, 100);
+    // 셀 총수가 **본문에 실제로 적힌 칸**을 넘지 않는다 — 모자란 칸을 채우면 여기서 32배가 된다.
+    const cells = blocks.reduce((sum, b) => sum + (b as {rows: unknown[][]}).rows.reduce((n, r) => n + r.length, 0), 0);
+    ok(cells <= 100 * 500, `셀이 ${cells}개 — 없는 칸을 채우고 있다`);
+    ok(ms < 500, `${ms.toFixed(0)}ms 걸렸다 — 본문 바이트당 비용이 열 수만큼 곱해진다`);
 });

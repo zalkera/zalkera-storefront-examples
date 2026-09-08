@@ -250,8 +250,8 @@ export function parseMarkdown(source: string): Block[] {
             continue;
         }
 
-        // 표 — 머리줄 다음이 구분줄일 때만 표다. 셀 수는 **머리줄이 정한다**(모자라면 채우고
-        // 넘치면 버린다 — 저작자의 오타가 열을 어긋나게 하지 않는다).
+        // 표 — 머리줄 다음이 구분줄일 때만 표다. 열 수의 상한은 **머리줄이 정한다**(넘치는 칸은
+        // 버린다 — 저작자의 오타가 열을 어긋나게 하지 않는다). 모자라는 칸은 **채우지 않는다**.
         //
         // 🔴 **칸 수와 행 수에 상한이 있다.** 행마다 머리줄 칸 수만큼 인라인 파싱을 하므로 비용이
         //    «칸 × 행» 곱이다. 상한이 없으면 6.8KB 짜리 본문 하나(1000칸 × 1000행)가 135MB 를 쓰고,
@@ -268,8 +268,11 @@ export function parseMarkdown(source: string): Block[] {
                 lines[i]!.trim() !== "" &&
                 rows.length < MAX_TABLE_ROWS
             ) {
-                const cells = tableCells(lines[i]!);
-                rows.push(tableHead.map((_, c) => parseInline(cells[c] ?? "")));
+                // 🔴 **없는 칸을 채우지 않는다.** 머리줄 칸 수만큼 채우면 `|` 한 글자짜리 행이
+                //    32개 셀을 만들어 **본문 바이트당 비용**이 열 수만큼 곱해진다(실측: 바이트당
+                //    14.2셀 · 113KB 본문이 서빙 프로세스를 죽였다). 넘치는 칸만 버린다.
+                const cells = tableCells(lines[i]!).slice(0, tableHead.length);
+                rows.push(cells.map((cell) => parseInline(cell)));
                 i += 1;
             }
             blocks.push({kind: "table", head: tableHead.map((cell) => parseInline(cell)), rows});

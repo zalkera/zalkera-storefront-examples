@@ -15,6 +15,9 @@ test("참조가 안정 URL 이 된다 — 저작기가 실제로 내는 꼴 그�
     assert.equal(bodyMediaSrc("media:12"), "/media/12");
     assert.equal(bodyMediaSrc(" media:7 "), "/media/7"); // 붙여넣기 공백
     assert.equal(resolveMediaRef("media:12"), 12);
+    // 안전정수 경계의 **양성** 짝 — 이것이 없으면 판정을 더 좁혀도(예: 2^32 미만) 초록이라
+    // 콘솔과 답이 갈린다(콘솔 `media-ref.test.ts` 에 같은 값이 있다).
+    assert.equal(resolveMediaRef("media:9007199254740991"), 9007199254740991);
 });
 
 test("참조가 아닌 것은 안 그린다 — 양성의 음성 짝", () => {
