@@ -30,8 +30,29 @@ test("🔴 제목에 앵커 id 가 붙는다 — 인용 단위가 문서에서 �
     ok(ids[0] !== ids[1], "같은 제목 둘이 같은 id 를 쓰면 링크가 첫 절로만 간다");
 });
 
+test("앵커는 «이미 쓰인 id» 와도 안 겹친다 — 번호 기억이 유일성을 이기지 않는다", () => {
+    // 「제목-2」가 먼저 나온 뒤 「제목」이 이어지면, 번호만 기억하는 구현은 같은 id 를 두 번 만든다.
+    // 앵커가 겹치면 뒤 절을 주소로 가리킬 수 없다(그것이 이 id 의 존재 이유다).
+    const ids = parseMarkdown("## 배송 안내-2\n\n## 배송 안내\n\n## 배송 안내\n\n## 배송 안내")
+        .filter((b) => b.kind === "heading")
+        .map((b) => (b as {id: string}).id);
+    strictEqual(new Set(ids).size, ids.length, `앵커가 겹쳤다: ${JSON.stringify(ids)}`);
+});
+
+/**
+ * **예산 — 앵커 원장은 문서 전역이라 빈 줄이 못 막는다.** 같은 제목이 반복되면 종전 구현은 k번째
+ * 중복에 k번 탐침해 제목 수의 제곱이 됐다(실측: 2만 개 → 파서 13.2초 · 그 쪽 첫 방문자 15.3초).
+ */
+test("예산 — 같은 제목 20,000개가 1초 안에 끝난다", () => {
+    const started = process.hrtime.bigint();
+    const blocks = parseMarkdown("## 배송 안내\n\n".repeat(20_000));
+    const ms = Number(process.hrtime.bigint() - started) / 1e6;
+    strictEqual(blocks.length, 20_000);
+    ok(ms < 1000, `제목 파싱이 ${ms.toFixed(0)}ms 걸렸다 — 제곱 비용이 돌아왔다`);
+});
+
 test("한글 제목도 id 를 얻는다 — 라틴만 남기면 전 문서가 «section» 이 된다", () => {
-    const id = headingId("반품·교환 안내", new Set());
+    const id = headingId("반품·교환 안내", new Map());
     ok(id.length > 0 && id !== "section", `얻은 id: ${id}`);
     ok(!id.includes("·"), "구두점이 주소에 남았다");
 });
@@ -95,4 +116,83 @@ test("인용과 구분선이 자기 블록이 된다", () => {
 test("통제군 — 빈 본문은 블록 0개다(빈 배열을 «그렸다»로 읽지 않게)", () => {
     strictEqual(parseMarkdown("").length, 0);
     strictEqual(parseMarkdown("\n\n  \n").length, 0);
+});
+
+/* ── 저작기 방언 ─────────────────────────────────────────────────────────────
+ * 아래 셋은 콘솔 미디어 드로어(`MediaDrawer`)가 **실제로 내는 것**이다. 파서가 못 알아보면
+ * 저작자는 미리보기에서 그림·재생기를 보고 사이트에서는 회색 상자 속 `media:12` 를 본다.
+ * 참조를 주소로 바꾸는 판정은 `mediaRef.test.ts` 가 따로 잰다(여기는 **구조**만 잰다). */
+
+test("이미지 참조는 원문 그대로 노드에 남는다 — 해석은 파서 밖이다", () => {
+    const [block] = parseMarkdown("![사진](media:12)");
+    strictEqual(block?.kind, "paragraph");
+    deepStrictEqual((block as {text: unknown[]}).text, [{kind: "image", src: "media:12", alt: "사진"}]);
+});
+
+test("`videofile` 펜스는 코드가 아니라 영상이다", () => {
+    const [block] = parseMarkdown("```videofile\nmedia:12\n```");
+    deepStrictEqual(block, {kind: "video", source: "file", src: "media:12"});
+});
+
+test("`video` 펜스는 외부 영상이다", () => {
+    const [block] = parseMarkdown("```video\nhttps://youtu.be/abc\n```");
+    deepStrictEqual(block, {kind: "video", source: "embed", src: "https://youtu.be/abc"});
+});
+
+test("음성 짝 — 보통 펜스는 여전히 코드이고 언어를 들고 있다", () => {
+    // 이 짝이 없으면 「펜스는 전부 영상」이라는 구현도 위 둘을 통과한다.
+    deepStrictEqual(parseMarkdown("```ts\nconst a = 1;\n```")[0], {
+        kind: "code",
+        lang: "ts",
+        text: "const a = 1;",
+    });
+    deepStrictEqual(parseMarkdown("```\n평문\n```")[0], {kind: "code", lang: "", text: "평문"});
+    // 빈 영상 펜스는 영상이 아니다 — 소스가 없으면 그릴 것도 없다.
+    strictEqual(parseMarkdown("```videofile\n```")[0]?.kind, "code");
+});
+
+/* ── 표 ─────────────────────────────────────────────────────────────────────
+ * 답변 엔진은 표를 통째로 인용한다. 저작기(remark-gfm)가 표를 그리므로 여기도 그린다. */
+
+test("표는 머리와 행으로 갈린다 — 셀 안의 인라인도 산다", () => {
+    const [block] = parseMarkdown("| 이름 | 값 |\n|---|---|\n| **굵게** | [링크](/a) |\n| 하나 | 둘 |");
+    strictEqual(block?.kind, "table");
+    const table = block as {head: {text?: string}[][]; rows: {kind: string}[][][]};
+    deepStrictEqual(table.head.map((c) => c[0]?.text), ["이름", "값"]);
+    strictEqual(table.rows.length, 2);
+    strictEqual(table.rows[0]![0]![0]!.kind, "strong");
+    strictEqual(table.rows[0]![1]![0]!.kind, "link");
+});
+
+test("열 수는 머리줄이 정한다 — 저작자의 오타가 열을 어긋내지 않는다", () => {
+    const [block] = parseMarkdown("| a | b |\n|---|---|\n| 하나 |\n| 하나 | 둘 | 셋 |");
+    const {rows} = block as {rows: unknown[][]};
+    deepStrictEqual(rows.map((r) => r.length), [2, 2]);
+});
+
+test("음성 짝 — 구분줄이 없으면 표가 아니다(파이프 든 문장이 표가 되면 안 된다)", () => {
+    strictEqual(parseMarkdown("| 이건 표가 아니다 | 그냥 문장 |")[0]?.kind, "paragraph");
+    strictEqual(parseMarkdown("가격은 1,000|2,000 사이입니다")[0]?.kind, "paragraph");
+    // 앞 문단에 먹히지도 않는다 — 문단 다음 줄이 표 머리면 거기서 끊긴다.
+    deepStrictEqual(
+        parseMarkdown("문단입니다\n| a | b |\n|---|---|\n| 1 | 2 |").map((b) => b.kind),
+        ["paragraph", "table"],
+    );
+});
+
+/**
+ * **예산 — 이 파서는 RSC(서버)에서 돈다.** 닫히지 않는 여는 괄호가 이어지면 종전 구현은 한 자리의
+ * 실패 시도가 남은 본문 전체를 되짚어 **본문 길이의 제곱**이 됐다. 저작자 한 명의 오타가 그
+ * 사이트의 응답을 세우는 형태다.
+ *
+ * 실측(개발 기계): 종전 10k 277ms · 20k 1,128ms · 40k 5,619ms(배로 늘면 4배) → 지금 40k **128ms** ·
+ * 80k 258ms(선형). 상한은 그 사이를 넉넉히 벌려 잡는다 — 느린 CI 에서 깜빡이지 않으면서 제곱이
+ * 돌아오면 반드시 걸리는 자리다.
+ */
+test("예산 — 닫히지 않는 괄호 40,000개가 1.5초 안에 끝난다", () => {
+    const started = process.hrtime.bigint();
+    parseMarkdown("![".repeat(40_000));
+    parseInline("[x](".repeat(40_000));
+    const ms = Number(process.hrtime.bigint() - started) / 1e6;
+    ok(ms < 1500, `본문 파싱이 ${ms.toFixed(0)}ms 걸렸다 — 제곱 비용이 돌아왔다`);
 });

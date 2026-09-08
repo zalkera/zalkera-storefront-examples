@@ -1,5 +1,6 @@
 import type {Block, Inline} from "@/lib/markdown";
 import {parseMarkdown} from "@/lib/markdown";
+import {bodyMediaSrc} from "@/lib/mediaRef";
 import {safeLinkUrl} from "@/lib/safeUrl";
 
 /**
@@ -31,8 +32,10 @@ function InlineNodes({nodes}: {nodes: Inline[]}) {
                         );
                     case "link": {
                         const href = safeLinkUrl(node.href);
-                        // 외부 링크만 `noopener` — 내부 링크에 `nofollow` 를 달면 우리 사이트의
-                        // 내부 연결을 우리 손으로 끊는다(그것이 크롤러가 따라가는 길이다).
+                        // 외부 링크에만 `rel` 을 단다. ⚠ **실제로 일하는 것은 `noreferrer` 다** —
+                        // `target="_blank"` 를 안 쓰므로 `noopener` 는 무동작이고(짝으로 두는 관례),
+                        // 같은 탭 이동에서도 `Referer` 가 지워진다. 내부 링크에는 아무것도 안 단다:
+                        // `nofollow` 를 달면 크롤러가 따라가는 우리 내부 연결을 우리 손으로 끊는다.
                         const external = /^https?:\/\//i.test(href);
                         return (
                             <a
@@ -45,20 +48,29 @@ function InlineNodes({nodes}: {nodes: Inline[]}) {
                             </a>
                         );
                     }
-                    case "image":
-                        // 커버와 같은 규약 — `/media/{id}` 안정 URL. `next/image` 는 바이트를 Next
-                        // 런타임에 태우므로 쓰지 않는다.
+                    case "image": {
+                        // 저작기가 박는 것은 **불변 참조**(`media:12`)다 — 소독기만 태우면 모르는
+                        // 스킴이라 `#` 이 되고, `<img src="#">` 는 그 쪽 HTML 을 이미지로 다시
+                        // 요청한다. 해석은 `bodyMediaSrc` 한 곳이 한다(소독까지 포함).
+                        // `next/image` 는 바이트를 Next 런타임에 태우므로 쓰지 않는다.
+                        const src = bodyMediaSrc(node.src);
+                        // 못 쓰는 주소면 **안 그린다** — 깨진 아이콘과 헛된 왕복만 남는다.
+                        if (src === "#") return null;
                         return (
                             <img
                                 key={i}
-                                src={safeLinkUrl(node.src)}
+                                src={src}
                                 alt={node.alt}
                                 loading="lazy"
                                 className="my-4 h-auto max-w-full rounded-lg"
                             />
                         );
+                    }
                     default:
-                        return <span key={i}>{node.text}</span>;
+                        // 평문 런은 **요소로 감싸지 않는다.** `<span>` 하나하나가 HTML 과 RSC
+                        // 페이로드에 실려 나간다(실측: 10KB 글에 span 132개 · raw −12% · gzip −11%).
+                        // 배열 속 문자열은 key 가 필요 없고, 뜻도 그대로다.
+                        return node.text;
                 }
             })}
         </>
@@ -99,10 +111,74 @@ function BlockNode({block}: {block: Block}) {
                     <InlineNodes nodes={block.text} />
                 </blockquote>
             );
+        case "table":
+            // 표는 답변 엔진이 통째로 인용한다 — `thead` 가 있어야 «무엇의 값인지» 가 남는다.
+            // 좁은 화면에서 **표만** 가로로 구른다(쪽 전체가 구르면 본문을 읽을 수 없다).
+            return (
+                <div className="my-4 overflow-x-auto">
+                    <table className="w-full border-collapse text-sm">
+                        <thead>
+                            <tr>
+                                {block.head.map((cell, c) => (
+                                    <th
+                                        key={c}
+                                        className="border border-border bg-surface px-3 py-2 text-left font-semibold"
+                                    >
+                                        <InlineNodes nodes={cell} />
+                                    </th>
+                                ))}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {block.rows.map((row, r) => (
+                                <tr key={r}>
+                                    {row.map((cell, c) => (
+                                        <td key={c} className="border border-border px-3 py-2">
+                                            <InlineNodes nodes={cell} />
+                                        </td>
+                                    ))}
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            );
+        case "video": {
+            if (block.source === "file") {
+                // 자체 업로드 영상 — 이미지와 같은 안정 URL 프록시를 탄다.
+                const src = bodyMediaSrc(block.src);
+                if (src === "#") return null;
+                return (
+                    <video
+                        src={src}
+                        controls
+                        preload="metadata"
+                        className="my-4 h-auto w-full rounded-lg"
+                    />
+                );
+            }
+            // 외부 영상은 **링크로 그린다.** 저작기 미리보기는 iframe 임베드지만, 여기서 그러려면
+            // 어느 호스트를 프레임에 넣을지 정하는 **허용목록**이 필요하다(임의 URL 을 iframe 에
+            // 넣는 것은 그 자체가 새 신뢰 표면이다). 그 판정은 오너 결정 대기 중이고, 그때까지
+            // 링크는 **읽는 사람도 크롤러도 영상에 닿는다** — 회색 코드 상자보다 정직하다.
+            const href = safeLinkUrl(block.src);
+            if (href === "#") return null;
+            return (
+                <p className="my-3">
+                    <a href={href} rel="noopener noreferrer" className="underline">
+                        {block.src}
+                    </a>
+                </p>
+            );
+        }
         case "code":
             return (
                 <pre className="my-4 overflow-x-auto rounded-lg bg-surface p-4 text-sm">
-                    <code>{block.text}</code>
+                    {/* 언어는 하이라이터의 관례 클래스로만 나간다 — 임의 문자열이 클래스 목록에
+                        섞이지 않도록 꼴을 좁힌다(공백이 들어오면 클래스가 하나 더 붙는다). */}
+                    <code className={/^[a-z0-9+#-]{1,20}$/.test(block.lang) ? `language-${block.lang}` : undefined}>
+                        {block.text}
+                    </code>
                 </pre>
             );
         case "hr":

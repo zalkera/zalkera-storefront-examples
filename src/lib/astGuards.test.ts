@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import {existsSync, readFileSync, readdirSync} from "node:fs";
 import {createRequire} from "node:module";
 import {fileURLToPath} from "node:url";
 import {dirname, join, relative} from "node:path";
@@ -212,31 +213,177 @@ test("CheckoutForm 은 «계좌가 있다»만 받는다 — 계좌 문자열을
  * 🔴 저작이 마크다운인데 문자열을 그대로 내면 `h2`·`a`·`img` 가 하나도 안 생긴다. 답변 엔진이
  *    인용할 청크 경계도, 크롤러가 따라갈 내부 링크도 없는 문서가 된다(그 상태로 배송돼 있었다).
  * ⚠ 문면이 아니라 **AST** 로 본다 — 주석 안의 예시나 다른 파일의 같은 문자열에 안 걸린다.
+ *
+ * ⚠ **정본만 재면 안 된다.** 위 `program` 은 `tsconfig` 를 따르는데 그것은 `presets` 를 **제외**한다
+ *   (팩 소스를 자기 것으로 알면 루트 타입체크가 죽는다). 그래서 고객이 실제로 받는 4벌은 단언이
+ *   0건이었다 — 넷에서 렌더러를 통째로 빼도 초록이었다. 타입이 필요 없는 판정(요소·속성의 형상)은
+ *   체커 없이 파일마다 파서를 돌려 **5벌 전부**를 본다.
  */
-test("블로그 상세가 본문을 `Markdown` 으로 그린다 — 평문 복귀를 잡는다", () => {
-    const detail = ourSourceFiles().filter((f) => relPath(f).endsWith("app/blog/[slug]/page.tsx"));
-    assert.ok(detail.length > 0, "블로그 상세 쪽을 못 찾았다 — 이 시험이 아무것도 안 본다");
+// ⚠ **팩에는 `presets/` 가 없다** — 이 파일은 고객 zip 에도 그대로 실린다. 없으면 자기 `src` 만
+//   본다(그 레포에서는 그것이 전부다). 있으면 4벌을 함께 잰다.
+const PRESETS = join(ROOT, "presets");
+const PACK_SRCS: [label: string, dir: string][] = [
+    ["src", join(ROOT, "src")],
+    ...(existsSync(PRESETS)
+        ? readdirSync(PRESETS, {withFileTypes: true})
+              .filter((e) => e.isDirectory() && existsSync(join(PRESETS, e.name, "src")))
+              .map((e): [string, string] => [`presets/${e.name}`, join(PRESETS, e.name, "src")])
+        : []),
+];
 
-    for (const sf of detail) {
-        let rendered = false;
-        const visit = (node: TS.Node): void => {
-            if (
-                (ts.isJsxSelfClosingElement(node) || ts.isJsxOpeningElement(node)) &&
-                node.tagName.getText(sf) === "Markdown"
-            ) {
-                rendered = true;
-            }
-            ts.forEachChild(node, visit);
-        };
-        visit(sf);
-        assert.ok(rendered, `${relPath(sf)}: 본문을 «Markdown» 으로 안 그린다`);
+/** 5벌의 같은 파일. 없으면 그것도 위반이다 — 파일을 지우는 것이 가드를 고치는 것보다 쉬우면 안 된다. */
+function packCopies(relative: string): {label: string; sf: TS.SourceFile}[] {
+    return PACK_SRCS.map(([label, dir]) => {
+        const path = join(dir, relative);
+        const text = readFileSync(path, "utf8"); // 없으면 여기서 죽는다(그것이 판정이다)
+        return {label, sf: ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)};
+    });
+}
+
+/** 그 파일이 이 태그를 **요소로** 그리는가. 문면이 아니라 JSX 노드를 센다. */
+function rendersTag(sf: TS.SourceFile, tag: string): boolean {
+    let found = false;
+    const visit = (node: TS.Node): void => {
+        if (
+            (ts.isJsxSelfClosingElement(node) || ts.isJsxOpeningElement(node)) &&
+            node.tagName.getText(sf) === tag
+        ) {
+            found = true;
+        }
+        ts.forEachChild(node, visit);
+    };
+    visit(sf);
+    return found;
+}
+
+/** 그 파일이 이 함수를 **부르는가**(import 만 해 두고 안 쓰는 것과 가른다). */
+function callsFunction(sf: TS.SourceFile, name: string): boolean {
+    let found = false;
+    const visit = (node: TS.Node): void => {
+        if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === name) {
+            found = true;
+        }
+        ts.forEachChild(node, visit);
+    };
+    visit(sf);
+    return found;
+}
+
+test("블로그 상세 5벌이 본문을 `Markdown` 으로 그린다 — 평문 복귀를 잡는다", () => {
+    const copies = packCopies("app/blog/[slug]/page.tsx");
+    assert.equal(copies.length, PACK_SRCS.length);
+    for (const {label, sf} of copies) {
+        assert.ok(rendersTag(sf, "Markdown"), `${label}: 본문을 «Markdown» 으로 안 그린다`);
     }
 });
 
-test("양성 통제군 — 그 그물이 실제로 «없음» 을 구분한다", () => {
-    // 소스에 `Markdown` 이 아예 없는 파일(이 시험 파일 자신을 제외한 아무 lib 파일)에서는
-    // 위 판정이 거짓이어야 한다. 늘 참인 판정이면 위 시험은 공허하다.
-    const other = ourSourceFiles().find((f) => relPath(f) === "lib/datetime.ts");
-    assert.ok(other, "통제군 파일을 못 찾았다");
-    assert.ok(!other!.getFullText().includes("<Markdown"), "통제군이 오염됐다 — 다른 파일을 고르라");
+test("양성 통제군 — 그 판정이 «없음» 을 실제로 구분한다", () => {
+    // ⚠ 종전 통제군은 `getFullText().includes("<Markdown")` 이라 **위 판정을 한 번도 안 불렀다** —
+    //    문면 검사로 AST 그물을 통제하는 동어반복이었다. 같은 함수에 물어야 통제군이다.
+    const [{sf}] = packCopies("lib/datetime.ts");
+    assert.equal(rendersTag(sf!, "Markdown"), false, "통제군이 오염됐다 — 다른 파일을 고르라");
+    assert.equal(rendersTag(packCopies("app/blog/[slug]/page.tsx")[0]!.sf, "존재하지않는태그"), false);
+});
+
+test("블로그 쪽 5벌이 공유 카드를 단다 — `pageMetadata` 를 실제로 부른다", () => {
+    // 프리셋 4벌에서 이 호출을 지워도 `npm run verify` 가 초록이었다(심의 실측).
+    for (const relative of ["app/blog/page.tsx", "app/blog/[slug]/page.tsx"]) {
+        for (const {label, sf} of packCopies(relative)) {
+            assert.ok(callsFunction(sf, "pageMetadata"), `${label}/${relative}: 공유 카드가 없다`);
+        }
+    }
+});
+
+/**
+ * **본문 렌더러의 주소는 판정을 거쳐서만 속성이 된다.**
+ *
+ * 🔴 이 그물이 없어 팩은 `media:{id}` 를 소독기에 그대로 태우고 있었다 — 모르는 스킴이라 `#` 이
+ *    되어 **본문 이미지가 전부 깨진** 채 배송됐다. 반대로 해석만 남기고 소독을 빼면 콘솔 입력
+ *    `javascript:` 가 링크가 된다. 그래서 **어느 함수를 태우는지**를 값으로 못박는다.
+ *
+ * ⚠ 판정은 「함수 이름이 파일 어딘가에 있다」가 아니다 — 속성 초기화식을 따라가 그 자리의
+ *   호출을 본다(변수 한 단계는 같은 파일의 선언으로 되짚는다). `src={node.src}` 로 되돌리면 red.
+ */
+const URL_ATTRS = new Set(["src", "href"]);
+
+/** `<태그>.<속성> ← <부른 함수>()` 목록. 못 따라가면 그 사실을 그대로 적는다(«?» 도 값이다). */
+function urlWiring(sf: TS.SourceFile): string[] {
+    // 같은 파일의 `const x = f(...)` 한 단계만 되짚는다. 이름이 여러 갈래면 그 사실을 남긴다.
+    const origins = new Map<string, Set<string>>();
+    const collect = (node: TS.Node): void => {
+        if (
+            ts.isVariableDeclaration(node) &&
+            ts.isIdentifier(node.name) &&
+            node.initializer &&
+            ts.isCallExpression(node.initializer) &&
+            ts.isIdentifier(node.initializer.expression)
+        ) {
+            const set = origins.get(node.name.text) ?? new Set<string>();
+            set.add(node.initializer.expression.text);
+            origins.set(node.name.text, set);
+        }
+        ts.forEachChild(node, collect);
+    };
+    collect(sf);
+
+    const originOf = (name: string): string => {
+        const set = origins.get(name);
+        if (!set) return `변수 ${name}`;
+        return set.size === 1 ? `${[...set][0]}()` : `여러 갈래(${[...set].sort().join("|")})`;
+    };
+
+    const out: string[] = [];
+    const visit = (node: TS.Node): void => {
+        if (ts.isJsxSelfClosingElement(node) || ts.isJsxOpeningElement(node)) {
+            const tag = node.tagName.getText(sf);
+            for (const attr of node.attributes.properties) {
+                if (!ts.isJsxAttribute(attr)) continue;
+                const name = attr.name.getText(sf);
+                if (!URL_ATTRS.has(name)) continue;
+                const init = attr.initializer;
+                let origin = "없음";
+                if (init && ts.isJsxExpression(init) && init.expression) {
+                    const expr = init.expression;
+                    if (ts.isCallExpression(expr) && ts.isIdentifier(expr.expression)) {
+                        origin = `${expr.expression.text}()`;
+                    } else if (ts.isIdentifier(expr)) {
+                        origin = originOf(expr.text);
+                    } else {
+                        origin = `식(${expr.getText(sf).slice(0, 40)})`;
+                    }
+                } else if (init && ts.isStringLiteral(init)) {
+                    origin = `"${init.text}"`;
+                }
+                out.push(`${tag}.${name} ← ${origin}`);
+            }
+        }
+        ts.forEachChild(node, visit);
+    };
+    visit(sf);
+    return out.sort();
+}
+
+test("본문 렌더러 5벌이 주소를 해석기·소독기에 태운다", () => {
+    // 값을 그대로 단언한다 — 「소독 안 한 자리가 없다」는 자리가 0개여도 참이라 공허하다.
+    const expected = [
+        "a.href ← safeLinkUrl()", // 본문 링크
+        "a.href ← safeLinkUrl()", // 외부 영상 펜스
+        "img.src ← bodyMediaSrc()",
+        "video.src ← bodyMediaSrc()",
+    ];
+    for (const {label, sf} of packCopies("components/Markdown.tsx")) {
+        assert.deepEqual(urlWiring(sf), expected, `${label}: 본문 렌더러의 주소 배선이 다르다`);
+    }
+});
+
+test("양성 통제군 — 그 판정이 «맨 값» 을 구분한다", () => {
+    // 소독을 뺀 형태를 실제로 지나가게 해 본다. 늘 초록이면 위 시험은 공허하다.
+    const sf = ts.createSourceFile(
+        "mutant.tsx",
+        'const x = <><img src={node.src} /><a href={safeLinkUrl(u)}>t</a></>;',
+        ts.ScriptTarget.Latest,
+        true,
+        ts.ScriptKind.TSX,
+    );
+    assert.deepEqual(urlWiring(sf), ["a.href ← safeLinkUrl()", "img.src ← 식(node.src)"]);
 });

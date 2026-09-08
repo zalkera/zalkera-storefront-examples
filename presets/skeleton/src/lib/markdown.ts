@@ -3,7 +3,8 @@
  *
  * ■ 왜 필요한가 (SEO·AEO 축)
  *
- * 본문은 콘솔의 마크다운 저작기에서 온다(미디어 삽입 버튼이 `![alt](/media/12)` 를 넣는다).
+ * 본문은 콘솔의 마크다운 저작기에서 온다(미디어 삽입 버튼이 **불변 참조** `![alt](media:12)` 를
+ * 넣는다 — 그 참조를 주소로 바꾸는 것은 `lib/mediaRef.ts` 다).
  * 그런데 팩은 그 문자열을 `whitespace-pre-wrap` 평문으로 냈다 — **`h2`·`a`·`img` 가 하나도 안
  * 생긴다.** 답변 엔진이 인용하는 단위는 «제목으로 잘린 청크» 이고, 검색엔진이 따라가는 것은
  * 내부 링크다. 둘 다 없는 문서는 「글자는 있는데 구조가 없는」 상태다.
@@ -26,8 +27,12 @@
  *
  * ■ 지원하지 않는 것 (의도)
  *
- * 표·각주·HTML 패스스루·중첩 목록·참조 링크. 필요해지면 «그때» 늘린다 — 안 쓰는 문법을 미리
- * 넣으면 그만큼이 전 테넌트가 유지해야 하는 표면이다.
+ * 각주·HTML 패스스루·중첩 목록·참조 링크·취소선·체크박스 목록. 필요해지면 «그때» 늘린다 —
+ * 안 쓰는 문법을 미리 넣으면 그만큼이 전 테넌트가 유지해야 하는 표면이다.
+ *
+ * ⚠ **저작기는 `react-markdown` + `remark-gfm` 이라 여기보다 넓다.** 즉 위 목록은 「미리보기에는
+ * 보이는데 사이트에서는 글자로 남는」 문법이고, 그 간극은 **저작기가 실제로 내는 것**부터 좁힌다:
+ * 삽입 버튼이 내는 셋(이미지 참조 · ```` ```video ```` · ```` ```videofile ```` 펜스)과 표는 여기 있다.
  */
 
 export type Inline =
@@ -43,7 +48,12 @@ export type Block =
     | {kind: "paragraph"; text: Inline[]}
     | {kind: "list"; ordered: boolean; items: Inline[][]}
     | {kind: "quote"; text: Inline[]}
-    | {kind: "code"; text: string}
+    /** 표는 답변 엔진이 통째로 인용하는 단위다 — 셀은 인라인까지 파싱한다. */
+    | {kind: "table"; head: Inline[][]; rows: Inline[][][]}
+    /** `lang` 은 펜스의 정보 문자열(소문자). 없으면 빈 문자열. */
+    | {kind: "code"; lang: string; text: string}
+    /** 저작기 영상 펜스. `file` = 자체 업로드(`media:{id}`) · `embed` = 외부 URL. */
+    | {kind: "video"; source: "file" | "embed"; src: string}
     | {kind: "hr"};
 
 /**
@@ -59,8 +69,16 @@ function headingLevel(hashes: number): 2 | 3 | 4 {
 /**
  * 제목의 앵커 id — **인용 가능한 주소를 만든다.** 답변 엔진·독자가 «그 절» 을 가리킬 수 있어야
  * 인용의 단위가 문서 전체에서 절로 내려간다. 같은 제목이 두 번 나오면 뒤엣것에 `-2` 를 붙인다.
+ *
+ * ⚠ **원장이 `Set` 이 아니라 `Map` 인 이유** — 값은 「이 문자열을 base 로 삼을 때 **다음에 시도할
+ *   번호**」다. `Set` 만 들고 2부터 매번 훑으면 k번째 중복이 k번 탐침해 **제목 수의 제곱**이 된다
+ *   (실측: 같은 제목 2만 개 → 파서 13.2초 · 그 쪽 첫 방문자 15.3초. 문단과 달리 이 원장은 문서
+ *   전역이라 빈 줄이 막아 주지도 않는다). 번호를 기억하면 탐침이 한 번으로 끝난다.
+ *
+ * ⚠ **그래도 `has` 로 한 번 더 묻는다.** 「제목-2」가 본문에 먼저 나오고 「제목」이 뒤따르면
+ *   번호만으로는 같은 id 를 두 번 만든다 — 앵커가 겹치면 그 절을 주소로 가리킬 수 없다.
  */
-export function headingId(text: string, used: Set<string>): string {
+export function headingId(text: string, used: Map<string, number>): string {
     const base =
         text
             .toLowerCase()
@@ -68,28 +86,36 @@ export function headingId(text: string, used: Set<string>): string {
             .trim()
             .replace(/\s+/g, "-")
             .slice(0, 64) || "section";
+    let n = used.get(base) ?? 2;
     let id = base;
-    let n = 2;
     while (used.has(id)) id = `${base}-${n++}`;
-    used.add(id);
+    used.set(base, n); // base 의 다음 시도 번호
+    if (!used.has(id)) used.set(id, 2); // 만들어 낸 id 자체도 «쓰임» 으로 남긴다
     return id;
 }
 
 /** 인라인 문법 — 이미지·링크·코드·강조. 겹치는 자리는 **먼저 열린 것이 이긴다**(왼쪽 우선). */
 export function parseInline(raw: string): Inline[] {
     const out: Inline[] = [];
-    let rest = raw;
-
     // 순서가 규칙이다 — 이미지(`![`)를 링크(`[`)보다 먼저 봐야 `![alt](x)` 가 링크로 안 읽힌다.
-    const pattern = /!\[([^\]]*)\]\(([^)\s]+)\)|\[([^\]]+)\]\(([^)\s]+)\)|`([^`]+)`|\*\*([^*]+)\*\*|\*([^*]+)\*/;
+    //
+    // ⚠ **길이 상한과 `\n` 제외는 장식이 아니다.** 상한이 없으면 닫히지 않는 여는 괄호가 이어질 때
+    //    한 자리의 실패 시도가 **남은 본문 전체**를 훑고 되짚는다. 그 비용이 자리마다 반복되면
+    //    본문 길이의 제곱이 되고, 이 파서는 RSC(서버) 에서 도므로 **그 사이 요청이 멈춘다** —
+    //    저작자 한 명의 오타가 그 사이트를 세우는 형태다.
+    //    실측(이 기계 · 여는 괄호 40,000개): 종전 구현 5,619ms → 지금 128ms. 종전은 입력이
+    //    배로 늘 때 4배로 늘었다(10k 277ms · 20k 1,128ms · 40k 5,619ms).
+    //    재현: `node --experimental-strip-types --test src/lib/markdown.test.ts` 의 예산 시험.
+    const pattern =
+        /!\[([^\]\n]{0,500})\]\(([^)\s]{1,2048})\)|\[([^\]\n]{1,500})\]\(([^)\s]{1,2048})\)|`([^`\n]{1,500})`|\*\*([^*\n]{1,500})\*\*|\*([^*\n]{1,500})\*/g;
 
-    while (rest.length > 0) {
-        const m = pattern.exec(rest);
-        if (!m) {
-            out.push({kind: "text", text: rest});
-            break;
-        }
-        if (m.index > 0) out.push({kind: "text", text: rest.slice(0, m.index)});
+    // ⚠ **`lastIndex` 로 전진한다** — `slice` 로 잘라 다시 훑으면 앞부분을 매치마다 되읽는다.
+    //    정규식은 상태를 가지므로 **여기서 만든다**(모듈 상수로 올리면 중첩 호출이 서로의
+    //    `lastIndex` 를 밟는다).
+    let last = 0;
+    let m: RegExpExecArray | null;
+    while ((m = pattern.exec(raw)) !== null) {
+        if (m.index > last) out.push({kind: "text", text: raw.slice(last, m.index)});
 
         if (m[2] !== undefined) out.push({kind: "image", src: m[2], alt: m[1] ?? ""});
         else if (m[4] !== undefined) out.push({kind: "link", href: m[4], text: m[3]!});
@@ -97,9 +123,29 @@ export function parseInline(raw: string): Inline[] {
         else if (m[6] !== undefined) out.push({kind: "strong", text: m[6]});
         else out.push({kind: "em", text: m[7]!});
 
-        rest = rest.slice(m.index + m[0].length);
+        last = pattern.lastIndex;
     }
+    if (last < raw.length) out.push({kind: "text", text: raw.slice(last)});
+
     return out.filter((n) => n.kind !== "text" || n.text !== "");
+}
+
+/** 표 한 줄의 셀 — 양끝 파이프는 장식이라 걷는다. */
+function tableCells(line: string): string[] {
+    let text = line.trim();
+    if (text.startsWith("|")) text = text.slice(1);
+    if (text.endsWith("|")) text = text.slice(0, -1);
+    return text.split("|").map((cell) => cell.trim());
+}
+
+/**
+ * 구분줄(`|---|---|`)인가 — **표의 존재를 정하는 줄이다.** 머리줄만으로는 표인지 알 수 없다
+ * (파이프가 든 평범한 문장이 표가 되면 안 된다).
+ */
+function isTableDelimiter(line: string): boolean {
+    if (!line.includes("|")) return false;
+    const cells = tableCells(line);
+    return cells.length > 0 && cells.every((cell) => /^:?-+:?$/.test(cell));
 }
 
 /**
@@ -110,7 +156,7 @@ export function parseInline(raw: string): Inline[] {
  */
 export function parseMarkdown(source: string): Block[] {
     const blocks: Block[] = [];
-    const usedIds = new Set<string>();
+    const usedIds = new Map<string, number>();
     const lines = source.replace(/\r\n?/g, "\n").split("\n");
 
     let i = 0;
@@ -124,12 +170,41 @@ export function parseMarkdown(source: string): Block[] {
 
         // 코드 울타리 — 닫히지 않으면 남은 줄 전부가 코드다(원문 보존이 안전한 쪽).
         if (line.startsWith("```")) {
+            const lang = line.slice(3).trim().toLowerCase();
             const body: string[] = [];
             i += 1;
             while (i < lines.length && !lines[i]!.startsWith("```")) body.push(lines[i++]!);
             i += 1;
-            blocks.push({kind: "code", text: body.join("\n")});
+            const text = body.join("\n");
+            // 저작기의 영상 방언(`MediaDrawer`). 코드로 그리면 회색 상자에 `media:12` 만 남는다 —
+            // 저작자는 미리보기에서 재생기를 봤는데 사이트에는 그 글자가 뜬다.
+            if ((lang === "video" || lang === "videofile") && text.trim() !== "") {
+                blocks.push({
+                    kind: "video",
+                    source: lang === "videofile" ? "file" : "embed",
+                    src: text.trim(),
+                });
+                continue;
+            }
+            blocks.push({kind: "code", lang, text});
             continue;
+        }
+
+        // 표 — 머리줄 다음이 구분줄일 때만 표다. 셀 수는 **머리줄이 정한다**(모자라면 채우고
+        // 넘치면 버린다 — 저작자의 오타가 열을 어긋나게 하지 않는다).
+        if (line.includes("|") && i + 1 < lines.length && isTableDelimiter(lines[i + 1]!)) {
+            const head = tableCells(line);
+            if (head.length === tableCells(lines[i + 1]!).length) {
+                i += 2;
+                const rows: Inline[][][] = [];
+                while (i < lines.length && lines[i]!.includes("|") && lines[i]!.trim() !== "") {
+                    const cells = tableCells(lines[i]!);
+                    rows.push(head.map((_, c) => parseInline(cells[c] ?? "")));
+                    i += 1;
+                }
+                blocks.push({kind: "table", head: head.map((cell) => parseInline(cell)), rows});
+                continue;
+            }
         }
 
         if (/^ {0,3}(-{3,}|\*{3,}|_{3,})\s*$/.test(line)) {
@@ -186,7 +261,8 @@ export function parseMarkdown(source: string): Block[] {
                 /^ {0,3}>\s?/.test(next) ||
                 bullet.test(next) ||
                 ordered.test(next) ||
-                /^ {0,3}(-{3,}|\*{3,}|_{3,})\s*$/.test(next)
+                /^ {0,3}(-{3,}|\*{3,}|_{3,})\s*$/.test(next) ||
+                (next.includes("|") && i + 1 < lines.length && isTableDelimiter(lines[i + 1]!))
             ) {
                 break;
             }

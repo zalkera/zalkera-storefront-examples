@@ -3,6 +3,7 @@ import type {Metadata} from "next";
 import {zalkera} from "@/lib/zalkera";
 import {siteUrl} from "@/lib/site";
 import {pageMetadata, withSiteName} from "@/lib/metadata";
+import {parseSeo} from "@/lib/seo";
 import {JsonLd, breadcrumbJsonLd, itemListJsonLd} from "@/components/JsonLd";
 import {formatDate} from "@/lib/datetime";
 
@@ -18,7 +19,6 @@ export const dynamic = "force-static";
 export const revalidate = 300;
 
 const TITLE = "블로그";
-const DESCRIPTION = "새 소식과 안내를 모았습니다.";
 
 /**
  * ⚠ **정적 `metadata` 가 아니라 `generateMetadata` 다** — 상호(`site_config`)가 서버에서 와야
@@ -26,12 +26,16 @@ const DESCRIPTION = "새 소식과 안내를 모았습니다.";
  */
 export async function generateMetadata(): Promise<Metadata> {
     const config = await zalkera.getSiteConfig({tags: ["site-config"]}).catch(() => null);
+    // ⚠ **이 쪽의 설명을 지어내지 않는다.** 쪽의 `description` 은 layout 의 것을 **라우트 단위로
+    //    이긴다** — 여기 한 문장을 박으면 전 테넌트의 `/blog` 가 자기 사이트 설명 대신 그것을
+    //    단다. `blog` 는 예약 세그먼트라 테넌트가 자기 페이지로 덮을 길도 없다.
+    //    사이트 기본 설명을 그대로 잇는다(없으면 없는 채로 — 이 레포의 「지어내지 않는다」 규칙).
+    const seo = parseSeo(config?.seoDefaults);
     return {
         title: TITLE,
-        description: DESCRIPTION,
         ...pageMetadata({
             ogTitle: withSiteName(TITLE, config?.companyName),
-            description: DESCRIPTION,
+            description: seo.description,
             path: "/blog",
             siteName: config?.companyName,
         }),
