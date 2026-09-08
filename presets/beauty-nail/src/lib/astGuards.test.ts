@@ -244,10 +244,7 @@ function packCopies(relative: string): {label: string; sf: TS.SourceFile}[] {
 function rendersTag(sf: TS.SourceFile, tag: string): boolean {
     let found = false;
     const visit = (node: TS.Node): void => {
-        if (
-            (ts.isJsxSelfClosingElement(node) || ts.isJsxOpeningElement(node)) &&
-            node.tagName.getText(sf) === tag
-        ) {
+        if ((ts.isJsxSelfClosingElement(node) || ts.isJsxOpeningElement(node)) && node.tagName.getText(sf) === tag) {
             found = true;
         }
         ts.forEachChild(node, visit);
@@ -412,7 +409,7 @@ test("양성 통제군 — 그 판정이 «맨 값» 을 구분한다", () => {
     // 소독을 뺀 형태를 실제로 지나가게 해 본다. 늘 초록이면 위 시험은 공허하다.
     const sf = ts.createSourceFile(
         "mutant.tsx",
-        'const x = <><img src={node.src} /><a href={safeLinkUrl(u)}>t</a></>;',
+        "const x = <><img src={node.src} /><a href={safeLinkUrl(u)}>t</a></>;",
         ts.ScriptTarget.Latest,
         true,
         ts.ScriptKind.TSX,

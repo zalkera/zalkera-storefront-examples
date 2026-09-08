@@ -158,7 +158,10 @@ test("표는 머리와 행으로 갈린다 — 셀 안의 인라인도 산다", 
     const [block] = parseMarkdown("| 이름 | 값 |\n|---|---|\n| **굵게** | [링크](/a) |\n| 하나 | 둘 |");
     strictEqual(block?.kind, "table");
     const table = block as {head: {text?: string}[][]; rows: {kind: string}[][][]};
-    deepStrictEqual(table.head.map((c) => c[0]?.text), ["이름", "값"]);
+    deepStrictEqual(
+        table.head.map((c) => c[0]?.text),
+        ["이름", "값"],
+    );
     strictEqual(table.rows.length, 2);
     strictEqual(table.rows[0]![0]![0]!.kind, "strong");
     strictEqual(table.rows[0]![1]![0]!.kind, "link");
@@ -167,7 +170,10 @@ test("표는 머리와 행으로 갈린다 — 셀 안의 인라인도 산다", 
 test("열 수는 머리줄이 정한다 — 저작자의 오타가 열을 어긋내지 않는다", () => {
     const [block] = parseMarkdown("| a | b |\n|---|---|\n| 하나 |\n| 하나 | 둘 | 셋 |");
     const {rows} = block as {rows: unknown[][]};
-    deepStrictEqual(rows.map((r) => r.length), [2, 2]);
+    deepStrictEqual(
+        rows.map((r) => r.length),
+        [2, 2],
+    );
 });
 
 test("음성 짝 — 구분줄이 없으면 표가 아니다(파이프 든 문장이 표가 되면 안 된다)", () => {
@@ -241,7 +247,10 @@ test("🔴 표가 거절돼도 진행이 멈추지 않는다 — 칸 수가 안 
         parseMarkdown("| a | b |\n|---|\n| 1 |").map((b) => b.kind),
         ["paragraph"],
     );
-    deepStrictEqual(parseMarkdown("| a | b |\n|---|").map((b) => b.kind), ["paragraph"]);
+    deepStrictEqual(
+        parseMarkdown("| a | b |\n|---|").map((b) => b.kind),
+        ["paragraph"],
+    );
 });
 
 test("상한 안의 표는 그대로 그린다 — 좁힘이 정상 표를 먹지 않는다", () => {
@@ -261,15 +270,19 @@ test("상한 안의 표는 그대로 그린다 — 좁힘이 정상 표를 먹�
 test("파일명에 대괄호가 있어도 이미지다 — 저작기는 이름을 이스케이프하지 않는다", () => {
     // `![[공지] 배너.png](media:13)`. 안 받으면 그 글의 그림이 글자로 남는다.
     const [block] = parseMarkdown("![[공지] 배너.png](media:13)");
-    deepStrictEqual((block as {text: unknown[]}).text, [
-        {kind: "image", src: "media:13", alt: "[공지] 배너.png"},
-    ]);
+    deepStrictEqual((block as {text: unknown[]}).text, [{kind: "image", src: "media:13", alt: "[공지] 배너.png"}]);
 });
 
 test("강조·링크는 줄바꿈을 건너뛴다 — 저작기(CommonMark)와 같은 답", () => {
     // 한 문단 안의 줄바꿈은 화면에 살리되(`whitespace-pre-line`), 문법은 줄을 건넌다.
-    deepStrictEqual(parseInline("**굵게 첫 줄\n둘째 줄**").map((n) => n.kind), ["strong"]);
-    deepStrictEqual(parseInline("[배송\n정책](/policies)").map((n) => n.kind), ["link"]);
+    deepStrictEqual(
+        parseInline("**굵게 첫 줄\n둘째 줄**").map((n) => n.kind),
+        ["strong"],
+    );
+    deepStrictEqual(
+        parseInline("[배송\n정책](/policies)").map((n) => n.kind),
+        ["link"],
+    );
 });
 
 test("앵커는 «이미 만들어 낸 id» 와도 안 겹친다 — 반대 순서", () => {

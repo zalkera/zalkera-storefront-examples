@@ -151,14 +151,7 @@ function BlockNode({block}: {block: Block}) {
                 // 외부 영상은 `video` 펜스의 몫이고, 그쪽은 링크로만 그린다.
                 const videoSrc = bodyVideoSrc(block.src);
                 if (videoSrc === null) return null;
-                return (
-                    <video
-                        src={videoSrc}
-                        controls
-                        preload="metadata"
-                        className="my-4 h-auto w-full rounded-lg"
-                    />
-                );
+                return <video src={videoSrc} controls preload="metadata" className="my-4 h-auto w-full rounded-lg" />;
             }
             // 외부 영상은 **링크로 그린다.** 저작기 미리보기는 iframe 임베드지만, 여기서 그러려면
             // 어느 호스트를 프레임에 넣을지 정하는 **허용목록**이 필요하다(임의 URL 을 iframe 에
