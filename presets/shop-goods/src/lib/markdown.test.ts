@@ -219,3 +219,63 @@ test("통제군 — 제목이 없는 본문은 빈 목록이다(빈 상자를 �
     strictEqual(headings("그냥 문단입니다.\n\n- 목록\n\n> 인용").length, 0);
     strictEqual(headings("").length, 0);
 });
+
+/* ── 표의 예산과 경계 ────────────────────────────────────────────────────────
+ * 표는 비용이 «칸 × 행» 곱이라, 작은 본문 하나가 서빙 프로세스를 죽일 수 있는 유일한 축이다.
+ * 그 글은 공개 URL 이고 크기가 커서 ISR 이 캐시를 거부하므로 비용을 방문자가 반복 유발한다. */
+
+test("🔴 예산 — 1000칸 × 1000행(6.8KB)이 표로 그려지지 않고 즉시 끝난다", () => {
+    const evil = "|".repeat(1001) + "\n|" + "---|".repeat(1000) + "\n" + "|\n".repeat(1000);
+    const started = process.hrtime.bigint();
+    const blocks = parseMarkdown(evil);
+    const ms = Number(process.hrtime.bigint() - started) / 1e6;
+
+    strictEqual(blocks[0]?.kind, "paragraph", "상한을 넘는 표를 표로 그렸다");
+    ok(ms < 500, `${ms.toFixed(0)}ms 걸렸다 — 칸×행 곱이 돌아왔다`);
+});
+
+test("🔴 표가 거절돼도 진행이 멈추지 않는다 — 칸 수가 안 맞는 오타", () => {
+    // 표 분기와 문단 경계가 다른 술어를 쓰면 이 입력에서 같은 줄을 영원히 다시 본다(무한 루프).
+    // 이 시험이 끝나는 것 자체가 판정이다.
+    deepStrictEqual(
+        parseMarkdown("| a | b |\n|---|\n| 1 |").map((b) => b.kind),
+        ["paragraph"],
+    );
+    deepStrictEqual(parseMarkdown("| a | b |\n|---|").map((b) => b.kind), ["paragraph"]);
+});
+
+test("상한 안의 표는 그대로 그린다 — 좁힘이 정상 표를 먹지 않는다", () => {
+    const head = `|${Array.from({length: 32}, (_, c) => ` c${c} `).join("|")}|`;
+    const delim = `|${"---|".repeat(32)}`;
+    const row = `|${Array.from({length: 32}, (_, c) => ` v${c} `).join("|")}|`;
+    const [block] = parseMarkdown([head, delim, ...Array(200).fill(row)].join("\n"));
+
+    strictEqual(block?.kind, "table");
+    const table = block as {head: unknown[]; rows: unknown[]};
+    strictEqual(table.head.length, 32);
+    strictEqual(table.rows.length, 200);
+});
+
+/* ── 저작기가 실제로 내는 꼴 ─────────────────────────────────────────────── */
+
+test("파일명에 대괄호가 있어도 이미지다 — 저작기는 이름을 이스케이프하지 않는다", () => {
+    // `![[공지] 배너.png](media:13)`. 안 받으면 그 글의 그림이 글자로 남는다.
+    const [block] = parseMarkdown("![[공지] 배너.png](media:13)");
+    deepStrictEqual((block as {text: unknown[]}).text, [
+        {kind: "image", src: "media:13", alt: "[공지] 배너.png"},
+    ]);
+});
+
+test("강조·링크는 줄바꿈을 건너뛴다 — 저작기(CommonMark)와 같은 답", () => {
+    // 한 문단 안의 줄바꿈은 화면에 살리되(`whitespace-pre-line`), 문법은 줄을 건넌다.
+    deepStrictEqual(parseInline("**굵게 첫 줄\n둘째 줄**").map((n) => n.kind), ["strong"]);
+    deepStrictEqual(parseInline("[배송\n정책](/policies)").map((n) => n.kind), ["link"]);
+});
+
+test("앵커는 «이미 만들어 낸 id» 와도 안 겹친다 — 반대 순서", () => {
+    // 「제목」이 먼저 둘, 그다음 「제목-2」. 만들어 낸 id 를 원장에 안 남기면 여기서 겹친다.
+    const ids = parseMarkdown("## 배송 안내\n\n## 배송 안내\n\n## 배송 안내-2")
+        .filter((b) => b.kind === "heading")
+        .map((b) => (b as {id: string}).id);
+    strictEqual(new Set(ids).size, ids.length, `앵커가 겹쳤다: ${JSON.stringify(ids)}`);
+});

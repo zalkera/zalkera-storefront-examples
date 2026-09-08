@@ -211,7 +211,7 @@ test("CheckoutForm 은 «계좌가 있다»만 받는다 — 계좌 문자열을
  * **글 본문은 구조로 그린다** — 평문으로 되돌리는 회귀를 판정 층에서 잡는다.
  *
  * 🔴 저작이 마크다운인데 문자열을 그대로 내면 `h2`·`a`·`img` 가 하나도 안 생긴다. 답변 엔진이
- *    인용할 청크 경계도, 크롤러가 따라갈 내부 링크도 없는 문서가 된다(그 상태로 배송돼 있었다).
+ *    인용할 청크 경계도, 크롤러가 따라갈 내부 링크도 없는 문서가 된다.
  * ⚠ 문면이 아니라 **AST** 로 본다 — 주석 안의 예시나 다른 파일의 같은 문자열에 안 걸린다.
  *
  * ⚠ **정본만 재면 안 된다.** 위 `program` 은 `tsconfig` 를 따르는데 그것은 `presets` 를 **제외**한다
@@ -304,23 +304,54 @@ test("블로그 쪽 5벌이 공유 카드를 단다 — `pageMetadata` 를 실�
  * ⚠ 판정은 「함수 이름이 파일 어딘가에 있다」가 아니다 — 속성 초기화식을 따라가 그 자리의
  *   호출을 본다(변수 한 단계는 같은 파일의 선언으로 되짚는다). `src={node.src}` 로 되돌리면 red.
  */
-const URL_ATTRS = new Set(["src", "href"]);
+const URL_ATTRS = new Set([
+    "src",
+    "href",
+    // ⚠ **`src`·`href` 만 세면 그 밖으로 새면 그만이다.** 아래는 전부 브라우저가 **요청을 내는**
+    //   속성이다. `poster` 는 영상 썸네일, `srcSet` 은 같은 `img` 에서 `src` 를 **이긴다**.
+    "poster",
+    "srcSet",
+    "action",
+    "formAction",
+    "cite",
+    "ping",
+    "background",
+    "data",
+]);
 
-/** `<태그>.<속성> ← <부른 함수>()` 목록. 못 따라가면 그 사실을 그대로 적는다(«?» 도 값이다). */
+/**
+ * `<태그>.<속성> ← <부른 함수>()` 목록. 못 따라가면 그 사실을 그대로 적는다(«?» 도 값이다).
+ *
+ * ⚠ **이름이 갈리는 모든 자리를 «여러 갈래» 로 적는다.** 한 이름이 어디선가 호출식으로, 다른
+ *   데서 맨 값으로 묶이면(`let src = ""; src = node.src;`) 그 이름의 배선은 더 이상 하나가 아니다.
+ *   그것을 하나로 접으면 소독을 통째로 우회하는 형태가 초록으로 지나간다.
+ */
 function urlWiring(sf: TS.SourceFile): string[] {
     // 같은 파일의 `const x = f(...)` 한 단계만 되짚는다. 이름이 여러 갈래면 그 사실을 남긴다.
     const origins = new Map<string, Set<string>>();
+    const note = (name: string, origin: string): void => {
+        const set = origins.get(name) ?? new Set<string>();
+        set.add(origin);
+        origins.set(name, set);
+    };
     const collect = (node: TS.Node): void => {
+        if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name)) {
+            const init = node.initializer;
+            if (init && ts.isCallExpression(init) && ts.isIdentifier(init.expression)) {
+                note(node.name.text, `${init.expression.text}()`);
+            } else if (init) {
+                note(node.name.text, "맨 값");
+            } else {
+                note(node.name.text, "선언만");
+            }
+        }
+        // 재대입은 그 자체로 갈래다 — 선언만 보면 뒤에서 바뀐 값을 못 본다.
         if (
-            ts.isVariableDeclaration(node) &&
-            ts.isIdentifier(node.name) &&
-            node.initializer &&
-            ts.isCallExpression(node.initializer) &&
-            ts.isIdentifier(node.initializer.expression)
+            ts.isBinaryExpression(node) &&
+            node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+            ts.isIdentifier(node.left)
         ) {
-            const set = origins.get(node.name.text) ?? new Set<string>();
-            set.add(node.initializer.expression.text);
-            origins.set(node.name.text, set);
+            note(node.left.text, "재대입");
         }
         ts.forEachChild(node, collect);
     };
@@ -329,7 +360,7 @@ function urlWiring(sf: TS.SourceFile): string[] {
     const originOf = (name: string): string => {
         const set = origins.get(name);
         if (!set) return `변수 ${name}`;
-        return set.size === 1 ? `${[...set][0]}()` : `여러 갈래(${[...set].sort().join("|")})`;
+        return set.size === 1 ? `${[...set][0]}` : `여러 갈래(${[...set].sort().join("|")})`;
     };
 
     const out: string[] = [];
@@ -369,7 +400,8 @@ test("본문 렌더러 5벌이 주소를 해석기·소독기에 태운다", () 
         "a.href ← safeLinkUrl()", // 본문 링크
         "a.href ← safeLinkUrl()", // 외부 영상 펜스
         "img.src ← bodyMediaSrc()",
-        "video.src ← bodyMediaSrc()",
+        // 영상은 한 겹 더 좁다(외부 주소를 안 받는다) — 그래서 자기 함수다.
+        "video.src ← bodyVideoSrc()",
     ];
     for (const {label, sf} of packCopies("components/Markdown.tsx")) {
         assert.deepEqual(urlWiring(sf), expected, `${label}: 본문 렌더러의 주소 배선이 다르다`);

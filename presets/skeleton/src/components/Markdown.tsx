@@ -1,6 +1,6 @@
 import type {Block, Inline} from "@/lib/markdown";
 import {parseMarkdown} from "@/lib/markdown";
-import {bodyMediaSrc} from "@/lib/mediaRef";
+import {bodyMediaSrc, bodyVideoSrc} from "@/lib/mediaRef";
 import {safeLinkUrl} from "@/lib/safeUrl";
 
 /**
@@ -55,7 +55,8 @@ function InlineNodes({nodes}: {nodes: Inline[]}) {
                         // `next/image` 는 바이트를 Next 런타임에 태우므로 쓰지 않는다.
                         const src = bodyMediaSrc(node.src);
                         // 못 쓰는 주소면 **안 그린다** — 깨진 아이콘과 헛된 왕복만 남는다.
-                        if (src === "#") return null;
+                        // 이 줄을 지우면 타입이 막는다(`null` 은 `src` 에 못 들어간다).
+                        if (src === null) return null;
                         return (
                             <img
                                 key={i}
@@ -145,12 +146,14 @@ function BlockNode({block}: {block: Block}) {
             );
         case "video": {
             if (block.source === "file") {
-                // 자체 업로드 영상 — 이미지와 같은 안정 URL 프록시를 탄다.
-                const src = bodyMediaSrc(block.src);
-                if (src === "#") return null;
+                // 자체 업로드 영상 — **불변 참조만** 받는다. 외부 주소를 여기서 받으면 방문자가
+                // 아무 조작도 안 했는데 `preload="metadata"` 가 그 호스트로 나간다(IP·UA 유출).
+                // 외부 영상은 `video` 펜스의 몫이고, 그쪽은 링크로만 그린다.
+                const videoSrc = bodyVideoSrc(block.src);
+                if (videoSrc === null) return null;
                 return (
                     <video
-                        src={src}
+                        src={videoSrc}
                         controls
                         preload="metadata"
                         className="my-4 h-auto w-full rounded-lg"

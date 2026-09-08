@@ -38,23 +38,54 @@ export function resolveMediaRef(raw: string | null | undefined): number | null {
 }
 
 /**
- * 본문 미디어의 최종 주소. 참조면 안정 URL(`/media/{id}` — 팩의 프록시 라우트)로, 그 외에는
- * 소독기를 태운 **뒤 한 번 더 좁힌다.**
+ * 본문 미디어의 최종 주소 — **못 쓰는 주소면 `null`**(호출자는 그때 아무것도 안 그린다).
  *
- * ⚠ **이미지 주소는 링크 주소보다 좁다.** 소독기는 링크용이라 `mailto:`·`tel:`·`#조각` 을
- *   통과시키는데(링크로는 정당하다) 그것들은 이미지가 될 수 없다 — `src="#조각"` 은 브라우저가
- *   **그 쪽 자신**으로 풀어 HTML 을 이미지로 다시 받는다. `http:` 도 뺀다: 사이트는 https 라
- *   혼합 콘텐츠로 어차피 막히고, 막히는 그림은 안 그리는 것이 낫다.
+ * ⚠ **`null` 이 그물이다.** 문자열 센티넬(`"#"`)을 돌려주면 호출자가 그 검사를 지워도 컴파일이
+ *   통과하고, `<img src="#">` 가 그 쪽 HTML 을 이미지로 다시 요청한다. `null` 이면 검사를 지우는
+ *   순간 타입이 막는다.
+ *
+ * ⚠ **이미지 주소는 링크 주소보다 좁다.** 소독기는 링크용이라 `mailto:`·`tel:`·`#조각`·상대경로를
+ *   통과시키는데(링크로는 정당하다) 그것들은 이미지가 될 수 없다. `http:` 도 뺀다 — 사이트는
+ *   https 라 혼합 콘텐츠로 어차피 막히고, 막히는 그림은 안 그리는 것이 낫다. 상대경로는
+ *   **막는다**: 소독기가 루트 기준으로 정규화해 저작기 미리보기와 **다른 주소**를 그린다.
+ *
+ * ⚠ **스킴 판정은 파서에 묻는다**(`safeUrl.ts` 와 같은 규율) — 문자로 보면 `ht<TAB>tps:` 처럼
+ *   브라우저는 https 로 읽는 값을 놓친다.
  *
  * 경로 조각을 손으로 잇지 않고 `mediaSrc` 를 부른다 — 주소 형태의 소유자는 client 하나다.
- * 못 쓰는 주소는 `#` 을 돌려준다. 호출자는 그때 **아무것도 안 그린다**(위 ⚠ 의 헛된 왕복).
  */
-export function bodyMediaSrc(raw: string | null | undefined): string {
+export function bodyMediaSrc(raw: string | null | undefined): string | null {
     const id = resolveMediaRef(raw);
-    if (id !== null) return mediaSrc(id) ?? "#";
+    if (id !== null) return mediaSrc(id) ?? null;
 
-    const url = safeLinkUrl(raw);
-    // 내부 절대경로(소독기가 이미 `//` 이탈을 걸렀다) 또는 https 만 남긴다.
-    if (url.startsWith("/")) return url;
-    return /^https:\/\//i.test(url) ? url : "#";
+    const value = typeof raw === "string" ? raw.trim() : "";
+    if (value === "") return null;
+
+    const internal = value.startsWith("/") && !value.startsWith("//");
+    if (!internal && protocolOf(value) !== "https:") return null;
+
+    const safe = safeLinkUrl(value);
+    // 소독기가 무력화했거나(`#`) 사이트 루트로 접혔으면(`"   "`·`/..`) 그릴 것이 없다.
+    return safe === "#" || safe === "/" ? null : safe;
+}
+
+/** 브라우저와 같은 파서로 스킴을 읽는다. 절대 URL 이 아니면 `null`. */
+function protocolOf(value: string): string | null {
+    try {
+        return new URL(value).protocol;
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * 자체 업로드 영상의 주소 — **불변 참조만** 받는다.
+ *
+ * 🔴 여기서 외부 주소를 받으면 방문자가 아무 조작도 안 했는데 `preload="metadata"` 가 그 호스트로
+ *    나간다(IP·UA 가 제3자에게 간다 · 실측). 외부 영상은 ```` ```video ```` 펜스의 몫이고 그쪽은
+ *    링크로만 그린다. 그래서 이 함수는 [bodyMediaSrc] 보다 **한 겹 더 좁다**.
+ */
+export function bodyVideoSrc(raw: string | null | undefined): string | null {
+    const id = resolveMediaRef(raw);
+    return id === null ? null : (mediaSrc(id) ?? null);
 }

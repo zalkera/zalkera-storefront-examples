@@ -9,7 +9,7 @@
  * 생긴다.** 답변 엔진이 인용하는 단위는 «제목으로 잘린 청크» 이고, 검색엔진이 따라가는 것은
  * 내부 링크다. 둘 다 없는 문서는 「글자는 있는데 구조가 없는」 상태다.
  *
- * ⚠ 종전 주석은 마크다운 렌더러 금지를 «D5» 로 인용했는데 **그 결정문은 이 레포에 없다**
+ * ⚠ 마크다운 렌더러 금지를 «D5» 로 인용하는 문면이 돌아다니는데 **그 결정문은 이 레포에 없다**
  * (실제 D5 는 memo135 「골격 zip 불요」·memo137 「DIGITAL 계속 닫음」으로 둘 다 무관하고,
  * 마크다운 DON'T-BUILD 는 memo129 §7 의 **고정 페이지** 축이다). 죽은 인용이었다.
  *
@@ -99,15 +99,22 @@ export function parseInline(raw: string): Inline[] {
     const out: Inline[] = [];
     // 순서가 규칙이다 — 이미지(`![`)를 링크(`[`)보다 먼저 봐야 `![alt](x)` 가 링크로 안 읽힌다.
     //
-    // ⚠ **길이 상한과 `\n` 제외는 장식이 아니다.** 상한이 없으면 닫히지 않는 여는 괄호가 이어질 때
-    //    한 자리의 실패 시도가 **남은 본문 전체**를 훑고 되짚는다. 그 비용이 자리마다 반복되면
-    //    본문 길이의 제곱이 되고, 이 파서는 RSC(서버) 에서 도므로 **그 사이 요청이 멈춘다** —
-    //    저작자 한 명의 오타가 그 사이트를 세우는 형태다.
-    //    실측(이 기계 · 여는 괄호 40,000개): 종전 구현 5,619ms → 지금 128ms. 종전은 입력이
-    //    배로 늘 때 4배로 늘었다(10k 277ms · 20k 1,128ms · 40k 5,619ms).
+    // ⚠ **길이 상한은 장식이 아니다.** 상한이 없으면 닫히지 않는 여는 괄호가 이어질 때 한 자리의
+    //    실패 시도가 **남은 본문 전체**를 훑고 되짚는다. 그 비용이 자리마다 반복되면 본문 길이의
+    //    제곱이 되고, 이 파서는 RSC(서버) 에서 도므로 **그 사이 요청이 멈춘다** — 저작자 한 명의
+    //    오타가 그 사이트를 세우는 형태다.
+    //
+    // ⚠ **줄바꿈은 막지 않는다.** 저작기(CommonMark)는 두 줄에 걸친 굵게·링크를 그린다 —
+    //    여기서 `\n` 을 빼면 그 본문이 사이트에서만 `**` 가 노출된 글자가 된다. 제곱 방어는
+    //    상한과 `lastIndex` 가 하고, 줄바꿈 제외는 거기 기여하지 않는다(실측).
+    //
+    // ⚠ **이미지 alt 는 한 겹 대괄호를 받는다.** 저작기가 파일명을 이스케이프 없이 박으므로
+    //    `[공지] 배너.png` 같은 이름이 그대로 온다 — 안 받으면 그 글의 그림이 글자로 남는다.
+    //    실측(이 기계 · 여는 괄호 40,000개): 지금 128ms. 상한과 `lastIndex` 중 **하나라도** 빼면
+    //    5,619ms 가 되고, 그 형상은 입력이 배로 늘 때 4배로 는다(10k 277ms · 20k 1,128ms).
     //    재현: `node --experimental-strip-types --test src/lib/markdown.test.ts` 의 예산 시험.
     const pattern =
-        /!\[([^\]\n]{0,500})\]\(([^)\s]{1,2048})\)|\[([^\]\n]{1,500})\]\(([^)\s]{1,2048})\)|`([^`\n]{1,500})`|\*\*([^*\n]{1,500})\*\*|\*([^*\n]{1,500})\*/g;
+        /!\[((?:[^[\]]|\[[^[\]]{0,200}\]){0,500})\]\(([^)\s]{1,2048})\)|\[([^[\]]{1,500})\]\(([^)\s]{1,2048})\)|`([^`]{1,500})`|\*\*([^*]{1,500})\*\*|\*([^*]{1,500})\*/g;
 
     // ⚠ **`lastIndex` 로 전진한다** — `slice` 로 잘라 다시 훑으면 앞부분을 매치마다 되읽는다.
     //    정규식은 상태를 가지므로 **여기서 만든다**(모듈 상수로 올리면 중첩 호출이 서로의
@@ -176,11 +183,37 @@ function isTableDelimiter(line: string): boolean {
 }
 
 /**
+ * 이 줄에서 표가 **실제로 시작되는가** — 시작한다면 머리줄의 칸.
+ *
+ * 🔴 **문단 경계 판정도 이 술어를 쓴다.** 「표 머리처럼 보이나」와 「표로 그리나」가 갈리면, 표를
+ *    거절한 줄에서 문단이 다시 끊겨 **진행이 멈춘다**(같은 줄을 영원히 다시 본다). 칸 수가 안 맞는
+ *    오타(`| a | b |` 다음에 `|---|`) 하나로 그 자리에 들어간다.
+ */
+function tableStartsAt(lines: string[], index: number): string[] | null {
+    const line = lines[index];
+    const next = lines[index + 1];
+    if (line === undefined || next === undefined) return null;
+    if (!line.includes("|") || !isTableDelimiter(next)) return null;
+
+    const head = tableCells(line);
+    // 칸 수가 맞아야 표다. 상한을 넘으면 표로 그리지 않는다(비용이 «칸 × 행» 곱이다).
+    if (head.length !== tableCells(next).length || head.length > MAX_TABLE_COLUMNS) return null;
+    return head;
+}
+
+/**
  * 본문 문자열 → 블록 목록.
  *
  * ⚠ **빈 줄이 문단을 가른다.** 한 줄 바꿈은 같은 문단 안의 줄바꿈으로 살린다(저작기에서 엔터 한 번
  * 친 것이 문단 분리로 보이면 글이 성기게 보인다).
  */
+/**
+ * 표의 상한 — 비용이 «칸 × 행» 곱이라 **둘 다** 묶는다. 넘는 표는 표로 그리지 않는다.
+ * 사람이 읽는 표의 현실 범위(수십 칸 · 수백 행)보다 넉넉하고, 최악이 32 × 500 = 16,000 셀이다.
+ */
+const MAX_TABLE_COLUMNS = 32;
+const MAX_TABLE_ROWS = 500;
+
 export function parseMarkdown(source: string): Block[] {
     const blocks: Block[] = [];
     const usedIds = new Map<string, number>();
@@ -219,19 +252,28 @@ export function parseMarkdown(source: string): Block[] {
 
         // 표 — 머리줄 다음이 구분줄일 때만 표다. 셀 수는 **머리줄이 정한다**(모자라면 채우고
         // 넘치면 버린다 — 저작자의 오타가 열을 어긋나게 하지 않는다).
-        if (line.includes("|") && i + 1 < lines.length && isTableDelimiter(lines[i + 1]!)) {
-            const head = tableCells(line);
-            if (head.length === tableCells(lines[i + 1]!).length) {
-                i += 2;
-                const rows: Inline[][][] = [];
-                while (i < lines.length && lines[i]!.includes("|") && lines[i]!.trim() !== "") {
-                    const cells = tableCells(lines[i]!);
-                    rows.push(head.map((_, c) => parseInline(cells[c] ?? "")));
-                    i += 1;
-                }
-                blocks.push({kind: "table", head: head.map((cell) => parseInline(cell)), rows});
-                continue;
+        //
+        // 🔴 **칸 수와 행 수에 상한이 있다.** 행마다 머리줄 칸 수만큼 인라인 파싱을 하므로 비용이
+        //    «칸 × 행» 곱이다. 상한이 없으면 6.8KB 짜리 본문 하나(1000칸 × 1000행)가 135MB 를 쓰고,
+        //    조금 더 키우면 서빙 프로세스가 힙에서 죽는다 — 그 글은 공개 URL 이고 크기가 커서
+        //    ISR 이 캐시를 거부하므로, 비용을 **익명 방문자가 반복해서** 유발한다.
+        //    상한을 넘는 표는 표로 그리지 않는다(그 줄들은 문단으로 남는다 — 글자는 안 사라진다).
+        const tableHead = tableStartsAt(lines, i);
+        if (tableHead) {
+            i += 2;
+            const rows: Inline[][][] = [];
+            while (
+                i < lines.length &&
+                lines[i]!.includes("|") &&
+                lines[i]!.trim() !== "" &&
+                rows.length < MAX_TABLE_ROWS
+            ) {
+                const cells = tableCells(lines[i]!);
+                rows.push(tableHead.map((_, c) => parseInline(cells[c] ?? "")));
+                i += 1;
             }
+            blocks.push({kind: "table", head: tableHead.map((cell) => parseInline(cell)), rows});
+            continue;
         }
 
         if (/^ {0,3}(-{3,}|\*{3,}|_{3,})\s*$/.test(line)) {
@@ -289,7 +331,9 @@ export function parseMarkdown(source: string): Block[] {
                 bullet.test(next) ||
                 ordered.test(next) ||
                 /^ {0,3}(-{3,}|\*{3,}|_{3,})\s*$/.test(next) ||
-                (next.includes("|") && i + 1 < lines.length && isTableDelimiter(lines[i + 1]!))
+                // 🔴 **표로 그릴 때만** 끊는다 — 「표처럼 보이나」로 끊으면 표가 거절된 줄에서
+                //    문단도 끊겨 그 자리를 영원히 다시 본다(위 `tableStartsAt` 의 ⚠).
+                tableStartsAt(lines, i) !== null
             ) {
                 break;
             }

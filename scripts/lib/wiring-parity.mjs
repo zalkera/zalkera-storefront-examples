@@ -55,6 +55,7 @@ export const WIRING_FILES = [
     "src/lib/oauth.ts", // safeNextPath — 오픈 리다이렉트 판정
     "src/lib/safeUrl.ts", // 링크 소독(저장형 XSS)
     "src/lib/mediaRef.ts", // 본문 미디어 참조 해석 + 그 소독(팩마다 갈리면 그 팩만 이미지가 죽는다)
+    "src/lib/markdown.ts", // 본문 파서 — 표·펜스 상한이 갈리면 그 팩만 병적 입력에 죽는다
     "src/lib/oauthState.ts", // OAuth state 대조(fail-closed)
     "src/lib/env.ts", // 서버 전용 env·테넌트 코드(폴백 없음이 의도)
     "src/lib/buildEnv.ts", // 오프라인 빌드 강하 — 서빙 빌드에 켜지면 콘텐츠 빈 아티팩트가 나간다
