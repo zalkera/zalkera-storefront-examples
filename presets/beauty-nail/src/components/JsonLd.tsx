@@ -151,7 +151,7 @@ export function merchantReturnPolicyJsonLd(config: SiteConfig, policies: Commerc
  *  - `image` 는 `coverAssetId` 가 있을 때만 `/media/{id}` 안정 URL 로(presigned 금지 — W4).
  *  - `datePublished`·`description` 도 값이 있을 때만.
  */
-export function blogPostingJsonLd(post: PostDetail, siteBase: string) {
+export function blogPostingJsonLd(post: PostDetail & {modified?: string | null}, siteBase: string) {
     const url = `${siteBase}/blog/${post.slug}`;
     return {
         "@context": "https://schema.org",
@@ -159,6 +159,11 @@ export function blogPostingJsonLd(post: PostDetail, siteBase: string) {
         headline: post.title,
         url,
         ...(post.publishedAt ? {datePublished: post.publishedAt} : {}),
+        // 「아직 최신인가」의 신호. 발행일만 내면 3년 전 글과 어제 고친 글이 같아 보인다.
+        // ⚠ 설치된 `@zalkera/client`(0.32.2)의 `PostDetail` 에는 이 칸이 아직 없다 — 백엔드는 보낸다.
+        //    그래서 타입을 여기서 넓힌다. client 판이 올라오면 이 교집합을 지운다.
+        //    없으면 **뺀다** — 없는 날짜를 지어내면 그 신선도 신호가 거짓이 된다.
+        ...(post.modified ? {dateModified: post.modified} : {}),
         ...(post.summary ? {description: post.summary} : {}),
         ...(post.coverAssetId != null ? {image: [`${siteBase}/media/${post.coverAssetId}`]} : {}),
     };

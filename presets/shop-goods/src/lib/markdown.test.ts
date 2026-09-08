@@ -1,6 +1,6 @@
 import {deepStrictEqual, ok, strictEqual} from "node:assert/strict";
 import {test} from "node:test";
-import {headingId, parseInline, parseMarkdown} from "./markdown.ts";
+import {headingId, headings, inlineText, parseInline, parseMarkdown} from "./markdown.ts";
 
 /**
  * **재는 것은 「구조가 생기는가」다** — 글자가 아니라 `h2`·`a`·`img`·`li` 의 경계.
@@ -195,4 +195,27 @@ test("예산 — 닫히지 않는 괄호 40,000개가 1.5초 안에 끝난다", 
     parseInline("[x](".repeat(40_000));
     const ms = Number(process.hrtime.bigint() - started) / 1e6;
     ok(ms < 1500, `본문 파싱이 ${ms.toFixed(0)}ms 걸렸다 — 제곱 비용이 돌아왔다`);
+});
+
+/* ── 목차의 재료 ────────────────────────────────────────────────────────────── */
+
+test("제목 목록이 본문 순서·깊이·앵커를 그대로 준다", () => {
+    const items = headings("## 배송\n\n본문\n\n### 지역별\n\n#### 도서산간\n\n## 교환");
+    deepStrictEqual(items, [
+        {level: 2, id: "배송", text: "배송"},
+        {level: 3, id: "지역별", text: "지역별"},
+        {level: 4, id: "도서산간", text: "도서산간"},
+        {level: 2, id: "교환", text: "교환"},
+    ]);
+});
+
+test("제목의 서식은 목차에서 «말» 이 된다 — 링크 주소·마크업이 아니라", () => {
+    // 목차에 `**` 나 URL 이 뜨면 그것은 제목이 아니다.
+    strictEqual(inlineText(parseInline("**중요** 한 [안내](/guide) 와 ![그림](media:12)")), "중요 한 안내 와 그림");
+    strictEqual(headings("## **배송** 안내")[0]?.text, "배송 안내");
+});
+
+test("통제군 — 제목이 없는 본문은 빈 목록이다(빈 상자를 그리지 않게)", () => {
+    strictEqual(headings("그냥 문단입니다.\n\n- 목록\n\n> 인용").length, 0);
+    strictEqual(headings("").length, 0);
 });

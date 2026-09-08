@@ -27,7 +27,7 @@ export const REQUIRED_FLOORS = {
     "src/lib/oauthState.test.ts": 11,
     "src/lib/routeParam.test.ts": 5,
     "src/lib/content.test.ts": 3,
-    "src/lib/markdown.test.ts": 23,
+    "src/lib/markdown.test.ts": 26,
     "src/lib/mediaRef.test.ts": 5,
     "src/lib/reservedSegments.test.ts": 4,
     "src/lib/previewGuard.test.ts": 8,

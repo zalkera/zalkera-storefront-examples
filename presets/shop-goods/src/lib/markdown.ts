@@ -130,6 +130,33 @@ export function parseInline(raw: string): Inline[] {
     return out.filter((n) => n.kind !== "text" || n.text !== "");
 }
 
+/**
+ * 인라인 노드의 **글자만** — 목차·요약처럼 구조 없이 텍스트가 필요한 자리가 쓴다.
+ *
+ * 이미지는 `alt` 로 대신한다(제목 안의 그림도 목차에서는 말이어야 한다). 링크는 주소가 아니라
+ * 보이는 글자를 남긴다 — 목차에 URL 이 뜨면 그것은 제목이 아니다.
+ */
+export function inlineText(nodes: Inline[]): string {
+    return nodes.map((node) => (node.kind === "image" ? node.alt : node.text)).join("");
+}
+
+/**
+ * 본문의 제목 목록 — **목차**의 재료다.
+ *
+ * ■ 왜 목차가 SEO·AEO 축인가
+ *   · 답변 엔진은 문서가 아니라 **절**을 인용한다. 목차는 그 절 목록을 기계와 사람에게 동시에 준다.
+ *   · 각 항목이 `#앵커` 내부 링크라, 검색결과의 **사이트링크 하이라이트**(그 절로 바로 가는 링크)가
+ *     설 자리가 생긴다.
+ *   · 긴 글에서 독자가 먼저 보는 것이 구조다.
+ *
+ * 제목이 없는 글이면 빈 배열이다 — 호출자는 그때 **아무것도 안 그린다**(빈 상자를 그리지 않는다).
+ */
+export function headings(source: string): {level: 2 | 3 | 4; id: string; text: string}[] {
+    return parseMarkdown(source)
+        .filter((block) => block.kind === "heading")
+        .map((block) => ({level: block.level, id: block.id, text: inlineText(block.text)}));
+}
+
 /** 표 한 줄의 셀 — 양끝 파이프는 장식이라 걷는다. */
 function tableCells(line: string): string[] {
     let text = line.trim();
