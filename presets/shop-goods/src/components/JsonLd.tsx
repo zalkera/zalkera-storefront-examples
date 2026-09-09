@@ -1,3 +1,4 @@
+import {schemaTypeOf} from "@/lib/blogGraph";
 import type {PostDetail, ProductDetail, RatingSummary, SiteConfig} from "@zalkera/client";
 import type {CommercePolicies} from "@/lib/commercePolicies";
 
@@ -79,15 +80,6 @@ export function productJsonLd(
 }
 
 /**
- * 업종 → schema.org 타입. 서버가 **실제 업태를 명시 입력받아** 주는 값만 좁힌다
- * (테마 선택에서 유도한 값이 아니다 — 디자인은 업태 진술이 아니므로).
- * 모르는 값·미설정은 `Organization` 으로 흘려보낸다 — 거짓 진술보다 덜 구체적인 진술이 낫다.
- */
-function schemaTypeOf(businessType: SiteConfig["businessType"]): string {
-    return businessType === "BEAUTY" ? "BeautySalon" : "Organization";
-}
-
-/**
  * 사이트 주체(회사) — 홈에 1회.
  *
  * 타입은 `config.businessType` 으로 자동 판별한다(BEAUTY→`BeautySalon`, 미설정→`Organization`).
@@ -139,33 +131,6 @@ export function merchantReturnPolicyJsonLd(config: SiteConfig, policies: Commerc
                   },
               }
             : {returnFees: "https://schema.org/FreeReturn"}),
-    };
-}
-
-/**
- * 블로그/공지 상세용 `BlogPosting`.
- *
- * **페이지에 실제로 보이는 것만 서술한다**(상품 JSON-LD 와 같은 규율): 없는 값은 필드 자체를 뺀다.
- *  - `author` 는 넣지 않는다 — PostDetail 에 저자가 없고 페이지에도 안 보인다. 지어내면 구조화
- *    데이터 위반이다.
- *  - `image` 는 `coverAssetId` 가 있을 때만 `/media/{id}` 안정 URL 로(presigned 금지 — W4).
- *  - `datePublished`·`description` 도 값이 있을 때만.
- */
-export function blogPostingJsonLd(post: PostDetail & {modified?: string | null}, siteBase: string) {
-    const url = `${siteBase}/blog/${post.slug}`;
-    return {
-        "@context": "https://schema.org",
-        "@type": "BlogPosting",
-        headline: post.title,
-        url,
-        ...(post.publishedAt ? {datePublished: post.publishedAt} : {}),
-        // 「아직 최신인가」의 신호. 발행일만 내면 3년 전 글과 어제 고친 글이 같아 보인다.
-        // ⚠ 설치된 `@zalkera/client`(0.32.2)의 `PostDetail` 에는 이 칸이 아직 없다 — 백엔드는 보낸다.
-        //    그래서 타입을 여기서 넓힌다. client 판이 올라오면 이 교집합을 지운다.
-        //    없으면 **뺀다** — 없는 날짜를 지어내면 그 신선도 신호가 거짓이 된다.
-        ...(post.modified ? {dateModified: post.modified} : {}),
-        ...(post.summary ? {description: post.summary} : {}),
-        ...(post.coverAssetId != null ? {image: [`${siteBase}/media/${post.coverAssetId}`]} : {}),
     };
 }
 
@@ -261,3 +226,9 @@ export function breadcrumbJsonLd(items: Array<{name: string; url: string}>) {
         })),
     };
 }
+
+/**
+ * 글 그래프는 순수 모듈에 산다(`lib/blogGraph.ts`) — 분기가 있어 시험이 붙어야 하는데 이 파일은
+ * JSX 라 Node 러너가 못 읽는다. 호출부가 바뀌지 않도록 여기서 재수출한다.
+ */
+export {blogPostingJsonLd, schemaTypeOf} from "@/lib/blogGraph";

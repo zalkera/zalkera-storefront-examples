@@ -9,6 +9,7 @@ import {Markdown} from "@/components/Markdown";
 import {RelatedPosts} from "@/components/RelatedPosts";
 import {TableOfContents} from "@/components/TableOfContents";
 import {ViewBeacon} from "./ViewBeacon";
+import type {PostWithByline} from "@/lib/postFields";
 import {routeParam} from "@/lib/routeParam";
 import {pageMetadata, withSiteName} from "@/lib/metadata";
 import {formatDate} from "@/lib/datetime";
@@ -82,7 +83,7 @@ export default async function BlogPostPage({params}: {params: Promise<{slug: str
     const {slug: rawParam} = await params;
     const slug = routeParam(rawParam);
 
-    let post;
+    let post: PostWithByline;
     try {
         post = await loadPost(slug);
     } catch (error) {
@@ -92,11 +93,13 @@ export default async function BlogPostPage({params}: {params: Promise<{slug: str
 
     const base = siteUrl();
     const related = await loadRelated(post);
+    // `generateMetadata` 와 **같은 인자**라 Next 요청 메모가 1회로 합친다.
+    const config = await zalkera.getSiteConfig({tags: ["site-config"]}).catch(() => null);
 
     return (
         <main>
             {/* 검색·AI 발견용 구조화 데이터 — 아래 보이는 내용과만 일치시킨다(저자·가짜 이미지 금지). */}
-            <JsonLd data={blogPostingJsonLd(post, base)} />
+            <JsonLd data={blogPostingJsonLd(post, base, config)} />
             <JsonLd
                 data={breadcrumbJsonLd([
                     {name: "홈", url: base},
@@ -105,7 +108,12 @@ export default async function BlogPostPage({params}: {params: Promise<{slug: str
                 ])}
             />
             <h1>{post.title}</h1>
-            {post.publishedAt && <time className="text-sm text-muted">{formatDate(post.publishedAt)}</time>}
+            {/* 바이라인 — 저자가 없으면 **안 그린다**(그래프는 상호로 강하하지만 화면에 회사명을
+                또 적으면 머리글이 두 번 말하는 셈이다). */}
+            <p className="text-sm text-muted">
+                {post.author ? <span className="mr-2">{post.author}</span> : null}
+                {post.publishedAt && <time dateTime={post.publishedAt}>{formatDate(post.publishedAt)}</time>}
+            </p>
             {/* 커버 이미지 — /media/{id} 안정 URL(W4). next/image 는 바이트를 Next 런타임에 태우므로
                 쓰지 않는다. 없으면 아무것도 안 그린다. */}
             {post.coverAssetId != null && (
@@ -123,6 +131,17 @@ export default async function BlogPostPage({params}: {params: Promise<{slug: str
                 사람과 기계에 함께 준다. */}
             {post.content && <TableOfContents source={post.content} />}
             {post.content && <Markdown source={post.content} />}
+            {/* 태그 — 표시만 한다. 공개 태그 라우트는 만들지 않는다(오너 결정): 태그당 글이 적을 때
+                그런 쪽은 얇은 페이지를 대량으로 만들어 답변 엔진에 역효과다. */}
+            {(post.tags ?? []).length > 0 && (
+                <ul aria-label="태그" className="my-4 flex flex-wrap gap-2">
+                    {(post.tags ?? []).map((tag) => (
+                        <li key={tag} className="rounded-full border border-border px-3 py-1 text-sm text-muted">
+                            {tag}
+                        </li>
+                    ))}
+                </ul>
+            )}
             <RelatedPosts posts={related} />
             {/* 조회수 비콘 — RSC 에서 recordPostView 를 직접 부르면 ISR 프리렌더가 조회를 세므로 금지.
                 브라우저 아일랜드가 BFF(/api/posts/{slug}/view)를 친다. */}
