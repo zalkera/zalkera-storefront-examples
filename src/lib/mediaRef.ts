@@ -87,8 +87,12 @@ export function bodyMediaSrc(raw: string | null | undefined): string | null {
  * [bodyMediaSrc] 가 `null` 을 준 뒤 「그럼 링크로 그릴 값인가」를 묻는 자리다. 그 판정을 렌더러에
  * 두면 **팩마다 갈릴 수 있고**, 갈린 팩만 조용히 외부 요청을 되살리거나 저작자의 그림을 통째로
  * 잃는다 — 화면으로는 안 보인다. 이 파일은 `wiring-parity` 가 5벌을 **바이트로** 잠그므로,
- * 여기 있으면 한 벌만 갈리는 순간 CI 가 빨강이다(실측: 렌더러에 두었을 때는 한 벌을 뒤집어도
- * 전 시험이 초록이었다).
+ * 여기 있으면 한 벌만 갈리는 순간 CI 가 빨강이다. 렌더러(`Markdown.tsx`)는 그 목록 밖이라
+ * 같은 보장이 없다.
+ *
+ * 재현(한 벌만 갈라 본다): `printf '\\n' >> presets/skeleton/src/lib/mediaRef.ts;`
+ *   `node scripts/lib/wiring-parity.mjs; echo rc=$?; git checkout -- presets/skeleton/src/lib/mediaRef.ts`
+ *   → rc=1
  *
  * ⚠ **소독을 먼저 태운다.** 원문에 꼴을 물으면 소독기가 무력화한 값(`javascript:` → `#`)과
  *   정규화한 값을 못 본다.
