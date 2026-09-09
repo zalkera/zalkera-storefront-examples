@@ -21,8 +21,8 @@ export function schemaTypeOf(businessType: SiteConfig["businessType"]): string {
  * 블로그/공지 상세용 `BlogPosting`.
  *
  * **페이지에 실제로 보이는 것만 서술한다**(상품 JSON-LD 와 같은 규율): 없는 값은 필드 자체를 뺀다.
- *  - `author` 는 넣지 않는다 — PostDetail 에 저자가 없고 페이지에도 안 보인다. 지어내면 구조화
- *    데이터 위반이다.
+ *  - `author` 는 **글이 저자를 들고 있을 때만** 사람(`Person`)이고, 없으면 발행자 조직으로 강하한다.
+ *    둘 다 없으면 칸을 뺀다 — 없는 사람 이름을 지어내면 구조화 데이터 위반이다.
  *  - `image` 는 `coverAssetId` 가 있을 때만 `/media/{id}` 안정 URL 로(presigned 금지 — W4).
  *  - `datePublished`·`description` 도 값이 있을 때만.
  */
