@@ -1,7 +1,7 @@
 import type {Block, Inline} from "@/lib/markdown";
 import {parseMarkdown} from "@/lib/markdown";
 import {bodyImageHref, bodyMediaSrc, bodyVideoSrc} from "@/lib/mediaRef";
-import {safeLinkUrl} from "@/lib/safeUrl";
+import {externalHref, safeLinkUrl} from "@/lib/safeUrl";
 
 /**
  * 글 본문 렌더러 — 마크다운 부분집합을 **React 요소로** 그린다.
@@ -15,16 +15,6 @@ import {safeLinkUrl} from "@/lib/safeUrl";
  *   · 제목마다 `id` 가 있어 **그 절을 주소로 가리킬 수 있다**.
  *   · 링크가 요소여야 크롤러가 따라간다. 이미지가 요소여야 `alt` 가 색인된다.
  */
-/**
- * 소독을 **통과한** 링크가 남의 호스트를 가리키는가 — `rel` 을 다는 조건.
- *
- * ⚠ [safeLinkUrl] 이 돌려준 값에만 건다. 원문에 걸면 소독기가 무력화한 값(`javascript:` → `#`)과
- *   정규화한 값을 못 본다.
- *
- * ⚠ 본문 **이미지**의 같은 물음은 여기 없다 — `bodyImageHref` 가 진다(5벌이 바이트로 잠긴 파일).
- */
-const EXTERNAL_HREF = /^https?:\/\//i;
-
 function InlineNodes({nodes}: {nodes: Inline[]}) {
     return (
         <>
@@ -46,7 +36,11 @@ function InlineNodes({nodes}: {nodes: Inline[]}) {
                         // `target="_blank"` 를 안 쓰므로 `noopener` 는 무동작이고(짝으로 두는 관례),
                         // 같은 탭 이동에서도 `Referer` 가 지워진다. 내부 링크에는 아무것도 안 단다:
                         // `nofollow` 를 달면 크롤러가 따라가는 우리 내부 연결을 우리 손으로 끊는다.
-                        const external = EXTERNAL_HREF.test(href);
+                        // ⚠ **문자로 묻지 마라.** `http:/evil.example/q`(슬래시 하나)는 소독기를
+                        //    통과하고 브라우저가 외부로 읽는데 `/^https?:\/\//` 는 못 맞춘다 —
+                        //    그러면 `rel` 이 조용히 안 붙는다. 판정은 파서를 쓰는 `externalHref` 가
+                        //    지고, 그 함수는 5벌이 바이트로 잠긴 파일에 산다.
+                        const external = externalHref(node.href) !== null;
                         return (
                             <a
                                 key={i}

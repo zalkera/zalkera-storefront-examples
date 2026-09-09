@@ -108,6 +108,59 @@ test("이미지도 링크도 될 수 없는 주소는 아무것도 안 그린다
     }
 });
 
+/**
+ * 브라우저가 **요청을 내는** 속성 전부 — 태그 이름을 세지 않는다.
+ *
+ * ⚠ 「`<img>` 가 없다 · `<a>` 가 없다」로 재면 **다른 태그로 새면 그만**이다. `<div
+ *   style="background-image:url(//evil.example/x.png)">` 는 방문자 조작 없이 그 호스트를 부르는데
+ *   두 단언을 다 통과한다(심의가 프리셋 한 벌을 그렇게 바꿔 전 게이트를 초록으로 만들었다).
+ *   그래서 **속성을 전수로** 훑는다.
+ */
+const REQUESTING_ATTRS =
+    /\s(?:src|srcset|imagesrcset|poster|background|data|href|action|formaction|ping|style|srcdoc)\s*=\s*"([^"]*)"/gi;
+
+/** 그 값 안에 우리 오리진 밖을 가리키는 것이 있는가 — `url(...)` 안쪽까지 본다. */
+function offOriginRefs(html: string): string[] {
+    const found: string[] = [];
+    for (const m of html.matchAll(REQUESTING_ATTRS)) {
+        const value = m[1] ?? "";
+        for (const candidate of [value, ...[...value.matchAll(/url\(\s*['"]?([^'")]+)/gi)].map((u) => u[1] ?? "")]) {
+            const v = candidate.trim();
+            if (v === "" || v.startsWith("/") && !v.startsWith("//")) continue;
+            if (v.startsWith("#") || v.startsWith("?")) continue;
+            found.push(v);
+        }
+    }
+    return found;
+}
+
+test("🔴 렌더 결과에 방문자 조작 없이 나가는 제3자 요청이 0건이다 — 태그를 세지 않고 속성을 훑는다", async () => {
+    // 이미지·영상·링크·표·목록을 한 본문에 다 넣는다. 새 갈래가 생겨도 이 시험을 지나간다.
+    const html = await renderMarkdown(
+        [
+            "# 제목",
+            "![우리 것](media:12)",
+            "![남의 것](https://cdn.example/a.png)",
+            "![못 쓰는 것](//evil.example/x.png)",
+            "[링크](https://cdn.example/page)",
+            "```videofile\nmedia:34\n```",
+            "```video\nhttps://youtu.be/abc\n```",
+            "| a | b |\n|---|---|\n| 1 | 2 |",
+        ].join("\n\n"),
+    );
+
+    // `href` 는 방문자가 **누를 때만** 나간다 — 자동 요청이 아니다. 그 둘을 갈라 센다.
+    const auto = offOriginRefs(html.replace(/<a\b[^>]*>/gi, (tag) => tag.replace(/\shref\s*=\s*"[^"]*"/i, "")));
+    assert.deepEqual(
+        auto,
+        [],
+        `방문자 조작 없이 나가는 제3자 요청이 있다 — 브라우저가 그 호스트를 부른다: ${auto.join(" · ")}\n${html}`,
+    );
+
+    // 통제군 — 훑개가 실제로 값을 본다. 0개면 위 단언이 공허참이다.
+    assert.ok(offOriginRefs(html).length > 0, `훑개가 아무 속성도 못 봤다 — 위 단언이 공허참이다: ${html}`);
+});
+
 /** 자체 업로드 영상만 `<video>` 다 — 외부 영상은 링크(그 판정은 `bodyVideoSrc` 가 진다). */
 test("자체 영상은 video 로, 외부 영상은 링크로", async () => {
     const own = await renderMarkdown("```videofile\nmedia:34\n```");

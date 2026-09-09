@@ -1,5 +1,5 @@
 import {mediaSrc} from "@zalkera/client";
-import {safeLinkUrl} from "./safeUrl.ts";
+import {externalHref, safeLinkUrl} from "./safeUrl.ts";
 
 /**
  * 본문의 **불변 미디어 참조** `media:{id}` 해석 — 콘솔이 박는 문자열을 실제 주소로 바꾼다.
@@ -93,33 +93,23 @@ export function bodyMediaSrc(raw: string | null | undefined): string | null {
  * 여기 있으면 한 벌만 갈리는 순간 CI 가 빨강이다. 렌더러(`Markdown.tsx`)는 그 목록 밖이라
  * 같은 보장이 없다.
  *
- * 재현(한 벌만 갈라 본다): `printf '\\n' >> presets/skeleton/src/lib/mediaRef.ts;`
- *   `node scripts/lib/wiring-parity.mjs; echo rc=$?; git checkout -- presets/skeleton/src/lib/mediaRef.ts`
- *   → rc=1
+ * 재현(한 벌만 갈라 본다 — **사본으로 되돌린다.** `git checkout --` 는 미커밋 편집을 먹는다):
+ *   `cp presets/skeleton/src/lib/mediaRef.ts /tmp/m.bak`
+ *   `printf '\n' >> presets/skeleton/src/lib/mediaRef.ts`
+ *   `node scripts/lib/wiring-parity.mjs; echo rc=$?`   → rc=1
+ *   `cp /tmp/m.bak presets/skeleton/src/lib/mediaRef.ts`
  *
- * ⚠ **스킴은 문자가 아니라 파서에 묻는다**(`safeUrl.ts` 와 같은 규율). `/^https?:\/\//` 문자
- *   검사로 놓으면 브라우저가 http(s) 로 읽는 값을 놓쳐, 그 그림이 `<img>` 도 링크도 아닌
- *   **아무것도 아닌 것**이 된다 — 저작기 미리보기에는 있고 사이트에는 없는 상태다.
- *   `https:cdn.example/a.png`·`https:/cdn.example/a.png`·제어문자 접두가 그 꼴이다.
- *   재현: 이 갈래를 `/^https?:\/\//i.test(href)` 로 바꾸고
- *   `node --experimental-strip-types --test src/lib/markdownRender.test.ts` → 1건 red
- *
- * ⚠ **소독을 먼저 태운다.** [safeLinkUrl] 이 무력화한 값(`javascript:` → `#`)이 여기 오면 안 되고,
- *   내부 갈래에서 정규화한 값도 그대로 실려야 한다.
+ * ⚠ **판정을 여기 적지 않는다** — [externalHref] 하나가 진다. 본문 **링크** 갈래가 같은 물음을
+ *   묻기 때문이고, 두 자리에 적으면 한쪽이 반드시 틀린다(한 판 이미지는 파서로·링크는 문자로
+ *   물었고, 링크 쪽이 `http:/evil.example/q` 를 내부로 판정해 `rel` 을 안 달았다).
  *
  * ⚠ `http:` 도 링크로는 받는다 — 저작자가 넣은 그림에 닿게 하는 것이 목적이고, 링크는 방문자가
  *   **누를 때만** 나간다(혼합 콘텐츠로 막히는 `<img>` 와 다르다).
  */
 export function bodyImageHref(raw: string | null | undefined): string | null {
-    if (typeof raw !== "string") return null;
-    const href = safeLinkUrl(raw);
-    try {
-        const protocol = new URL(href).protocol;
-        return protocol === "https:" || protocol === "http:" ? href : null;
-    } catch {
-        // 절대 URL 이 아니다 — 내부 경로(`/…`)·조각(`#`)·질의(`?`)·소독기가 무력화한 `#`.
-        return null;
-    }
+    // 판정은 [externalHref] 하나가 진다 — 본문 **링크** 갈래도 같은 물음을 묻고, 두 자리에 적으면
+    // 한쪽이 반드시 틀린다(실제로 한 판 이미지는 파서로·링크는 문자로 물었다).
+    return externalHref(raw);
 }
 
 /**

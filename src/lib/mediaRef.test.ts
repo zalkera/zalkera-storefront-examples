@@ -135,9 +135,25 @@ test("저작기 삽입 문자열이 본문 파이프라인을 끝까지 통과�
  */
 test("🔴 외부 이미지는 링크로 그릴 주소를 준다 — 안 그러면 저작자의 그림이 사라진다", () => {
     assert.equal(bodyImageHref("https://cdn.example/a.png"), "https://cdn.example/a.png");
-    assert.equal(bodyImageHref("HTTPS://CDN.example/a.png"), "HTTPS://CDN.example/a.png");
     // `http:` 도 링크로는 받는다 — 링크는 방문자가 **누를 때만** 나간다.
     assert.equal(bodyImageHref("http://cdn.example/a.png"), "http://cdn.example/a.png");
+
+    // 🔴 **정규화한 절대 주소**를 준다. 원문을 그대로 실으면 브라우저가 문서 base 로 풀어
+    //    `https://<우리도메인>/blog/cdn.example/a.png` — 저작자가 가리킨 곳이 아니라 **우리 404** 이고,
+    //    크롤러가 따라갈 소프트-404 내부 링크가 생긴다. 「그 그림에 닿는다」가 거짓이 되는 자리다.
+    for (const odd of [
+        "https:cdn.example/a.png", // 슬래시 없음
+        "https:/cdn.example/a.png", // 슬래시 하나
+        "https:///cdn.example/a.png", // 슬래시 셋
+        "HTTPS://CDN.example/a.png", // 대문자
+        "\u0001https://cdn.example/a.png", // 제어문자 접두를 파서가 걷어낸다
+    ]) {
+        assert.equal(
+            bodyImageHref(odd),
+            "https://cdn.example/a.png",
+            `${JSON.stringify(odd)} 가 절대 주소로 안 풀렸다 — 그 링크는 우리 404 로 간다`,
+        );
+    }
 
     // **음성 짝** — 이미지도 링크도 될 수 없는 것들. 링크로 세우면 뜻 없는 자리가 생긴다.
     for (const notALink of [

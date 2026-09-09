@@ -56,6 +56,36 @@ export function internalPath(raw: string): string | null {
     return out;
 }
 
+/**
+ * 소독을 **통과한** 주소가 남의 호스트를 가리키는가 — 그렇다면 **정규화한 절대 주소**, 아니면 `null`.
+ *
+ * ## ⚠ 문자로 묻지 마라
+ *
+ * `/^https?:\/\//` 문자 검사는 브라우저가 http(s) 로 읽는 값을 놓친다 — `http:/evil.example/q`
+ * (슬래시 하나)·`https:\\evil.example/…`·제어문자 접두가 그렇다. [safeLinkUrl] 은 절대 URL 갈래에서
+ * **정규화를 안 하고 원문을 그대로** 돌려주므로, 그 출력에 문자 검사를 걸어도 이 부류는 안 잡힌다.
+ *
+ * ## ⚠ 정규화한 값을 돌려주는 이유
+ *
+ * `https:cdn.example/a.png` 를 `href` 에 **그대로** 실으면 브라우저가 문서 base 로 풀어
+ * `https://<우리도메인>/blog/cdn.example/a.png` 가 된다 — 저작자가 가리킨 곳이 아니라 **우리 404** 이고,
+ * 크롤러가 따라갈 소프트-404 내부 링크가 생긴다. 파서가 읽은 절대 주소를 실어야 「그 그림에 닿는다」가
+ * 참이 된다.
+ *
+ * 재현: `node -e 'console.log(new URL("https:cdn.example/a.png").href)'` → https://cdn.example/a.png
+ */
+export function externalHref(raw: string | null | undefined): string | null {
+    if (typeof raw !== "string") return null;
+    const sanitized = safeLinkUrl(raw);
+    try {
+        const url = new URL(sanitized);
+        return url.protocol === "https:" || url.protocol === "http:" ? url.href : null;
+    } catch {
+        // 절대 URL 이 아니다 — 내부 경로(`/…`)·조각(`#`)·질의(`?`)·소독기가 무력화한 `#`.
+        return null;
+    }
+}
+
 export function safeLinkUrl(raw: string | null | undefined): string {
     if (!raw) return "#";
     const url = raw.trim();
