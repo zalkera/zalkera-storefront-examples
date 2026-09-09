@@ -520,7 +520,9 @@ test("원시 HTML 삽입은 5벌 모두 JsonLd 한 곳뿐이다", () => {
 test("그 한 곳도 이스케이프를 `jsonLdScriptBody` 에 맡긴다 — 여기서 stringify 를 직접 부르지 않는다", () => {
     for (const {label, sf} of packCopies("components/JsonLd.tsx")) {
         assert.ok(callsFunction(sf, "jsonLdScriptBody"), `${label}: 소독기를 안 부른다`);
-        // ⚠ 문면으로 세지 마라 — 바로 위 주석이 그 이름을 적고 있어서 자기 설명에 걸린다(실측).
+        // ⚠ 문면으로 세지 마라 — 바로 위 주석이 그 이름을 적고 있어서 **자기 설명에 걸린다**(실측).
+        //   재현: 이 줄을 `sf.getFullText().includes("JSON.stringify")` 로 되돌리고
+        //   `node --experimental-strip-types --test src/lib/astGuards.test.ts` → 이 시험만 red.
         assert.equal(callsMember(sf, "JSON", "stringify"), false, `${label}: stringify 를 직접 부른다`);
     }
 });
