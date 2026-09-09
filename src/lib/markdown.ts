@@ -72,9 +72,11 @@ function headingLevel(hashes: number): 2 | 3 | 4 {
  *
  * ⚠ **원장이 `Set` 이 아니라 `Map` 인 이유** — 값은 「이 문자열을 base 로 삼을 때 **다음에 시도할
  *   번호**」다. `Set` 만 들고 2부터 매번 훑으면 k번째 중복이 k번 탐침해 **제목 수의 제곱**이 된다
- *   (실측: 같은 제목 2만 개 → 파서 13.2초 · 그 쪽 첫 방문자 15.3초 — 재현은 `node --experimental-strip-types --test src/lib/markdown.test.ts`
- *   의 「예산 — 같은 제목 20,000개」. 문단과 달리 이 원장은 문서
- *   전역이라 빈 줄이 막아 주지도 않는다). 번호를 기억하면 탐침이 한 번으로 끝난다.
+ *   (제목 수를 배로 늘리면 시간이 **네 배**가 된다 — 문단과 달리 이 원장은 문서 전역이라 빈 줄이
+ *   막아 주지도 않는다). 번호를 기억하면 탐침이 한 번으로 끝난다.
+ *   재현: `node --experimental-strip-types --test src/lib/markdown.test.ts` 의 「원장 — 같은 제목
+ *   20,000개의 id 가 1초 안에 갈린다」. ⚠ 그 시험은 [headingId] 를 **직접** 부른다 — 본문으로
+ *   재면 블록 예산이 먼저 끊어 이 결함이 문턱 안에 들어온다.
  *
  * ⚠ **그래도 `has` 로 한 번 더 묻는다.** 「제목-2」가 본문에 먼저 나오고 「제목」이 뒤따르면
  *   번호만으로는 같은 id 를 두 번 만든다 — 앵커가 겹치면 그 절을 주소로 가리킬 수 없다.
@@ -96,10 +98,39 @@ export function headingId(text: string, used: Map<string, number>): string {
 }
 
 /**
+ * 인라인 노드 한 개가 예산에서 빼 가는 **몫** — 산출 크기에 맞춘 가중치다.
+ *
+ * 🔴 **개수로 세면 가장 싼 노드가 예산을 정한다.** 한 판 개수로 셌더니 이미지 참조만 이어 붙인
+ * 본문 하나가 예산을 「정확히 지킨 채」 다른 씨앗의 **네 배**를 냈다 — 이미지는 `<img>` 와 그
+ * 주소·대체문구를, 강조는 태그 한 쌍을 낸다. 산출이 다른데 같은 몫을 빼 가면 예산이 뜻을 잃는다.
+ *
+ * 가중치는 «가장 싼 노드 = 1» 로 정규화한 산출 크기 비율이다. 재는 법은 [MAX_BLOCKS_PER_DOCUMENT]
+ * KDoc 의 「올리기 전에 재라」와 같다 — 씨앗을 한 갈래만 채워 쪽 바이트를 노드 수로 나눈다.
+ * 가중치가 실제로 걸리는지는
+ * `node --experimental-strip-types --test src/lib/markdown.test.ts` 의 「비싼 인라인일수록 적게
+ * 받는다」가 잰다(이미지 < 링크 < 강조).
+ */
+const INLINE_COST: Record<Inline["kind"], number> = {
+    image: 3,
+    code: 2,
+    link: 2,
+    // ⚠ **`text` 만 잰 값이 아니다** — 글자 노드만 있는 씨앗을 만들 수 없어서다(글자는 다른
+    //    노드 «사이» 에만 생긴다). 안전한 쪽으로 **과하게** 잡았다. 산문은 블록 예산이 먼저
+    //    걸리므로 이 값 때문에 잘리는 글은 없다 — 그것은 시험의 「예산 안의 장문 기사」가 잰다.
+    text: 2,
+    strong: 1,
+    em: 1,
+};
+
+/**
  * 인라인 문법 — 이미지·링크·코드·강조. 겹치는 자리는 **먼저 열린 것이 이긴다**(왼쪽 우선).
  *
- * `limit` 은 이 호출이 만들 수 있는 노드 수다. 다 쓰면 **남은 글자를 통째로 한 덩어리**로 남긴다 —
- * 서식은 잃지만 글자는 안 잃는다. 문서 예산은 [parseMarkdown] 이 쥐고 남은 몫을 여기 넘긴다.
+ * `limit` 은 이 호출이 쓸 수 있는 **몫**이다(개수가 아니라 [INLINE_COST] 로 가중한 합). 다 쓰면
+ * **남은 글자를 통째로 한 덩어리**로 남긴다 — 서식은 잃지만 글자는 안 잃는다. 문서 예산은
+ * [parseMarkdown] 이 쥐고 남은 몫을 여기 넘긴다.
+ *
+ * ⚠ **판정이 여기 있어야 한다.** 한 판 개수로 자르고 밖에서 가중치를 셌더니, 한 블록짜리 문서는
+ *   첫 호출에 남은 몫을 통째로 받아 **가중치가 한 번도 안 걸렸다**.
  */
 export function parseInline(raw: string, limit: number = MAX_INLINE_NODES_PER_DOCUMENT): Inline[] {
     const out: Inline[] = [];
@@ -129,18 +160,23 @@ export function parseInline(raw: string, limit: number = MAX_INLINE_NODES_PER_DO
     //    정규식은 상태를 가지므로 **여기서 만든다**(모듈 상수로 올리면 중첩 호출이 서로의
     //    `lastIndex` 를 밟는다).
     let last = 0;
+    let spent = 0;
     let m: RegExpExecArray | null;
     while ((m = pattern.exec(raw)) !== null) {
         // 🔴 **예산은 여기서 걸어야 한다.** 부른 뒤에 세면 이미 만들어진 뒤다 — 한 문단이
         //    노드 100만 개를 내는 씨앗이 실재한다(`` `x` `` 를 이어 붙이면 블록은 **1개**다).
-        if (out.length >= limit) break;
-        if (m.index > last) out.push({kind: "text", text: raw.slice(last, m.index)});
+        if (spent >= limit) break;
+        if (m.index > last) {
+            out.push({kind: "text", text: raw.slice(last, m.index)});
+            spent += INLINE_COST.text;
+        }
 
         if (m[2] !== undefined) out.push({kind: "image", src: m[2], alt: m[1] ?? ""});
         else if (m[4] !== undefined) out.push({kind: "link", href: m[4], text: m[3]!});
         else if (m[5] !== undefined) out.push({kind: "code", text: m[5]});
         else if (m[6] !== undefined) out.push({kind: "strong", text: m[6]});
         else out.push({kind: "em", text: m[7]!});
+        spent += INLINE_COST[out[out.length - 1]!.kind];
 
         last = pattern.lastIndex;
     }
@@ -231,8 +267,8 @@ const MAX_TABLE_COLUMNS = 32;
  * 🔴 **목록 항목도 같은 예산에서 뺀다.** 목록은 길이와 무관하게 **블록 1개**라 블록 예산이 영원히
  * 안 걸린다. 표 칸과 목록 항목은 「반복되는 잎」이라는 같은 형상이고 산출 단가도 같은 자릿수다.
  *
- * 8,000이면 32열 × 250행 · 8열 × 1,000행 · 2열 × 4,000행 · 목록 8,000항목이 각각 들어간다
- * (사람이 읽는 가격표·사양표의 현실 범위 밖이다).
+ * 8,000이면 32열 249행 · 8열 999행 · 2열 3,999행 · 목록 8,000항목이 각각 들어간다(머리줄도
+ * 칸이라 한 행씩 적다). 사람이 읽는 가격표·사양표의 현실 범위 밖이다.
  *
  * 넘으면 그 뒤의 줄은 표·목록으로 그리지 않는다(문단으로 남아 **글자는 안 사라진다**).
  */
@@ -277,8 +313,9 @@ const MAX_LEAF_NODES_PER_DOCUMENT = 8_000;
  */
 const MAX_BLOCKS_PER_DOCUMENT = 2_000;
 
+
 /**
- * 한 **문서**의 인라인 노드 총수 상한.
+ * 한 **문서**의 인라인 예산(위 가중치로 센 몫의 합).
  *
  * 🔴 **블록 수와 잎 수만 묶으면 축이 안 닫힌다.** 한 문단은 내용이 얼마든 **블록 1개**이고 잎은
  * 0개다 — 인라인 문법만 이어 붙인 본문 하나가 두 예산을 **통과한 채** 힙을 넘긴다. 인라인 노드
@@ -288,8 +325,8 @@ const MAX_BLOCKS_PER_DOCUMENT = 2_000;
  *
  * 넘으면 그 뒤의 글자는 **서식 없이 한 덩어리**로 남는다 — 글자는 안 사라진다.
  *
- * ⚠ 그래서 노드 **총수**의 상한은 이 값이 아니라 «이 값 + 블록 수 + 잎 수» 다. 예산이 바닥나도
- *   블록·잎마다 남은 글자 한 덩어리는 생긴다 — 그것이 글자를 안 잃는 방법이다.
+ * ⚠ 그래서 몫의 합은 이 값을 넘을 수 있다 — 예산이 바닥나도 블록·잎마다 남은 글자 한 덩어리는
+ *   생긴다(그것이 글자를 안 잃는 방법이다). 상한은 «이 값 + (블록 수 + 잎 수) × 글자 몫» 이다.
  */
 const MAX_INLINE_NODES_PER_DOCUMENT = 20_000;
 
@@ -309,7 +346,7 @@ export function parseMarkdown(source: string): Block[] {
      */
     const inline = (text: string): Inline[] => {
         const nodes = parseInline(text, Math.max(0, MAX_INLINE_NODES_PER_DOCUMENT - inlineUsed));
-        inlineUsed += nodes.length;
+        inlineUsed += nodes.reduce((sum, node) => sum + INLINE_COST[node.kind], 0);
         return nodes;
     };
     /**
@@ -374,9 +411,9 @@ export function parseMarkdown(source: string): Block[] {
         // 버린다 — 저작자의 오타가 열을 어긋나게 하지 않는다). 모자라는 칸은 **채우지 않는다**.
         //
         // 🔴 **칸에 예산이 있다.** 행마다 머리줄 칸 수만큼 인라인 파싱을 하므로 비용이 «칸 × 행»
-        //    곱, 즉 칸 수다. 예산이 없으면 6.8KB 짜리 본문 하나(1000칸 × 1000행)가 135MB 를 쓰고,
-        //    조금 더 키우면 서빙 프로세스가 힙에서 죽는다 — 그 글은 공개 URL 이고, 산출이 커지면
-        //    ISR 캐시(읽기전용 박스에서는 메모리 LRU 뿐)가 거부해 **매 요청 다시 그린다**.
+        //    곱, 즉 칸 수다. 예산이 없으면 몇 KB 짜리 본문 하나가 수백 MB 를 쓰고, 조금 더 키우면
+        //    서빙 프로세스가 힙에서 죽는다 — 그 글은 공개 URL 이고, 산출이 커지면 ISR 캐시가 그
+        //    항목을 거부해 **매 요청 다시 그린다**.
         //    예산을 넘는 줄은 표로 그리지 않는다(문단으로 남는다 — 글자는 안 사라진다).
         const tableHead = startsTable(i);
         if (tableHead) {
@@ -391,9 +428,9 @@ export function parseMarkdown(source: string): Block[] {
                 leafUsed + tableHead.length <= MAX_LEAF_NODES_PER_DOCUMENT
             ) {
                 // 🔴 **없는 칸을 채우지 않는다.** 머리줄 칸 수만큼 채우면 `|` 한 글자짜리 행이
-                //    32개 셀을 만들어 **본문 바이트당 비용**이 열 수만큼 곱해진다(실측: 바이트당
-                //    14.2셀 · 113KB 본문이 서빙 프로세스를 죽인다 · 재현은
-                //    `node --experimental-strip-types --test src/lib/markdown.test.ts` 의 「표를 100개 쌓아도」). 넘치는 칸만 버린다.
+                //    32개 셀을 만들어 **본문 바이트당 비용**이 열 수만큼 곱해진다. 넘치는 칸만
+                //    버린다. 재현: `node --experimental-strip-types --test src/lib/markdown.test.ts`
+                //    의 「표를 100개 쌓아도」가 칸 총수를 잰다.
                 const cells = tableCells(lines[i]!).slice(0, tableHead.length);
                 rows.push(cells.map((cell) => inline(cell)));
                 leafUsed += cells.length;

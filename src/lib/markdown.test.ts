@@ -41,7 +41,7 @@ test("앵커는 «이미 쓰인 id» 와도 안 겹친다 — 번호 기억이 �
 
 /**
  * **예산 — 앵커 원장은 문서 전역이라 빈 줄이 못 막는다.** 같은 제목이 반복되면 종전 구현은 k번째
- * 중복에 k번 탐침해 제목 수의 제곱이 된다(실측: 2만 개 → 파서 13.2초 · 그 쪽 첫 방문자 15.3초).
+ * 중복에 k번 탐침해 제목 수의 제곱이 된다 — 제목 수를 배로 늘리면 시간이 네 배가 된다.
  * 재현: 이 파일을 `node --experimental-strip-types --test src/lib/markdown.test.ts` 로 돌린다.
  */
 /**
@@ -133,6 +133,33 @@ test("예산 안의 목록은 항목으로 그린다", () => {
     const blocks = parseMarkdown(Array.from({length: 30}, (_, i) => `- 항목 ${i}`).join("\n"));
     strictEqual(blocks.length, 1);
     strictEqual((blocks[0] as {items: unknown[]}).items.length, 30);
+});
+
+/**
+ * 🔴 **인라인 예산은 «개수» 가 아니라 «산출 비용» 으로 센다.**
+ *
+ * 개수로 세면 **가장 싼 노드가 예산을 정한다** — 이미지는 `<img>` 와 주소·대체문구를, 강조는
+ * 태그 한 쌍을 낸다. 한 판 개수로 셌더니 이미지 참조만 이어 붙인 본문이 예산을 「정확히 지킨 채」
+ * 강조 씨앗의 **네 배**를 냈고, 그것이 작은 컨테이너를 죽였다.
+ *
+ * 재현: `parseInline` 의 `spent += INLINE_COST[...]` 를 `spent += 1` 로 되돌리면 red 다
+ * (그러면 네 씨앗이 전부 같은 노드 수를 낸다).
+ */
+test("🔴 예산 — 비싼 인라인일수록 적게 받는다", () => {
+    const nodesOf = (unit: string, n: number) =>
+        parseMarkdown(unit.repeat(n)).reduce((sum, b) => sum + ((b as {text?: unknown[]}).text?.length ?? 0), 0);
+
+    const image = nodesOf("![a](media:1)", 20_000);
+    const link = nodesOf("[a](/x)", 100_000);
+    const emphasis = nodesOf("**a**", 100_000);
+
+    // 싼 것이 더 많이 들어간다 — 그 «더» 가 가중치다.
+    ok(image < link, `이미지 ${image} · 링크 ${link} — 가중치가 안 걸렸다`);
+    ok(link < emphasis, `링크 ${link} · 강조 ${emphasis} — 가중치가 안 걸렸다`);
+    // 그리고 셋 다 예산 안이다(가중치가 예산을 늘리는 방향으로 새면 안 된다).
+    for (const [name, n] of [["이미지", image], ["링크", link], ["강조", emphasis]] as const) {
+        ok(n <= 20_001, `${name} 노드가 ${n}개 — 예산 밖이다`);
+    }
 });
 
 /** **양성 짝** — 예산이 정상 문단의 서식을 먹으면 링크·강조가 통째로 사라진다. */
@@ -343,10 +370,11 @@ test("음성 짝 — 구분줄이 없으면 표가 아니다(파이프 든 문�
  * 실패 시도가 남은 본문 전체를 되짚어 **본문 길이의 제곱**이 됐다. 저작자 한 명의 오타가 그
  * 사이트의 응답을 세우는 형태다.
  *
- * 재현: `node --experimental-strip-types --test src/lib/markdown.test.ts`.
- * 실측(개발 기계): 상한 없는 구현은 10k 277ms · 20k 1,128ms · 40k 5,619ms(배로 늘면 4배) → 지금 40k **128ms** ·
- * 80k 258ms(선형). 상한은 그 사이를 넉넉히 벌려 잡는다 — 느린 CI 에서 깜빡이지 않으면서 제곱이
- * 돌아오면 반드시 걸리는 자리다.
+ * 재현: `node --experimental-strip-types --test src/lib/markdown.test.ts` 가 `duration_ms` 를 낸다.
+ * 재는 것은 **형상**이다 — 상한을 빼면 여는 괄호를 배로 늘릴 때 시간이 **네 배**가 되고(제곱),
+ * 지금은 **두 배**가 된다(선형). ⚠ 절대 시간을 여기 적지 마라: 같은 기계에서도 부하에 따라
+ * 여러 배 갈리고, 팩을 받는 개발자에게는 「개발 기계」가 가리킬 대상이 없다.
+ * 문턱은 그 둘 사이를 넉넉히 벌려 잡는다 — 제곱이 돌아오면 반드시 걸리는 자리다.
  */
 test("예산 — 닫히지 않는 괄호 40,000개가 1.5초 안에 끝난다", () => {
     const started = process.hrtime.bigint();
@@ -486,8 +514,8 @@ test("🔴 예산 소진 뒤 표처럼 생긴 줄은 문단 하나로 남는다 
 });
 
 test("🔴 예산 — 넓은 표는 칸 예산에서 멈춘다", () => {
-    // 열 상한만으로는 못 막는다. 32열 표는 행이 늘수록 비용이 곱으로 는다 — 977KB 본문이
-    // 654MB·2.3초, 3.9MB 면 2.6GB 다. 본문 길이에 상한이 없으므로 칸에 예산이 있어야 한다.
+    // 열 상한만으로는 못 막는다. 32열 표는 행이 늘수록 비용이 «칸 × 행» 곱으로 늘고, 본문 길이에
+    // 상한이 없으므로 칸에 예산이 있어야 한다.
     const head = `|${Array.from({length: 32}, (_, c) => ` c${c} `).join("|")}|`;
     const delim = `|${"---|".repeat(32)}`;
     const row = `|${Array.from({length: 32}, () => " v ").join("|")}|`;

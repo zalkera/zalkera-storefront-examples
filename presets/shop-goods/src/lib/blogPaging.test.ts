@@ -77,6 +77,9 @@ test("🔴 다음 쪽이 있으면 그린다 · 없거나 모르면 안 그린�
     assert.equal(hasNextPage({last: true}), false, "마지막 쪽인데 다음을 그린다 — 없는 쪽으로 보낸다");
     // ⚠ **백엔드가 죽으면 모른다** — 모를 때는 안 그린다.
     assert.equal(hasNextPage(null), false, "백엔드가 죽었는데 다음을 그린다 — 없는 쪽으로 크롤러를 보낸다");
+    // 🔴 **`undefined` 도 같은 「모름」이다** — 형제 `isOutOfRange` 만 넓히고 여기를 안 넓혔더니
+    //    이 자리에서 던져 공개 쪽이 404 가 아니라 **500** 이 됐다. 두 술어는 같은 값을 받는다.
+    assert.equal(hasNextPage(undefined), false, "빈 본문 응답에 던지거나 다음을 그린다");
     assert.equal(hasNextPage({}), false, "`last` 가 없으면 모른다 — 그때도 안 그린다");
 });
 

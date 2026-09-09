@@ -57,12 +57,16 @@ export function parseBlogPageSegment(raw: string): number | null {
 /**
  * 「다음 쪽」을 그릴 것인가 — 이 판정이 **발견 경로를 만든다.**
  *
- * ⚠ **백엔드가 죽으면(`null`) 안 그린다.** 마지막 쪽인지 모를 때 없는 쪽으로 크롤러를 보내지
- *   않는다. 한 판 이 자리에 그물이 없어, `false` 로 고정하는 변이(=「다음」이 통째로 사라져
- *   21번째 글이 다시 도달 불가)가 전 게이트를 통과했다.
+ * ⚠ **백엔드가 죽으면 안 그린다.** 마지막 쪽인지 모를 때 없는 쪽으로 크롤러를 보내지 않는다.
+ *   한 판 이 자리에 그물이 없어, `false` 로 고정하는 변이(=「다음」이 통째로 사라져 21번째 글이
+ *   다시 도달 불가)가 전 게이트를 통과했다.
+ *
+ * 🔴 **`null` 과 `undefined` 를 함께 받는다.** 형제 [isOutOfRange] 만 `undefined` 를 넓히고 이
+ *   함수를 안 넓혔더니, 「모름」이 범위 판정을 통과한 뒤 여기서 던져 공개 쪽이 **404 가 아니라
+ *   500** 이 됐다. 두 술어는 같은 값을 받으므로 **같은 관용을 가져야 한다.**
  */
-export function hasNextPage(posts: {last?: boolean} | null): boolean {
-    return posts !== null && posts.last === false;
+export function hasNextPage(posts: {last?: boolean} | null | undefined): boolean {
+    return posts?.last === false;
 }
 
 /**

@@ -22,14 +22,11 @@ export async function listBlogPage(page: number) {
         .catch(() => null);
 }
 
-export async function BlogList({
-    page,
-    posts: given,
-}: {
-    page: number;
-    posts?: Awaited<ReturnType<typeof listBlogPage>>;
-}) {
-    const posts = given !== undefined ? given : await listBlogPage(page);
+export async function BlogList(props: {page: number; posts?: Awaited<ReturnType<typeof listBlogPage>>}) {
+    const {page} = props;
+    // ⚠ **인자가 «왔는가» 로 가른다** — `!== undefined` 로 가르면 라우트가 넘긴 값이 `undefined`
+    //    (백엔드가 2xx 빈 본문을 준 경우)일 때 가드가 풀려 **같은 쪽을 두 번** 부른다.
+    const posts = "posts" in props ? props.posts : await listBlogPage(page);
     const items = posts?.content ?? [];
     const base = siteUrl();
     // ⚠ **판정은 여기 없다** — `hasNextPage` 가 진다. 이 **배선**은 `lib/blogListRender.test.ts` 가

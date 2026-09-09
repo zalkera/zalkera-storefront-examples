@@ -176,10 +176,14 @@ test("🔴 2쪽의 이전은 /blog 다 — /blog/page/1 이 아니다", async ()
  * 없는 쪽으로 크롤러를 보낸다.
  */
 test("🔴 백엔드가 죽으면 셸만 그리고 다음을 안 그린다", async () => {
-    const html = await render(1, null);
-    assert.match(html, /게시글이 없습니다/, `셸이 안 섰다: ${html}`);
-    assert.doesNotMatch(html, /rel="next"/, "모르는데 다음을 그렸다");
-    assert.doesNotMatch(html, /ItemList/, "글 0건인데 목록 그래프를 냈다 — 보이지 않는 것을 서술한다");
+    // 🔴 **`undefined` 도 넣는다** — `@zalkera/client` 는 2xx **빈 본문**에 `undefined` 를 준다.
+    //    한 판 술어 하나만 그것을 받게 넓혔더니 이 컴포넌트가 던져 공개 쪽이 **500** 이 됐다.
+    for (const 모름 of [null, undefined]) {
+        const html = await render(1, 모름);
+        assert.match(html, /게시글이 없습니다/, `${String(모름)} 에 셸이 안 섰다: ${html}`);
+        assert.doesNotMatch(html, /rel="next"/, "모르는데 다음을 그렸다");
+        assert.doesNotMatch(html, /ItemList/, "글 0건인데 목록 그래프를 냈다 — 보이지 않는 것을 서술한다");
+    }
 });
 
 /** 글이 있으면 목록 그래프를 낸다 — 답변 엔진이 상세로 가는 허브로 읽는 자리다. */
