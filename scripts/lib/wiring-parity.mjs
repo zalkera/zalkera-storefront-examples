@@ -55,6 +55,8 @@ export const WIRING_FILES = [
     "src/lib/oauth.ts", // safeNextPath — 오픈 리다이렉트 판정
     "src/lib/safeUrl.ts", // 링크 소독(저장형 XSS)
     "src/lib/mediaRef.ts", // 본문 미디어 참조 해석 + 그 소독(팩마다 갈리면 그 팩만 이미지가 죽는다)
+    // 그 판정의 **뜻**. 본체만 잠그면 시험은 하한표 여유로 지울 수 있다 — `safeUrl` 형제와 같은 처방.
+    "src/lib/mediaRef.test.ts",
     "src/lib/markdown.ts", // 본문 파서 — 표·펜스 상한이 갈리면 그 팩만 병적 입력에 죽는다
     // JSON-LD 이스케이프. `<` 전량을 접는 소독기라 한 벌만 갈리면 그 팩만 `</script>` 로 스크립트가
     // 닫힌다 — 그리고 그 그래프에 들어가는 값(제목·작성자·태그·회사명)은 콘솔이 받는 자유 문자열이다.

@@ -51,8 +51,11 @@ export function resolveMediaRef(raw: string | null | undefined): number | null {
  * ## 🔴 외부 호스트를 안 준다 — 우리가 서빙하는 주소만
  *
  * `<img src>` 는 방문자가 아무 조작도 안 했는데 브라우저가 **그 호스트로 나간다** — 방문자 IP·UA 가
- * 제3자에게 간다. [bodyVideoSrc] 가 자체 업로드 영상만 받는 것과 **같은 이유**이고, 팩의 인수 기준
- * (`docs/mockup-to-pack.md` §1-6 「외부 호스트 요청 0건」)이 요구하는 바다.
+ * 제3자에게 간다. [bodyVideoSrc] 가 자체 업로드 영상만 받는 것과 **같은 이유**다.
+ *
+ * ⚠ 팩의 납품 검수(`docs/mockup-to-pack.md` §3 「외부 호스트 요청 0건」)를 근거로 들지 마라 —
+ *   그 검수는 **시안↔팩 대조**라 테넌트 본문 글을 안 본다(검수 시점에 글이 없다). 근거는 위
+ *   한 문장으로 충분하다.
  *
  * ⚠ **외부 주소를 「안 그리는 것」이 아니다.** 렌더러가 그것을 **링크로** 그린다 — 외부 영상 펜스와
  *   같은 판정이다. 저작자 의도는 남고(읽는 사람도 크롤러도 그 그림에 닿는다) 방문자 브라우저는
@@ -94,8 +97,15 @@ export function bodyMediaSrc(raw: string | null | undefined): string | null {
  *   `node scripts/lib/wiring-parity.mjs; echo rc=$?; git checkout -- presets/skeleton/src/lib/mediaRef.ts`
  *   → rc=1
  *
- * ⚠ **소독을 먼저 태운다.** 원문에 꼴을 물으면 소독기가 무력화한 값(`javascript:` → `#`)과
- *   정규화한 값을 못 본다.
+ * ⚠ **스킴은 문자가 아니라 파서에 묻는다**(`safeUrl.ts` 와 같은 규율). `/^https?:\/\//` 문자
+ *   검사로 놓으면 브라우저가 http(s) 로 읽는 값을 놓쳐, 그 그림이 `<img>` 도 링크도 아닌
+ *   **아무것도 아닌 것**이 된다 — 저작기 미리보기에는 있고 사이트에는 없는 상태다.
+ *   `https:cdn.example/a.png`·`https:/cdn.example/a.png`·제어문자 접두가 그 꼴이다.
+ *   재현: 이 갈래를 `/^https?:\/\//i.test(href)` 로 바꾸고
+ *   `node --experimental-strip-types --test src/lib/markdownRender.test.ts` → 1건 red
+ *
+ * ⚠ **소독을 먼저 태운다.** [safeLinkUrl] 이 무력화한 값(`javascript:` → `#`)이 여기 오면 안 되고,
+ *   내부 갈래에서 정규화한 값도 그대로 실려야 한다.
  *
  * ⚠ `http:` 도 링크로는 받는다 — 저작자가 넣은 그림에 닿게 하는 것이 목적이고, 링크는 방문자가
  *   **누를 때만** 나간다(혼합 콘텐츠로 막히는 `<img>` 와 다르다).
@@ -103,7 +113,13 @@ export function bodyMediaSrc(raw: string | null | undefined): string | null {
 export function bodyImageHref(raw: string | null | undefined): string | null {
     if (typeof raw !== "string") return null;
     const href = safeLinkUrl(raw);
-    return /^https?:\/\//i.test(href) ? href : null;
+    try {
+        const protocol = new URL(href).protocol;
+        return protocol === "https:" || protocol === "http:" ? href : null;
+    } catch {
+        // 절대 URL 이 아니다 — 내부 경로(`/…`)·조각(`#`)·질의(`?`)·소독기가 무력화한 `#`.
+        return null;
+    }
 }
 
 /**
