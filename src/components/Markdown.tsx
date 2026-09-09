@@ -69,8 +69,7 @@ function InlineNodes({nodes}: {nodes: Inline[]}) {
                     }
                     default:
                         // 평문 런은 **요소로 감싸지 않는다.** `<span>` 하나하나가 HTML 과 RSC
-                        // 페이로드에 실려 나간다(실측: 10KB 글에 span 132개 · raw −12% · gzip −11%).
-                        // 배열 속 문자열은 key 가 필요 없고, 뜻도 그대로다.
+                        // 페이로드에 실려 나가는데, 배열 속 문자열은 key 가 필요 없고 뜻도 그대로다.
                         return node.text;
                 }
             })}

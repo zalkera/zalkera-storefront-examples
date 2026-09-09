@@ -283,7 +283,7 @@ test("양성 통제군 — 그 판정이 «없음» 을 실제로 구분한다",
 });
 
 test("블로그 쪽 5벌이 공유 카드를 단다 — `pageMetadata` 를 실제로 부른다", () => {
-    // 프리셋 4벌에서 이 호출을 지워도 `npm run verify` 가 초록이었다(심의 실측).
+    // 프리셋 4벌은 고객이 받는 것이다 — 여기서 안 재면 그 넷에서 호출이 사라져도 아무도 못 본다.
     for (const relative of ["app/blog/page.tsx", "app/blog/[slug]/page.tsx"]) {
         for (const {label, sf} of packCopies(relative)) {
             assert.ok(callsFunction(sf, "pageMetadata"), `${label}/${relative}: 공유 카드가 없다`);
@@ -422,7 +422,7 @@ test("양성 통제군 — 그 판정이 «맨 값» 을 구분한다", () => {
  *
  * 🔴 배선 그물은 호출식의 **이름**만 본다. 그래서 import 를 지우고 같은 이름의 통과 함수를 같은
  *    파일에 심으면 배선 문자열이 그대로라 전 게이트가 초록이다 — 실제로 그 형상에서 본문의
- *    `media:13` 이 해석·소독을 통째로 우회해 원문 그대로 나갔다(심의 실측).
+ *    그 형상에서는 `media:13` 이 해석·소독을 통째로 우회해 **원문 그대로** 나간다.
  *    그래서 **이름의 출처**를 값으로 못박는다.
  */
 const SANITIZER_NAMES = ["bodyMediaSrc", "bodyVideoSrc", "safeLinkUrl"];

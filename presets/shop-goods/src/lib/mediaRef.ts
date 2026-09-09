@@ -82,7 +82,7 @@ function protocolOf(value: string): string | null {
  * 자체 업로드 영상의 주소 — **불변 참조만** 받는다.
  *
  * 🔴 여기서 외부 주소를 받으면 방문자가 아무 조작도 안 했는데 `preload="metadata"` 가 그 호스트로
- *    나간다(IP·UA 가 제3자에게 간다 · 실측). 외부 영상은 ```` ```video ```` 펜스의 몫이고 그쪽은
+ *    나간다 — 방문자 IP·UA 가 제3자에게 간다. 외부 영상은 ```` ```video ```` 펜스의 몫이고 그쪽은
  *    링크로만 그린다. 그래서 이 함수는 [bodyMediaSrc] 보다 **한 겹 더 좁다**.
  */
 export function bodyVideoSrc(raw: string | null | undefined): string | null {
