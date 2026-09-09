@@ -112,9 +112,11 @@ export function parseInline(raw: string): Inline[] {
     //
     // ⚠ **이미지 alt 는 한 겹 대괄호를 받는다.** 저작기가 파일명을 이스케이프 없이 박으므로
     //    `[공지] 배너.png` 같은 이름이 그대로 온다 — 안 받으면 그 글의 그림이 글자로 남는다.
-    //    실측(이 기계 · 여는 괄호 40,000개): 지금 128ms. 상한과 `lastIndex` 중 **하나라도** 빼면
-    //    5,619ms 가 되고, 그 형상은 입력이 배로 늘 때 4배로 는다(10k 277ms · 20k 1,128ms).
-    //    재현: `node --experimental-strip-types --test src/lib/markdown.test.ts` 의 예산 시험.
+    //    ⚠ **절대 시간을 여기 적지 마라** — 기계마다 2~3배 갈리고, 팩을 받는 개발자에게는
+    //    「이 기계」라는 말이 가리킬 대상이 없다. 재는 것은 **형상**이다: 지금은 여는 괄호를 배로
+    //    늘리면 시간도 배로 늘고(선형), 상한과 `lastIndex` 중 **하나라도** 빼면 4배로 는다(제곱).
+    //    재현: `node --experimental-strip-types --test src/lib/markdown.test.ts` 의 예산 시험이
+    //    `duration_ms` 를 낸다 — 10k·20k·40k 를 견주면 그 형상이 보인다.
     const pattern =
         /!\[((?:[^[\]]|\[[^[\]]{0,200}\]){0,500})\]\(([^)\s]{1,2048})\)|\[([^[\]]{1,500})\]\(([^)\s]{1,2048})\)|`([^`]{1,500})`|\*\*([^*]{1,500})\*\*|\*([^*]{1,500})\*/g;
 
@@ -209,40 +211,73 @@ function tableStartsAt(lines: string[], index: number): string[] | null {
  * ⚠ **빈 줄이 문단을 가른다.** 한 줄 바꿈은 같은 문단 안의 줄바꿈으로 살린다(저작기에서 엔터 한 번
  * 친 것이 문단 분리로 보이면 글이 성기게 보인다).
  */
-/**
- * 표의 상한 — 비용이 «칸 × 행» 곱이라 **둘 다** 묶는다. 넘는 표는 표로 그리지 않는다.
- * 사람이 읽는 표의 현실 범위(수십 칸 · 수백 행)보다 넉넉하고, 최악이 32 × 500 = 16,000 셀이다.
- */
+/** 표의 열 수 상한 — 머리줄이 정한다. 넘치는 칸은 버린다(저작자의 오타가 열을 안 어긋나게). */
 const MAX_TABLE_COLUMNS = 32;
-const MAX_TABLE_ROWS = 500;
 
 /**
- * 한 **문서**의 표 행 총수 상한.
+ * 한 **문서**의 표 «칸» 총수 상한.
  *
- * 🔴 표 하나의 상한은 표 **개수**를 안 묶는다. 본문 길이에는 상한이 없으므로, 상한 안의 표를
- * 이어 붙이는 것만으로 행이 무한히 는다 — 행 하나가 `<tr><td>` 를 내므로 산출 HTML 이 본문의
- * 수백 배가 되고(실측: 128KB 본문 → 5만 행 → **18MB 응답** · 재현은 표 100개를 이어 붙인 본문으로
- * `npm run build` 한 뒤 그 쪽을 받아 크기를 잰다), 그 크기는 ISR 캐시 한도를 넘어
- * **방문자가 매 요청 재생성**시킨다. 서빙 박스에는 테넌트가 여럿 산다.
+ * 🔴 **행이 아니라 칸을 센다.** 비용도 산출 HTML 도 «칸 × 행» 곱, 즉 칸 수에 비례한다 — 행으로
+ * 세면 2열짜리 긴 표는 부당하게 잘리고 32열짜리 표는 예산의 32배를 쓴다.
  *
- * 넘으면 그 뒤의 표는 표로 그리지 않는다(문단으로 남아 **글자는 안 사라진다**).
+ * 🔴 표 하나의 상한은 표 **개수**를 안 묶는다. 본문 길이에 상한이 없으므로 상한 안의 표를 이어
+ * 붙이는 것만으로 칸이 무한히 는다. 칸 하나가 `<td>` 하나와 그 RSC 사본을 내므로 산출이 본문의
+ * 수십 배가 된다 — **칸당 약 233B**(64,000칸이 HTML 9.6MB + 인라인 RSC 5.3MB).
+ *
+ * 재현: 32열 × 2,000행 표를 본문에 넣은 글을 만들고 `npm run build && npm start` 뒤
+ * `curl -s localhost:3000/blog/<슬러그> | wc -c` 를 칸 수로 나눈다.
+ *
+ * 8,000칸이면 최악 약 1.9MB 다. 32열 × 250행 · 8열 × 1,000행 · 2열 × 4,000행이 모두 들어간다.
+ *
+ * 넘으면 그 뒤의 줄은 표로 그리지 않는다(문단으로 남아 **글자는 안 사라진다**).
  */
-const MAX_TABLE_ROWS_PER_DOCUMENT = 2_000;
+const MAX_TABLE_CELLS_PER_DOCUMENT = 8_000;
+
+/**
+ * 한 **문서**의 블록 총수 상한.
+ *
+ * 🔴 **표만 묶으면 안 된다.** 제목·문단·목록에는 상한이 없었고, 제목은 본문 10바이트가 산출
+ * **약 530B**(문서 HTML + TOC 항목 + RSC 사본)가 되는 **53배 증폭기**다 — 본문 976KB(제목 10만
+ * 개)가 HTML 53MB·RSS 1.4GB·요청당 9초였다. 배포된 서빙 컨테이너는 `RUNTIME_MEMORY=192m`
+ * (그중 `.next/cache` tmpfs 64m)이므로 그 글 하나가 **OOM 재시작 고리**를 만든다. 그리고 그
+ * 글은 공개 URL 이라 비용을 **익명 방문자가 반복해서** 유발한다.
+ *
+ * 2,000블록이면 최악 약 1.0MB 다. 제목 50개·문단 300개짜리 장문 기사의 대여섯 배다.
+ *
+ * 넘으면 남은 본문은 **서식 없이 글자 그대로** 한 문단에 남는다 — 이 트랜치 이전의 모습
+ * (`whitespace-pre-wrap` 평문)이고, **글자는 하나도 안 사라진다**.
+ *
+ * 재현: `node --expose-gc <bench> heading 10000` 로 산출 바이트/블록을 재고, 끝에서 끝까지는
+ * `npm run build` 뒤 그 쪽을 받아 크기와 RSS 를 잰다.
+ */
+const MAX_BLOCKS_PER_DOCUMENT = 2_000;
 
 export function parseMarkdown(source: string): Block[] {
     const blocks: Block[] = [];
     const usedIds = new Map<string, number>();
-    let tableRows = 0;
+    let tableCellsUsed = 0;
     /**
      * 표 판정의 **단 하나의 자리** — 문서 예산까지 여기서 본다. 문단 경계도 이것을 쓴다:
      * 두 술어가 갈리면 표를 거절한 줄에서 문단도 끊겨 진행이 멈춘다(같은 줄을 영원히 다시 본다).
      */
-    const startsTable = (index: number): string[] | null =>
-        tableRows < MAX_TABLE_ROWS_PER_DOCUMENT ? tableStartsAt(lines, index) : null;
+    const startsTable = (index: number): string[] | null => {
+        const head = tableStartsAt(lines, index);
+        // 머리줄까지 **들어가야** 표로 판정한다 — 「남았나」만 보면 예산을 머리줄 폭만큼 넘긴다.
+        if (head === null || tableCellsUsed + head.length > MAX_TABLE_CELLS_PER_DOCUMENT) return null;
+        return head;
+    };
     const lines = source.replace(/\r\n?/g, "\n").split("\n");
 
     let i = 0;
     while (i < lines.length) {
+        // 🔴 **블록 예산.** 다 쓰면 남은 본문을 **서식 없이 글자 그대로** 한 문단에 담고 끝낸다 —
+        //    인라인 파싱도 안 한다(링크 하나가 다시 노드 하나다). 글자는 안 사라진다.
+        if (blocks.length >= MAX_BLOCKS_PER_DOCUMENT) {
+            const rest = lines.slice(i).join("\n").trim();
+            if (rest !== "") blocks.push({kind: "paragraph", text: [{kind: "text", text: rest}]});
+            break;
+        }
+
         const line = lines[i]!;
 
         if (line.trim() === "") {
@@ -275,21 +310,22 @@ export function parseMarkdown(source: string): Block[] {
         // 표 — 머리줄 다음이 구분줄일 때만 표다. 열 수의 상한은 **머리줄이 정한다**(넘치는 칸은
         // 버린다 — 저작자의 오타가 열을 어긋나게 하지 않는다). 모자라는 칸은 **채우지 않는다**.
         //
-        // 🔴 **칸 수와 행 수에 상한이 있다.** 행마다 머리줄 칸 수만큼 인라인 파싱을 하므로 비용이
-        //    «칸 × 행» 곱이다. 상한이 없으면 6.8KB 짜리 본문 하나(1000칸 × 1000행)가 135MB 를 쓰고,
-        //    조금 더 키우면 서빙 프로세스가 힙에서 죽는다 — 그 글은 공개 URL 이고 크기가 커서
-        //    ISR 이 캐시를 거부하므로, 비용을 **익명 방문자가 반복해서** 유발한다.
-        //    상한을 넘는 표는 표로 그리지 않는다(그 줄들은 문단으로 남는다 — 글자는 안 사라진다).
+        // 🔴 **칸에 예산이 있다.** 행마다 머리줄 칸 수만큼 인라인 파싱을 하므로 비용이 «칸 × 행»
+        //    곱, 즉 칸 수다. 예산이 없으면 6.8KB 짜리 본문 하나(1000칸 × 1000행)가 135MB 를 쓰고,
+        //    조금 더 키우면 서빙 프로세스가 힙에서 죽는다 — 그 글은 공개 URL 이고, 산출이 커지면
+        //    ISR 캐시(읽기전용 박스에서는 메모리 LRU 뿐)가 거부해 **매 요청 다시 그린다**.
+        //    예산을 넘는 줄은 표로 그리지 않는다(문단으로 남는다 — 글자는 안 사라진다).
         const tableHead = startsTable(i);
         if (tableHead) {
             i += 2;
             const rows: Inline[][][] = [];
+            // 머리줄도 칸이다 — 예산에서 먼저 뺀다.
+            tableCellsUsed += tableHead.length;
             while (
                 i < lines.length &&
                 lines[i]!.includes("|") &&
                 lines[i]!.trim() !== "" &&
-                rows.length < MAX_TABLE_ROWS &&
-                tableRows < MAX_TABLE_ROWS_PER_DOCUMENT
+                tableCellsUsed + tableHead.length <= MAX_TABLE_CELLS_PER_DOCUMENT
             ) {
                 // 🔴 **없는 칸을 채우지 않는다.** 머리줄 칸 수만큼 채우면 `|` 한 글자짜리 행이
                 //    32개 셀을 만들어 **본문 바이트당 비용**이 열 수만큼 곱해진다(실측: 바이트당
@@ -297,7 +333,7 @@ export function parseMarkdown(source: string): Block[] {
                 //    `node --experimental-strip-types --test src/lib/markdown.test.ts` 의 「표를 100개 쌓아도」). 넘치는 칸만 버린다.
                 const cells = tableCells(lines[i]!).slice(0, tableHead.length);
                 rows.push(cells.map((cell) => parseInline(cell)));
-                tableRows += 1;
+                tableCellsUsed += cells.length;
                 i += 1;
             }
             blocks.push({kind: "table", head: tableHead.map((cell) => parseInline(cell)), rows});

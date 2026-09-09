@@ -85,10 +85,30 @@ test("🔴 다음 쪽이 있으면 그린다 · 없거나 모르면 안 그린�
  * 이어지는 빈 쪽 사슬의 입구가 된다.
  */
 test("🔴 범위 밖 쪽은 없는 쪽이다 — 200 빈 목록을 내지 않는다", () => {
-    assert.equal(isOutOfRange(4, 0), true, "글 0건인 4쪽이 200 으로 선다 — 소프트 404 다");
-    assert.equal(isOutOfRange(999, 0), true);
+    assert.equal(isOutOfRange(4, {content: []}), true, "글 0건인 4쪽이 200 으로 선다 — 소프트 404 다");
+    assert.equal(isOutOfRange(999, {content: []}), true);
 
     // **양성 짝** — 정상 쪽과 1쪽(빈 블로그)을 먹으면 안 된다.
-    assert.equal(isOutOfRange(2, 20), false, "글이 있는 쪽을 없는 쪽이라 한다");
-    assert.equal(isOutOfRange(1, 0), false, "글이 0건인 블로그의 첫 쪽은 404 가 아니다 — 「게시글이 없습니다」다");
+    assert.equal(isOutOfRange(2, {content: new Array(20)}), false, "글이 있는 쪽을 없는 쪽이라 한다");
+    assert.equal(isOutOfRange(1, {content: []}), false, "글이 0건인 블로그의 첫 쪽은 404 가 아니다");
+});
+
+/**
+ * 🔴 **백엔드가 죽은 것은 「범위 밖」이 아니다.**
+ *
+ * `null`(모름)에 404 를 내면 그것이 ISR 로 `revalidate` 동안 굳어, **백엔드가 살아난 뒤에도**
+ * 그 쪽이 404 를 낸다. 캐시는 디스크에 있어 프로세스를 다시 띄워도 살아남는다 — 응답이
+ * `x-nextjs-cache: HIT` 로 나간다. 형제 `hasNextPage` 와 같은 판정이다: **모름 ≠ 없음**.
+ *
+ * 재현: 백엔드를 내린 채 `/blog/page/4` 를 한 번 받고, 백엔드를 올린 뒤 다시 받아
+ * `curl -sI localhost:3000/blog/page/4 | grep -i 'x-nextjs-cache\|HTTP/'` 를 견준다.
+ */
+test("🔴 백엔드가 죽으면(null) 범위 밖이라 하지 않는다 — 404 가 캐시에 굳는다", () => {
+    for (const page of [2, 4, 999]) {
+        assert.equal(isOutOfRange(page, null), false, `${page}쪽이 백엔드 장애에 404 를 낸다`);
+    }
+    // **양성 짝** — 「무조건 false」면 진짜 범위 밖이 200 빈 목록으로 선다.
+    assert.equal(isOutOfRange(4, {content: []}), true);
+    // `content` 자체가 없는 응답도 「모름」이 아니라 빈 쪽이다(백엔드가 답은 했다).
+    assert.equal(isOutOfRange(4, {}), true);
 });

@@ -16,7 +16,7 @@ import {formatDate} from "@/lib/datetime";
 
 /**
  * 블로그/공지 상세 (RSC · ISR). 발행글은 세션 무관 읽기라 상품 상세와 같은 사상으로 굽는다:
- * 첫 요청에 렌더한 뒤 `revalidate` 주기로 캐시. `getPost` 는 0.32.0 부터 [ReadOptions] 를 받지만,
+ * 첫 요청에 렌더한 뒤 `revalidate` 주기로 캐시. `listPosts`·`getPost` 는 0.32.0 부터 [ReadOptions] 를 받지만,
  * **태그는 캐시가 아니고**(왕복을 안 줄인다) 무효화 도달도 빌드마다 다르다(`llms.txt`) — 갱신은
  * **시간 기반 revalidate** 가 진다. generateStaticParams 는 두지 않는다(글이 유동적 → on-demand ISR).
  */

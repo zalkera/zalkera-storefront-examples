@@ -32,8 +32,9 @@ export async function BlogList({
     const posts = given !== undefined ? given : await listBlogPage(page);
     const items = posts?.content ?? [];
     const base = siteUrl();
-    // ⚠ **판정은 여기 없다** — `hasNextPage` 가 진다. 이 자리에 두었을 때는 `false` 로 고정하는
-    //    변이(=「다음」이 통째로 사라져 21번째 글이 다시 도달 불가)가 **전 게이트를 통과**했다.
+    // ⚠ **판정은 여기 없다** — `hasNextPage` 가 진다. 이 **배선**은 `lib/blogListRender.test.ts` 가
+    //    실제로 렌더해서 잰다(술어만 재면 `const hasNext = false` 로 고정하는 변이가 통과한다 —
+    //    그 변이는 「다음」을 통째로 없애 21번째 글을 다시 도달 불가로 만든다).
     const hasNext = hasNextPage(posts);
 
     return (

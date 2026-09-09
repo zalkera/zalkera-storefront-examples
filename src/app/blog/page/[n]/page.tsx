@@ -54,6 +54,6 @@ export default async function BlogPagedPage({params}: {params: Promise<{n: strin
     //    그려져 `/blog` 까지 이어지는 빈 쪽 사슬의 입구가 된다 — 글을 지워 쪽 수가 줄면 **이미
     //    색인된** 쪽이 그 상태로 남는다(`isOutOfRange` KDoc).
     const posts = await listBlogPage(page);
-    if (isOutOfRange(page, posts?.content?.length ?? 0)) notFound();
+    if (isOutOfRange(page, posts)) notFound();
     return <BlogList page={page} posts={posts} />;
 }

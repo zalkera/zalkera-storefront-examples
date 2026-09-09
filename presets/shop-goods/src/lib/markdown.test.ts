@@ -48,8 +48,46 @@ test("예산 — 같은 제목 20,000개가 1초 안에 끝난다", () => {
     const started = process.hrtime.bigint();
     const blocks = parseMarkdown("## 배송 안내\n\n".repeat(20_000));
     const ms = Number(process.hrtime.bigint() - started) / 1e6;
-    strictEqual(blocks.length, 20_000);
+    // 제목 원장은 여기서도 돈다(같은 문구 2만 개 → id 가 2만 개 갈린다). 블록 예산이 걸려도
+    // **그 전까지의 비용**은 그대로이므로 이 시험의 뜻은 유지된다.
+    ok(blocks.length > 0);
     ok(ms < 1000, `제목 파싱이 ${ms.toFixed(0)}ms 걸렸다 — 제곱 비용이 돌아왔다`);
+});
+
+/**
+ * 🔴 **블록 예산 — 제목이 표보다 큰 증폭기다.**
+ *
+ * 제목 한 줄(10바이트)이 산출 약 530B(문서 HTML + 목차 항목 + RSC 사본)가 된다. 예산이 없으면
+ * 본문 976KB 가 HTML 53MB·RSS 1.4GB 가 되고, 배포된 서빙 컨테이너는 `RUNTIME_MEMORY=192m` 이라
+ * 그 글 하나가 OOM 재시작 고리를 만든다 — 그 URL 은 공개다.
+ *
+ * 넘친 뒤에도 **글자는 안 사라진다**: 남은 본문이 서식 없는 한 문단으로 남는다.
+ */
+test("🔴 예산 — 블록이 2,000개에서 멈추고 남은 본문은 글자로 남는다", () => {
+    const blocks = parseMarkdown(Array.from({length: 20_000}, (_, i) => `## 제목 ${i}`).join("\n\n"));
+
+    // 구조를 만든 블록 + 남은 본문 한 문단.
+    strictEqual(blocks.length, 2_001, `블록이 ${blocks.length}개 — 예산이 안 걸렸다`);
+    strictEqual(blocks.filter((b) => b.kind === "heading").length, 2_000);
+
+    // 🔴 **글자가 사라지지 않는다** — 마지막 제목이 꼬리 문단 안에 그대로 있다.
+    const tail = blocks[2_000];
+    strictEqual(tail?.kind, "paragraph");
+    const text = (tail as {text: Array<{kind: string; text: string}>}).text;
+    strictEqual(text.length, 1, "꼬리를 인라인 파싱했다 — 노드가 다시 는다");
+    strictEqual(text[0]?.kind, "text");
+    ok(text[0]!.text.includes("## 제목 19999"), "마지막 본문이 사라졌다");
+});
+
+/** **양성 짝** — 예산이 정상 글을 먹으면 안 된다(제목 50개·문단 300개짜리 장문 기사). */
+test("예산 안의 장문 기사는 그대로 구조가 된다", () => {
+    const source = Array.from({length: 50}, (_, h) =>
+        [`## 절 ${h}`, ...Array.from({length: 6}, (_, p) => `문단 ${h}-${p} 입니다.`)].join("\n\n"),
+    ).join("\n\n");
+    const blocks = parseMarkdown(source);
+
+    strictEqual(blocks.filter((b) => b.kind === "heading").length, 50);
+    strictEqual(blocks.filter((b) => b.kind === "paragraph").length, 300);
 });
 
 test("한글 제목도 id 를 얻는다 — 라틴만 남기면 전 문서가 «section» 이 된다", () => {
@@ -230,7 +268,8 @@ test("통제군 — 제목이 없는 본문은 빈 목록이다(빈 상자를 �
 });
 
 /* ── 표의 예산과 경계 ────────────────────────────────────────────────────────
- * 표는 비용이 «칸 × 행» 곱이라, 작은 본문 하나가 서빙 프로세스를 죽일 수 있는 유일한 축이다.
+ * 표는 비용이 «칸 × 행» 곱이라 작은 본문 하나가 서빙 프로세스를 죽일 수 있다.
+ * ⚠ 한 판 「**유일한** 축」이라 적혀 있었고 거짓이다 — 제목은 칸보다 큰 증폭기다(위 블록 예산).
  * 그 글은 공개 URL 이고 크기가 커서 ISR 이 캐시를 거부하므로 비용을 방문자가 반복 유발한다. */
 
 test("🔴 예산 — 1000칸 × 1000행(6.8KB)이 표로 그려지지 않고 즉시 끝난다", () => {
@@ -298,9 +337,18 @@ test("앵커는 «이미 만들어 낸 id» 와도 안 겹친다 — 반대 순�
     strictEqual(new Set(ids).size, ids.length, `앵커가 겹쳤다: ${JSON.stringify(ids)}`);
 });
 
-test("🔴 예산 — 행 상한: 501행째부터는 표가 아니다", () => {
-    // 칸 상한만으로는 못 막는다. 32칸 표는 행이 늘수록 비용이 곱으로 는다 — 977KB 본문이
-    // 654MB·2.3초, 3.9MB 면 2.6GB 다. 본문 길이에 상한이 없으므로 행에도 상한이 있어야 한다.
+/** 그 문서가 실제로 만든 표 칸 수 — 머리줄까지 센다(비용이 거기도 든다). */
+function tableCellCount(blocks: ReturnType<typeof parseMarkdown>): number {
+    return blocks.reduce((sum, b) => {
+        if (b.kind !== "table") return sum;
+        const t = b as {head: unknown[]; rows: unknown[][]};
+        return sum + t.head.length + t.rows.reduce((n, row) => n + row.length, 0);
+    }, 0);
+}
+
+test("🔴 예산 — 넓은 표는 칸 예산에서 멈춘다", () => {
+    // 열 상한만으로는 못 막는다. 32열 표는 행이 늘수록 비용이 곱으로 는다 — 977KB 본문이
+    // 654MB·2.3초, 3.9MB 면 2.6GB 다. 본문 길이에 상한이 없으므로 칸에 예산이 있어야 한다.
     const head = `|${Array.from({length: 32}, (_, c) => ` c${c} `).join("|")}|`;
     const delim = `|${"---|".repeat(32)}`;
     const row = `|${Array.from({length: 32}, () => " v ").join("|")}|`;
@@ -309,10 +357,29 @@ test("🔴 예산 — 행 상한: 501행째부터는 표가 아니다", () => {
     const ms = Number(process.hrtime.bigint() - started) / 1e6;
 
     strictEqual(blocks[0]?.kind, "table");
-    strictEqual((blocks[0] as {rows: unknown[]}).rows.length, 500, "행 상한이 안 걸렸다");
+    ok(tableCellCount(blocks) <= 8_000, `칸이 ${tableCellCount(blocks)}개 — 예산이 안 걸렸다`);
     // 넘친 줄은 사라지지 않는다 — 문단으로 남는다.
     strictEqual(blocks[1]?.kind, "paragraph");
-    ok(ms < 500, `${ms.toFixed(0)}ms 걸렸다 — 행 상한이 비용을 못 묶는다`);
+    ok(ms < 500, `${ms.toFixed(0)}ms 걸렸다 — 칸 예산이 비용을 못 묶는다`);
+});
+
+/**
+ * 🔴 **좁은 표는 그만큼 더 긴 행을 받는다.** 예산을 «행» 으로 세면 2열짜리 1,000행 표가
+ * 32열짜리와 같은 대접을 받아 부당하게 잘린다 — 비용은 열 수만큼 다른데.
+ */
+test("🔴 예산 — 좁은 표는 넓은 표보다 훨씬 긴 행을 받는다", () => {
+    const rowsOf = (cols: number) => {
+        const head = `|${Array.from({length: cols}, (_, c) => ` c${c} `).join("|")}|`;
+        const delim = `|${"---|".repeat(cols)}`;
+        const row = `|${Array.from({length: cols}, () => " v ").join("|")}|`;
+        const blocks = parseMarkdown([head, delim, ...Array(5_000).fill(row)].join("\n"));
+        return (blocks[0] as {rows: unknown[]}).rows.length;
+    };
+
+    const narrow = rowsOf(2);
+    const wide = rowsOf(32);
+    ok(narrow > wide * 10, `2열 ${narrow}행 · 32열 ${wide}행 — 행으로 세고 있다`);
+    ok(narrow >= 1_000, `2열 표가 ${narrow}행에서 잘린다 — 현실적인 가격표가 안 들어간다`);
 });
 
 test("🔴 예산 — 상한 안의 표를 100개 쌓아도 즉시 끝난다", () => {
@@ -326,11 +393,16 @@ test("🔴 예산 — 상한 안의 표를 100개 쌓아도 즉시 끝난다", (
     const blocks = parseMarkdown(source);
     const ms = Number(process.hrtime.bigint() - started) / 1e6;
 
-    // 문서 예산(2,000행)을 쓰고 나면 그 뒤 표는 문단이다 — 글자는 안 사라진다.
-    strictEqual(blocks.filter((b) => b.kind === "table").length, 4);
-    strictEqual(blocks.filter((b) => b.kind === "paragraph").length, 96);
-    // 행 총수가 문서 예산에서 멈춘다 — 표당 상한만으로는 여기서 5만 행이 된다.
-    const rows = blocks.reduce((sum, b) => sum + (b.kind === "table" ? (b as {rows: unknown[][]}).rows.length : 0), 0);
-    strictEqual(rows, 2_000, `표 행이 ${rows}개 — 문서 예산이 안 걸렸다`);
+    // 문서 예산을 쓰고 나면 그 뒤 표는 문단이다 — 글자는 안 사라진다.
+    const tables = blocks.filter((b) => b.kind === "table").length;
+    ok(tables < 100, `표가 ${tables}개 — 문서 예산이 안 걸렸다`);
+    // 넘친 줄은 **문단으로** 남는다 — 다른 무엇으로도 새지 않고, 사라지지도 않는다.
+    ok(
+        blocks.every((b) => b.kind === "table" || b.kind === "paragraph"),
+        `표도 문단도 아닌 블록이 생겼다: ${[...new Set(blocks.map((b) => b.kind))].join(" · ")}`,
+    );
+    ok(blocks.filter((b) => b.kind === "paragraph").length >= 84, "넘친 표가 문단으로 안 남았다");
+    // 칸 총수가 문서 예산에서 멈춘다 — 표당 상한만으로는 여기서 5만 칸이 된다.
+    ok(tableCellCount(blocks) <= 8_000, `표 칸이 ${tableCellCount(blocks)}개 — 문서 예산이 안 걸렸다`);
     ok(ms < 500, `${ms.toFixed(0)}ms 걸렸다 — 본문 바이트당 비용이 열 수만큼 곱해진다`);
 });

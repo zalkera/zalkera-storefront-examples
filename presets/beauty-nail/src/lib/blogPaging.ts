@@ -73,6 +73,13 @@ export function hasNextPage(posts: {last?: boolean} | null): boolean {
  *   쪽이 그 상태로 남는다. 같은 판단이 `sitemap.ts`(「빈 목록 페이지를 색인시킬 이유가 없다」)와
  *   `BlogList`(글 0건이면 `ItemList` 를 안 낸다)에 이미 있다 — 라우트에만 없었다.
  */
-export function isOutOfRange(page: number, itemCount: number): boolean {
-    return page > 1 && itemCount === 0;
+export function isOutOfRange(page: number, posts: {content?: unknown[]} | null): boolean {
+    // ⚠ **`null` 은 「모름」이지 「범위 밖」이 아니다.** 백엔드가 죽었을 때 404 를 내면 그것이
+    //    ISR 로 `revalidate` 동안 굳어, **백엔드가 살아난 뒤에도** 그 쪽이 404 를 낸다 —
+    //    캐시는 디스크에 있어 프로세스를 다시 띄워도 산다(응답에 `x-nextjs-cache: HIT`).
+    //    형제 `hasNextPage` 와 같은 판정이다: **모름 ≠ 없음**.
+    //    재현: 백엔드를 내린 채 `curl -sI localhost:3000/blog/page/4` 로 404 를 받고, 백엔드를
+    //    올린 뒤 같은 명령을 다시 내 `HTTP/` 줄과 `x-nextjs-cache` 줄을 견준다.
+    if (posts === null) return false;
+    return page > 1 && (posts.content?.length ?? 0) === 0;
 }
