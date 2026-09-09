@@ -80,6 +80,29 @@ export function bodyMediaSrc(raw: string | null | undefined): string | null {
 }
 
 /**
+ * 본문 이미지를 **링크로** 그릴 주소 — 남의 호스트면 그 주소, 아니면 `null`.
+ *
+ * ## 왜 렌더러가 아니라 여기인가
+ *
+ * [bodyMediaSrc] 가 `null` 을 준 뒤 「그럼 링크로 그릴 값인가」를 묻는 자리다. 그 판정을 렌더러에
+ * 두면 **팩마다 갈릴 수 있고**, 갈린 팩만 조용히 외부 요청을 되살리거나 저작자의 그림을 통째로
+ * 잃는다 — 화면으로는 안 보인다. 이 파일은 `wiring-parity` 가 5벌을 **바이트로** 잠그므로,
+ * 여기 있으면 한 벌만 갈리는 순간 CI 가 빨강이다(실측: 렌더러에 두었을 때는 한 벌을 뒤집어도
+ * 전 시험이 초록이었다).
+ *
+ * ⚠ **소독을 먼저 태운다.** 원문에 꼴을 물으면 소독기가 무력화한 값(`javascript:` → `#`)과
+ *   정규화한 값을 못 본다.
+ *
+ * ⚠ `http:` 도 링크로는 받는다 — 저작자가 넣은 그림에 닿게 하는 것이 목적이고, 링크는 방문자가
+ *   **누를 때만** 나간다(혼합 콘텐츠로 막히는 `<img>` 와 다르다).
+ */
+export function bodyImageHref(raw: string | null | undefined): string | null {
+    if (typeof raw !== "string") return null;
+    const href = safeLinkUrl(raw);
+    return /^https?:\/\//i.test(href) ? href : null;
+}
+
+/**
  * 자체 업로드 영상의 주소 — **불변 참조만** 받는다.
  *
  * 🔴 여기서 외부 주소를 받으면 방문자가 아무 조작도 안 했는데 `preload="metadata"` 가 그 호스트로

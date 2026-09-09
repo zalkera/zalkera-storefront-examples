@@ -1,6 +1,6 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
-import {bodyMediaSrc, bodyVideoSrc, resolveMediaRef} from "./mediaRef.ts";
+import {bodyImageHref, bodyMediaSrc, bodyVideoSrc, resolveMediaRef} from "./mediaRef.ts";
 import {parseMarkdown} from "./markdown.ts";
 
 /**
@@ -120,6 +120,41 @@ test("저작기 삽입 문자열이 본문 파이프라인을 끝까지 통과�
     assert.equal(image?.kind, "image");
     assert.equal(image!.kind === "image" ? image.alt : "", name, "alt 가 색인되려면 이름이 남아야 한다");
     assert.equal(bodyMediaSrc(image!.kind === "image" ? image.src : ""), `/media/${id}`);
+});
+
+/**
+ * 🔴 **외부 이미지는 「사라지는 것」이 아니라 링크가 된다.**
+ *
+ * [bodyMediaSrc] 가 `null` 을 준 뒤 렌더러가 무엇을 그릴지 정하는 자리다. 이 함수가 `null` 만
+ * 돌려주면 저작자가 넣은 그림이 **통째로 사라진다** — 화면에 아무 흔적이 없어 사람 눈으로 안
+ * 잡힌다. 반대로 너무 넓으면 `#조각`·`mailto:` 가 링크로 서서 뜻 없는 자리를 만든다.
+ *
+ * ⚠ **판정이 렌더러에 있으면 이 그물이 못 선다.** 한 판 렌더러에 두었더니 프리셋 한 벌의
+ *   판별자를 뒤집어도 전 시험이 초록이었다(실측). 여기 있으면 `wiring-parity` 가 5벌을 바이트로
+ *   잠근다.
+ */
+test("🔴 외부 이미지는 링크로 그릴 주소를 준다 — 안 그러면 저작자의 그림이 사라진다", () => {
+    assert.equal(bodyImageHref("https://cdn.example/a.png"), "https://cdn.example/a.png");
+    assert.equal(bodyImageHref("HTTPS://CDN.example/a.png"), "HTTPS://CDN.example/a.png");
+    // `http:` 도 링크로는 받는다 — 링크는 방문자가 **누를 때만** 나간다.
+    assert.equal(bodyImageHref("http://cdn.example/a.png"), "http://cdn.example/a.png");
+
+    // **음성 짝** — 이미지도 링크도 될 수 없는 것들. 링크로 세우면 뜻 없는 자리가 생긴다.
+    for (const notALink of [
+        "javascript:alert(1)", // 소독기가 `#` 으로 무력화한다
+        "#section-2",
+        "?page=2",
+        "mailto:a@b.co",
+        "tel:+8210",
+        "/media/12", // 우리 주소 — 이미 `<img>` 로 그렸다
+        "/uploads/a.png",
+        "media:12",
+        "   ",
+        "",
+    ]) {
+        assert.equal(bodyImageHref(notALink), null, `${JSON.stringify(notALink)} 가 링크로 섰다`);
+    }
+    assert.equal(bodyImageHref(null), null);
 });
 
 test("🔴 자체 영상은 불변 참조만 받는다 — 외부 주소는 «없음» 이다", () => {

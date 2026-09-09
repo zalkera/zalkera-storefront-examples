@@ -1,6 +1,6 @@
 import type {Block, Inline} from "@/lib/markdown";
 import {parseMarkdown} from "@/lib/markdown";
-import {bodyMediaSrc, bodyVideoSrc} from "@/lib/mediaRef";
+import {bodyImageHref, bodyMediaSrc, bodyVideoSrc} from "@/lib/mediaRef";
 import {safeLinkUrl} from "@/lib/safeUrl";
 
 /**
@@ -16,13 +16,12 @@ import {safeLinkUrl} from "@/lib/safeUrl";
  *   · 링크가 요소여야 크롤러가 따라간다. 이미지가 요소여야 `alt` 가 색인된다.
  */
 /**
- * 소독을 **통과한** 주소가 남의 호스트를 가리키는가.
- *
- * ⚠ 판별자를 두 자리에 베끼지 마라 — 링크 갈래(`rel` 을 다는 조건)와 이미지 갈래(자동으로 안 부르고
- *   링크로 그리는 조건)가 **같은 물음**이다. 갈리면 한쪽이 반드시 틀린다.
+ * 소독을 **통과한** 링크가 남의 호스트를 가리키는가 — `rel` 을 다는 조건.
  *
  * ⚠ [safeLinkUrl] 이 돌려준 값에만 건다. 원문에 걸면 소독기가 무력화한 값(`javascript:` → `#`)과
  *   정규화한 값을 못 본다.
+ *
+ * ⚠ 본문 **이미지**의 같은 물음은 여기 없다 — `bodyImageHref` 가 진다(5벌이 바이트로 잠긴 파일).
  */
 const EXTERNAL_HREF = /^https?:\/\//i;
 
@@ -78,16 +77,20 @@ function InlineNodes({nodes}: {nodes: Inline[]}) {
                         }
                         // 🔴 **외부 호스트는 자동으로 안 부른다.** `<img src>` 로 두면 방문자가
                         //    아무 조작도 안 했는데 브라우저가 그 호스트로 나가 IP·UA 를 넘긴다.
-                        //    그래서 [bodyMediaSrc] 가 우리 주소만 주고, 나머지는 여기서 **링크로**
-                        //    그린다 — 외부 영상 펜스와 **같은 판정**이다. 안 그리면 저작자가 넣은
-                        //    그림이 통째로 사라지는데, 링크는 읽는 사람도 크롤러도 그것에 닿는다.
-                        const href = safeLinkUrl(node.src);
-                        // 이미지가 될 수도 링크가 될 수도 없는 것들(`#조각`·`?질의`·`mailto:`·
-                        // 상대경로·소독기가 무력화한 `#`)은 그릴 것이 없다. 링크 갈래와 **같은
-                        // 판별자**를 쓴다 — 두 자리가 갈리면 한쪽이 반드시 틀린다.
-                        if (!EXTERNAL_HREF.test(href)) return null;
+                        //    그래서 [bodyMediaSrc] 가 우리 주소만 주고, 나머지는 **링크로** 그린다 —
+                        //    외부 영상 펜스와 같은 판정이다. 안 그리면 저작자가 넣은 그림이 통째로
+                        //    사라지는데, 링크는 읽는 사람도 크롤러도 그것에 닿는다.
+                        //
+                        // ⚠ **판정은 여기 없다.** `bodyImageHref` 가 진다 — 그 파일은 5벌이 바이트로
+                        //    잠겨 있어 한 벌만 갈리면 CI 가 빨강이다. 여기 두었을 때는 한 벌을
+                        //    뒤집어도 전 시험이 초록이었다(실측).
+                        // ⚠ **이름을 링크 갈래와 갈라 둔다.** 배선 그물은 같은 파일의 **이름**으로
+                        //    되짚으므로, 둘 다 `href` 면 두 갈래가 「여러 갈래」로 뭉쳐 어느 쪽이
+                        //    무엇에 묶였는지 못 말한다.
+                        const imageHref = bodyImageHref(node.src);
+                        if (imageHref === null) return null;
                         return (
-                            <a key={i} href={href} rel="noopener noreferrer" className="underline">
+                            <a key={i} href={imageHref} rel="noopener noreferrer" className="underline">
                                 {node.alt || node.src}
                             </a>
                         );

@@ -394,10 +394,11 @@ function urlWiring(sf: TS.SourceFile): string[] {
 test("본문 렌더러 5벌이 주소를 해석기·소독기에 태운다", () => {
     // 값을 그대로 단언한다 — 「소독 안 한 자리가 없다」는 자리가 0개여도 참이라 공허하다.
     const expected = [
-        "a.href ← safeLinkUrl()", // 본문 링크
         // 외부 이미지 — `<img>` 로 안 그리고 링크로 그린다(방문자 브라우저가 남의 호스트를
-        // 자동으로 안 부른다). 이 줄이 사라지면 그 갈래가 통째로 없어진 것이다.
-        "a.href ← safeLinkUrl()",
+        // 자동으로 안 부른다). 소독과 꼴 판정을 **자기 함수**가 진다 — 그 파일은 5벌이 바이트로
+        // 잠겨 있어 한 벌만 갈리면 CI 가 빨강이다.
+        "a.href ← bodyImageHref()",
+        "a.href ← safeLinkUrl()", // 본문 링크
         "a.href ← safeLinkUrl()", // 외부 영상 펜스
         // 이미지·영상은 한 겹 더 좁다(외부 주소를 안 받는다) — 그래서 자기 함수다.
         "img.src ← bodyMediaSrc()",
@@ -428,7 +429,7 @@ test("양성 통제군 — 그 판정이 «맨 값» 을 구분한다", () => {
  *    그 형상에서는 `media:13` 이 해석·소독을 통째로 우회해 **원문 그대로** 나간다.
  *    그래서 **이름의 출처**를 값으로 못박는다.
  */
-const SANITIZER_NAMES = ["bodyMediaSrc", "bodyVideoSrc", "safeLinkUrl"];
+const SANITIZER_NAMES = ["bodyImageHref", "bodyMediaSrc", "bodyVideoSrc", "safeLinkUrl"];
 
 /** `이름 ← 출처` — import 면 모듈 이름, 같은 파일이 만들었으면 «지역 선언». */
 function nameSources(sf: TS.SourceFile): string[] {
@@ -531,7 +532,12 @@ test("그 한 곳도 이스케이프를 `jsonLdScriptBody` 에 맡긴다 — 여
 });
 
 test("본문 렌더러 5벌이 소독기를 «정본 모듈에서» 가져온다 — 동명 지역함수로 못 가린다", () => {
-    const expected = ["bodyMediaSrc ← @/lib/mediaRef", "bodyVideoSrc ← @/lib/mediaRef", "safeLinkUrl ← @/lib/safeUrl"];
+    const expected = [
+        "bodyImageHref ← @/lib/mediaRef",
+        "bodyMediaSrc ← @/lib/mediaRef",
+        "bodyVideoSrc ← @/lib/mediaRef",
+        "safeLinkUrl ← @/lib/safeUrl",
+    ];
     for (const {label, sf} of packCopies("components/Markdown.tsx")) {
         assert.deepEqual(nameSources(sf), expected, `${label}: 소독기 이름의 출처가 다르다`);
     }
