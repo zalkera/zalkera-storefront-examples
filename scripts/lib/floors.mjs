@@ -31,7 +31,7 @@ export const REQUIRED_FLOORS = {
     "src/lib/content.test.ts": 3,
     "src/lib/blogGraph.test.ts": 6,
     "src/lib/jsonLdScript.test.ts": 5,
-    "src/lib/markdown.test.ts": 42,
+    "src/lib/markdown.test.ts": 44,
     "src/lib/mediaRef.test.ts": 8,
     "src/lib/markdownRender.test.ts": 6,
     "src/lib/reservedSegments.test.ts": 4,

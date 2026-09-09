@@ -223,29 +223,27 @@ function tableStartsAt(lines: string[], index: number): string[] | null {
 const MAX_TABLE_COLUMNS = 32;
 
 /**
- * 한 **문서**의 표 «칸» 총수 상한.
+ * 한 **문서**의 **잎 노드**(표 칸 + 목록 항목) 총수 상한.
  *
- * 🔴 **행이 아니라 칸을 센다.** 비용도 산출 HTML 도 «칸 × 행» 곱, 즉 칸 수에 비례한다 — 행으로
- * 세면 2열짜리 긴 표는 부당하게 잘리고 32열짜리 표는 예산의 32배를 쓴다.
+ * 🔴 **행이 아니라 칸을 센다.** 표 비용은 «칸 × 행» 곱, 즉 칸 수에 비례한다 — 행으로 세면 2열짜리
+ * 긴 가격표가 부당하게 잘리고 32열짜리는 예산의 32배를 쓴다.
  *
- * 🔴 표 하나의 상한은 표 **개수**를 안 묶는다. 본문 길이에 상한이 없으므로 상한 안의 표를 이어
- * 붙이는 것만으로 칸이 무한히 는다. 칸 하나가 `<td>` 하나와 그 RSC 사본을 내므로 산출이 본문의
- * 수십 배가 된다 — 칸 하나가 `<td>` 와 그 안의 인라인 노드를 낸다.
+ * 🔴 **목록 항목도 같은 예산에서 뺀다.** 목록은 길이와 무관하게 **블록 1개**라 블록 예산이 영원히
+ * 안 걸린다. 표 칸과 목록 항목은 「반복되는 잎」이라는 같은 형상이고 산출 단가도 같은 자릿수다.
  *
- * 8,000칸이면 32열 × 250행 · 8열 × 1,000행 · 2열 × 4,000행이 모두 들어간다(뷰티 시술 가격표·
- * 사양표의 현실 범위 밖이다).
+ * 8,000이면 32열 × 250행 · 8열 × 1,000행 · 2열 × 4,000행 · 목록 8,000항목이 각각 들어간다
+ * (사람이 읽는 가격표·사양표의 현실 범위 밖이다).
  *
- * 넘으면 그 뒤의 줄은 표로 그리지 않는다(문단으로 남아 **글자는 안 사라진다**).
- *
- * 산출 크기의 근거는 [MAX_BLOCKS_PER_DOCUMENT] 아래 «예산 셋이 함께 묶는 것» 에 있다.
+ * 넘으면 그 뒤의 줄은 표·목록으로 그리지 않는다(문단으로 남아 **글자는 안 사라진다**).
  */
-const MAX_TABLE_CELLS_PER_DOCUMENT = 8_000;
+const MAX_LEAF_NODES_PER_DOCUMENT = 8_000;
 
 /**
  * 한 **문서**의 블록 총수 상한.
  *
- * 🔴 **표만 묶으면 안 된다.** 제목·문단·목록에는 상한이 없었다. 제목은 본문 한 줄이 문서 HTML +
- * 목차 항목 + RSC 사본 셋을 내는 증폭기다.
+ * 🔴 **표만 묶으면 안 된다.** 제목·문단에는 상한이 없었다. 제목 한 줄은 문서 HTML + 목차 항목 +
+ * RSC 사본 셋을 낸다 — 본문 한 줄이 산출 수백 바이트가 되는 증폭기다(**목록**은 블록이 아니라
+ * 잎으로 센다 — [MAX_LEAF_NODES_PER_DOCUMENT]).
  *
  * 2,000블록이면 제목 50개·문단 300개짜리 장문 기사의 대여섯 배다. 표는 열이 좁을수록 더 긴 행을
  * 받는다 — 4열 1,999행 · 2열 3,999행.
@@ -255,59 +253,54 @@ const MAX_TABLE_CELLS_PER_DOCUMENT = 8_000;
  * 넘으면 남은 본문은 **서식 없이 글자 그대로** 한 문단에 남는다 — `whitespace-pre-line` 로 그려져
  * 줄바꿈은 살고 연속 공백은 접힌다. **글자는 하나도 안 사라진다.**
  *
- * ## 예산 셋이 함께 묶는 것
+ * ## 예산이 함께 묶는 것 — 그리고 안 묶는 것
  *
- * 이 상수와 [MAX_TABLE_CELLS_PER_DOCUMENT] · [MAX_INLINE_NODES_PER_DOCUMENT] 가 묶는 것은
- * **구조 비용**이지 본문 크기가 아니다. 예산을 넘긴 글자는 그대로 남으므로 산출은 늘
- * «본문 + 구조» 다.
+ * 이 상수와 [MAX_LEAF_NODES_PER_DOCUMENT] · [MAX_INLINE_NODES_PER_DOCUMENT] 가 묶는 것은
+ * **구조 비용**이지 본문 크기가 아니다. 예산을 넘긴 글자는 원문 그대로 남으므로 산출은 늘
+ * «본문 + 구조» 이고, 구조 쪽만 상수로 닫힌다.
  *
- * 재현(노드 수 — 예산이 실제로 무는 자리):
+ * ⚠ **본문 크기 자체에는 상한이 없다.** 이 파서가 세울 수 있는 것이 아니다 — 본문을 받는 API 가
+ *   정한다. 예산이 없애는 것은 **증폭**이지 크기가 아니다.
+ *
+ * 왜 증폭이 위험한가: 산출이 커지면 ISR 페이지 캐시가 그 항목을 거부하고, 그러면 **요청마다 다시
+ * 그린다**. 그 주소는 공개라 비용을 익명 방문자가 반복해서 유발하고, 서빙 프로세스에는 테넌트가
+ * 함께 산다.
+ *
+ * 재현(예산이 실제로 무는 자리 — 노드 수):
  * `node --experimental-strip-types -e 'import("./src/lib/markdown.ts").then(({parseMarkdown})=>{const b=parseMarkdown("\`x\`".repeat(1e6));console.log("블록",b.length,"인라인",b[0].text.length)})'`
- * → `블록 1 인라인 20001` (예산 전에는 `1000000`). 아래 바이트 표는 그 씨앗들을
- * `renderToStaticMarkup(<Markdown source={씨앗} />)` 에 태워 잰 값이다(쪽 전체는 아래 ⚠ 참조):
+ * → `블록 1 인라인 20001`
  *
- * | 씨앗 | 본문 | 예산 없음 | 예산 적용 |
- * |---|---|---|---|
- * | `` `x` `` × 100만 | 2,930KB | HTML 51.5MB · 5,224ms | HTML 3.83MB · 172ms |
- * | `## 제목 N` × 10만 | 1,649KB | HTML 6.75MB · 1,189ms | HTML 1.71MB · 131ms |
- * | 예산 셋을 **동시에** 채운 글 | 280KB | HTML 1.93MB | HTML 1.09MB |
- *
- * 즉 **구조 비용의 상한이 약 0.9MB** 다(HTML − 본문: 0.90 · 0.10 · 0.82MB). 증폭이 사라지고
- * 이 트랜치 이전의 평문 형상(1배)에 상수 하나가 붙은 꼴로 돌아온다.
- *
- * ⚠ **본문 크기에는 상한이 없다** — 백엔드 `post.content` 가 `LONGTEXT` 이고 쓰기 DTO 에 `@Size`
- *   가 없다. 그 상한은 여기서 못 세운다(**별건**).
- *
- * ⚠ **쪽 전체는 이보다 크다** — 목차가 제목을 한 벌 더 그리고 RSC 사본이 트리를 한 벌 더 싣는다.
- *   쪽 전체 실측은 `npm run build && npm start` 뒤 `curl -s localhost:3000/blog/<슬러그> | wc -c`.
- *
- * ⚠ 이 예산의 근거인 서빙 컨테이너 값(`RUNTIME_MEMORY=192m` · `.next/cache` tmpfs 64m)은
- *   **이 레포에 없다** — `zalkera-serving/serving-orchestrator/scripts/provision-box.sh` 가 정본이다.
- *   그 값이 바뀌면 여기 숫자도 다시 정해야 하는데 이 레포의 게이트는 그것을 못 본다.
+ * ⚠ **이 상수들을 올리기 전에 산출을 재라.** 「좀 넉넉하게」로 올리면 그만큼이 그대로 한 요청의
+ *   메모리·바이트가 된다. 재는 법은 `npm run build` 뒤 배송 형상(`.next/standalone/server.js`)을
+ *   메모리 상한을 건 채 띄우고 그 쪽을 받아 크기를 보는 것이다 — `next start` 는 이 레포의 배송
+ *   형상이 아니다(`output: standalone`).
  */
 const MAX_BLOCKS_PER_DOCUMENT = 2_000;
 
 /**
  * 한 **문서**의 인라인 노드 총수 상한.
  *
- * 🔴 **블록 수와 표 칸 수만 묶으면 축이 안 닫힌다.** 한 문단·한 목록은 내용이 얼마든 **블록 1개**
- * 이고 표 칸은 0개다 — `` `x` `` 를 이어 붙인 본문 293KB 하나가 두 예산을 **통과한 채** 힙 128MiB
- * 에서 프로세스를 죽였다(`node --max-old-space-size=128` 에서 rc=134). 인라인 노드 하나가
- * `<code>`·`<a>` 하나와 그 RSC 사본을 낸다.
+ * 🔴 **블록 수와 잎 수만 묶으면 축이 안 닫힌다.** 한 문단은 내용이 얼마든 **블록 1개**이고 잎은
+ * 0개다 — 인라인 문법만 이어 붙인 본문 하나가 두 예산을 **통과한 채** 힙을 넘긴다. 인라인 노드
+ * 하나가 `<code>`·`<a>` 하나와 그 RSC 사본을 낸다.
  *
- * 표 칸도 여기서 센다(칸마다 인라인 파싱을 하므로 같은 자원이다).
+ * 표 칸·목록 항목 **안의** 인라인도 여기서 센다(잎마다 인라인 파싱을 하므로 같은 자원이다).
  *
  * 넘으면 그 뒤의 글자는 **서식 없이 한 덩어리**로 남는다 — 글자는 안 사라진다.
  *
- * ⚠ 그래서 노드 **총수**의 상한은 이 값이 아니라 «이 값 + 블록 수 + 칸 수» 다. 예산이 바닥나도
- *   블록·칸마다 남은 글자 한 덩어리는 생긴다 — 그것이 글자를 안 잃는 방법이다.
+ * ⚠ 그래서 노드 **총수**의 상한은 이 값이 아니라 «이 값 + 블록 수 + 잎 수» 다. 예산이 바닥나도
+ *   블록·잎마다 남은 글자 한 덩어리는 생긴다 — 그것이 글자를 안 잃는 방법이다.
  */
 const MAX_INLINE_NODES_PER_DOCUMENT = 20_000;
+
+/** 목록 항목 — 판정이 두 자리(목록 갈래·문단 경계)에 있으므로 정규식은 한 벌만 둔다. */
+const BULLET_ITEM = /^ {0,3}([-*+])\s+(.*)$/;
+const ORDERED_ITEM = /^ {0,3}\d+[.)]\s+(.*)$/;
 
 export function parseMarkdown(source: string): Block[] {
     const blocks: Block[] = [];
     const usedIds = new Map<string, number>();
-    let tableCellsUsed = 0;
+    let leafUsed = 0;
     let inlineUsed = 0;
     /**
      * 인라인 파싱의 **단 하나의 자리** — 문서 예산이 여기를 지난다.
@@ -326,10 +319,17 @@ export function parseMarkdown(source: string): Block[] {
     const startsTable = (index: number): string[] | null => {
         const head = tableStartsAt(lines, index);
         // 머리줄까지 **들어가야** 표로 판정한다 — 「남았나」만 보면 예산을 머리줄 폭만큼 넘긴다.
-        if (head === null || tableCellsUsed + head.length > MAX_TABLE_CELLS_PER_DOCUMENT) return null;
+        if (head === null || leafUsed + head.length > MAX_LEAF_NODES_PER_DOCUMENT) return null;
         return head;
     };
     const lines = source.replace(/\r\n?/g, "\n").split("\n");
+
+    /**
+     * 목록 판정의 **단 하나의 자리** — 문단 경계도 이것을 쓴다. 두 술어가 갈리면 목록을 거절한
+     * 줄에서 문단도 끊겨 빈 문단이 줄 수만큼 생긴다(표의 `startsTable` 과 같은 처방).
+     */
+    const startsList = (line: string): boolean =>
+        (BULLET_ITEM.test(line) || ORDERED_ITEM.test(line)) && leafUsed < MAX_LEAF_NODES_PER_DOCUMENT;
 
     let i = 0;
     while (i < lines.length) {
@@ -383,12 +383,12 @@ export function parseMarkdown(source: string): Block[] {
             i += 2;
             const rows: Inline[][][] = [];
             // 머리줄도 칸이다 — 예산에서 먼저 뺀다.
-            tableCellsUsed += tableHead.length;
+            leafUsed += tableHead.length;
             while (
                 i < lines.length &&
                 lines[i]!.includes("|") &&
                 lines[i]!.trim() !== "" &&
-                tableCellsUsed + tableHead.length <= MAX_TABLE_CELLS_PER_DOCUMENT
+                leafUsed + tableHead.length <= MAX_LEAF_NODES_PER_DOCUMENT
             ) {
                 // 🔴 **없는 칸을 채우지 않는다.** 머리줄 칸 수만큼 채우면 `|` 한 글자짜리 행이
                 //    32개 셀을 만들어 **본문 바이트당 비용**이 열 수만큼 곱해진다(실측: 바이트당
@@ -396,7 +396,7 @@ export function parseMarkdown(source: string): Block[] {
                 //    `node --experimental-strip-types --test src/lib/markdown.test.ts` 의 「표를 100개 쌓아도」). 넘치는 칸만 버린다.
                 const cells = tableCells(lines[i]!).slice(0, tableHead.length);
                 rows.push(cells.map((cell) => inline(cell)));
-                tableCellsUsed += cells.length;
+                leafUsed += cells.length;
                 i += 1;
             }
             blocks.push({kind: "table", head: tableHead.map((cell) => inline(cell)), rows});
@@ -431,15 +431,17 @@ export function parseMarkdown(source: string): Block[] {
             continue;
         }
 
-        const bullet = /^ {0,3}([-*+])\s+(.*)$/;
-        const ordered = /^ {0,3}\d+[.)]\s+(.*)$/;
-        if (bullet.test(line) || ordered.test(line)) {
-            const isOrdered = ordered.test(line);
+        if (startsList(line)) {
+            const isOrdered = ORDERED_ITEM.test(line);
             const items: Inline[][] = [];
-            while (i < lines.length) {
-                const m = isOrdered ? ordered.exec(lines[i]!) : bullet.exec(lines[i]!);
+            // 🔴 **항목도 예산에서 뺀다.** 목록은 길이와 무관하게 **블록 1개**라 블록 예산이 영원히
+            //    안 걸린다 — 짧은 본문 하나가 `<li>` 수만 개를 낸다. 들어올 때 예산이 남아 있음을
+            //    `startsList` 가 보장하므로 첫 항목은 항상 실린다(그래야 `i` 가 전진한다).
+            while (i < lines.length && leafUsed < MAX_LEAF_NODES_PER_DOCUMENT) {
+                const m = isOrdered ? ORDERED_ITEM.exec(lines[i]!) : BULLET_ITEM.exec(lines[i]!);
                 if (!m) break;
                 items.push(inline((isOrdered ? m[1]! : m[2]!).trim()));
+                leafUsed += 1;
                 i += 1;
             }
             blocks.push({kind: "list", ordered: isOrdered, items});
@@ -455,8 +457,9 @@ export function parseMarkdown(source: string): Block[] {
                 next.startsWith("```") ||
                 /^(#{1,6})\s+/.test(next) ||
                 /^ {0,3}>\s?/.test(next) ||
-                bullet.test(next) ||
-                ordered.test(next) ||
+                // 🔴 **목록도 같은 술어를 쓴다** — 표와 같은 이유다. 「목록처럼 보이나」로 끊고
+                //    목록 판정에서는 예산까지 보면, 예산이 소진된 뒤 줄마다 문단이 끊긴다.
+                startsList(next) ||
                 /^ {0,3}(-{3,}|\*{3,}|_{3,})\s*$/.test(next) ||
                 // 🔴 **표로 그릴 때만** 끊는다 — 「표처럼 보이나」로 끊으면 표가 거절된 줄에서
                 //    문단도 끊겨 그 자리를 영원히 다시 본다(위 `tableStartsAt` 의 ⚠).

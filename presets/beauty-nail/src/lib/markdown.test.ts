@@ -67,16 +67,16 @@ test("예산 — 같은 제목 20,000개짜리 본문이 1초 안에 끝난다",
     const started = process.hrtime.bigint();
     const blocks = parseMarkdown("## 배송 안내\n\n".repeat(20_000));
     const ms = Number(process.hrtime.bigint() - started) / 1e6;
-    ok(blocks.length > 0);
+    // ⚠ **정확값으로 단언한다** — `> 0` 으로 두면 파서가 블록 1개만 내도 초록이다.
+    strictEqual(blocks.length, 2_001, `블록이 ${blocks.length}개 — 예산이 안 걸렸다`);
     ok(ms < 1000, `제목 파싱이 ${ms.toFixed(0)}ms 걸렸다 — 제곱 비용이 돌아왔다`);
 });
 
 /**
  * 🔴 **인라인 노드에도 예산이 있다.**
  *
- * 한 문단·한 목록은 내용이 얼마든 **블록 1개**이고 표 칸은 0개다 — 블록·칸 예산이 둘 다 「합법」
- * 이라 답한다. 그 씨앗 하나(본문 293KB)가 힙 128MiB 에서 프로세스를 죽였다
- * (`node --max-old-space-size=128` → rc=134).
+ * 한 문단은 내용이 얼마든 **블록 1개**이고 잎은 0개다 — 블록·잎 예산이 둘 다 「합법」이라
+ * 답한다. 인라인 문법만 이어 붙인 본문 하나가 두 예산을 통과한 채 힙을 넘긴다.
  *
  * 재현: `parseInline` 의 `if (out.length >= limit) break;` 를 지우면 이 시험이 red 다.
  */
@@ -92,6 +92,47 @@ test("🔴 예산 — 한 문단의 인라인 노드가 20,000개에서 멈추�
     strictEqual(tail.kind, "text");
     ok(tail.text.endsWith("끝표시"), "본문 끝이 사라졌다");
     ok(tail.text.includes("`x`"), "남은 글자가 서식째 안 남았다");
+});
+
+/**
+ * 🔴 **목록 항목에도 예산이 있다.**
+ *
+ * 목록은 길이와 무관하게 **블록 1개**라 블록 예산이 영원히 안 걸린다 — 짧은 본문 하나가
+ * `<li>` 수만 개를 낸다.
+ *
+ * 재현: `startsList` 의 `&& leafUsed < MAX_LEAF_NODES_PER_DOCUMENT` 를 지우면 이 시험이 red 다.
+ */
+test("🔴 예산 — 목록 항목이 8,000개에서 멈추고 남은 줄은 문단으로 남는다", () => {
+    for (const n of [10_000, 50_000]) {
+        const source = Array.from({length: n}, (_, i) => `- 항목 ${i}`).join("\n");
+        const blocks = parseMarkdown(source);
+
+        const items = blocks.reduce((sum, b) => sum + (b.kind === "list" ? b.items.length : 0), 0);
+        strictEqual(items, 8_000, `${n}줄에서 항목이 ${items}개 — 예산이 안 걸렸다`);
+
+        // 🔴 **목록 하나 + 꼬리 문단 하나. 그것뿐이다.**
+        //    `startsList` 에서 예산 판정을 빼면 항목 수는 그대로인데 **빈 목록 블록**이 블록 예산까지
+        //    쌓인다(2,001개). 항목만 세면 그 변이가 안 죽는다.
+        strictEqual(blocks.length, 2, `블록이 ${blocks.length}개 — 빈 블록이 쌓였다`);
+        strictEqual(
+            blocks.filter((b) => b.kind === "list" && b.items.length === 0).length,
+            0,
+            "빈 목록 블록이 생겼다",
+        );
+
+        // 🔴 **글자가 사라지지 않고, 줄마다 문단이 끊기지도 않는다**(문단 경계가 같은 술어를 쓴다).
+        const paragraphs = blocks.filter((b) => b.kind === "paragraph");
+        strictEqual(paragraphs.length, 1, `문단이 ${paragraphs.length}개 — 줄마다 끊겼다`);
+        const tail = (paragraphs[0] as {text: Array<{text: string}>}).text[0]!.text;
+        ok(tail.includes(`- 항목 ${n - 1}`), "마지막 줄이 사라졌다");
+    }
+});
+
+/** **양성 짝** — 예산 안의 목록은 그대로 항목이 된다. */
+test("예산 안의 목록은 항목으로 그린다", () => {
+    const blocks = parseMarkdown(Array.from({length: 30}, (_, i) => `- 항목 ${i}`).join("\n"));
+    strictEqual(blocks.length, 1);
+    strictEqual((blocks[0] as {items: unknown[]}).items.length, 30);
 });
 
 /** **양성 짝** — 예산이 정상 문단의 서식을 먹으면 링크·강조가 통째로 사라진다. */
@@ -117,7 +158,7 @@ test("표 칸의 인라인도 같은 예산에서 나온다", () => {
 
     const table = blocks[0] as {rows: {length: number}[][]};
     const nodes = table.rows.reduce((sum, r) => sum + r.reduce((n, cell) => n + cell.length, 0), 0);
-    // 20,000(예산) + 8,000(칸마다 남는 글자 한 덩어리) = 28,000 이 상한이다.
+    // 20,000(예산) + 8,000(잎마다 남는 글자 한 덩어리) = 28,000 이 상한이다.
     ok(nodes <= 28_000, `표 안 인라인 노드가 ${nodes}개 — 예산 밖이다`);
     ok(nodes > 8_000, "칸마다 한 덩어리씩만 남았다 — 예산이 정상 표의 서식을 먹었다");
 });
@@ -125,9 +166,9 @@ test("표 칸의 인라인도 같은 예산에서 나온다", () => {
 /**
  * 🔴 **블록 예산 — 제목이 표보다 큰 증폭기다.**
  *
- * 제목 한 줄(10바이트)이 산출 약 530B(문서 HTML + 목차 항목 + RSC 사본)가 된다. 예산이 없으면
- * 본문 976KB 가 HTML 53MB·RSS 1.4GB 가 되고, 배포된 서빙 컨테이너는 `RUNTIME_MEMORY=192m` 이라
- * 그 글 하나가 OOM 재시작 고리를 만든다 — 그 URL 은 공개다.
+ * 제목 한 줄은 문서 HTML + 목차 항목 + RSC 사본 셋을 낸다 — 본문 한 줄이 산출 수백 바이트가 되는
+ * 증폭기다. 예산이 없으면 그 증폭이 본문 길이에 그대로 곱해지고, 산출이 커지면 ISR 캐시가 그
+ * 항목을 거부해 **요청마다 다시 그린다**. 그 주소는 공개다.
  *
  * 넘친 뒤에도 **글자는 안 사라진다**: 남은 본문이 서식 없는 한 문단으로 남는다.
  */
