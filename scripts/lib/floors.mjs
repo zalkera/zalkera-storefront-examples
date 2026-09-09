@@ -26,6 +26,7 @@ export const REQUIRED_FLOORS = {
     "src/lib/crossOrigin.test.ts": 18,
     "src/lib/oauthState.test.ts": 11,
     "src/lib/routeParam.test.ts": 6,
+    "src/lib/blogPagePath.test.ts": 2,
     "src/lib/content.test.ts": 3,
     "src/lib/blogGraph.test.ts": 6,
     "src/lib/jsonLdScript.test.ts": 5,
