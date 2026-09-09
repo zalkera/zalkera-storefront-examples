@@ -56,6 +56,10 @@ export const WIRING_FILES = [
     "src/lib/safeUrl.ts", // 링크 소독(저장형 XSS)
     "src/lib/mediaRef.ts", // 본문 미디어 참조 해석 + 그 소독(팩마다 갈리면 그 팩만 이미지가 죽는다)
     "src/lib/markdown.ts", // 본문 파서 — 표·펜스 상한이 갈리면 그 팩만 병적 입력에 죽는다
+    // JSON-LD 이스케이프. `<` 전량을 접는 소독기라 한 벌만 갈리면 그 팩만 `</script>` 로 스크립트가
+    // 닫힌다 — 그리고 그 그래프에 들어가는 값(제목·작성자·태그·회사명)은 콘솔이 받는 자유 문자열이다.
+    "src/lib/jsonLdScript.ts",
+    "src/components/JsonLd.tsx", // 그 소독기의 **유일한 집행 지점**(원시 HTML 삽입 자리)
     "src/lib/oauthState.ts", // OAuth state 대조(fail-closed)
     "src/lib/env.ts", // 서버 전용 env·테넌트 코드(폴백 없음이 의도)
     "src/lib/buildEnv.ts", // 오프라인 빌드 강하 — 서빙 빌드에 켜지면 콘텐츠 빈 아티팩트가 나간다
@@ -81,6 +85,7 @@ export const WIRING_FILES = [
     "src/lib/oauthPath.test.ts", // safeNextPath — 로그인 능력에 딸린 소독기(갈라 낸 자리)
     "src/lib/urlEscapes.fixture.ts", // 위 둘이 나눠 쓰는 입력 목록 — 베끼면 한쪽만 늘어난다
     "src/lib/safeUrlDrift.test.ts", // 팩 로컬 소독기와 @zalkera/client 사본의 안전성 판정이 갈리는지
+    "src/lib/jsonLdScript.test.ts", // 그 이스케이프의 **뜻**을 잠근다(좁게 거는 구현을 red 로 만든다)
     "src/lib/previewGuard.test.ts",
     // ⚠ 콘텐츠 조회 3종. `content.ts` 가 `pages[slug]` 로 바로 읽으면 `__proto__` 가
     //   `Object.prototype` 을 돌려주고 그것이 객체라 가드를 통과한다 — `/__proto__` 가 404 대신
