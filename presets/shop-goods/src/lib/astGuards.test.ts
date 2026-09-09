@@ -451,6 +451,80 @@ function nameSources(sf: TS.SourceFile): string[] {
     return out.sort();
 }
 
+/** 팩 사본 하나 아래의 `.ts`·`.tsx` 전부(재귀). `program` 은 presets 를 안 보므로 손으로 훑는다. */
+function sourcesUnder(dir: string): string[] {
+    const out: string[] = [];
+    const walk = (d: string): void => {
+        for (const entry of readdirSync(d, {withFileTypes: true})) {
+            const path = join(d, entry.name);
+            if (entry.isDirectory()) walk(path);
+            else if (/\.tsx?$/.test(entry.name)) out.push(path);
+        }
+    };
+    walk(dir);
+    return out;
+}
+
+/** `수신자.멤버(...)` 호출이 있는가 — **주석·문자열 안의 같은 이름에 안 걸린다**. */
+function callsMember(sf: TS.SourceFile, receiver: string, member: string): boolean {
+    let found = false;
+    const visit = (node: TS.Node): void => {
+        if (
+            ts.isCallExpression(node) &&
+            ts.isPropertyAccessExpression(node.expression) &&
+            node.expression.expression.getText(sf) === receiver &&
+            node.expression.name.getText(sf) === member
+        ) {
+            found = true;
+        }
+        ts.forEachChild(node, visit);
+    };
+    visit(sf);
+    return found;
+}
+
+function sourceOf(path: string): TS.SourceFile {
+    return ts.createSourceFile(path, readFileSync(path, "utf8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+}
+
+/** 그 파일이 `dangerouslySetInnerHTML` 을 **JSX 속성으로** 쓰는가. 문자열 등장이 아니라 속성 노드다. */
+function setsInnerHtml(sf: TS.SourceFile): boolean {
+    let found = false;
+    const visit = (node: TS.Node): void => {
+        if (ts.isJsxAttribute(node) && node.name.getText(sf) === "dangerouslySetInnerHTML") found = true;
+        ts.forEachChild(node, visit);
+    };
+    visit(sf);
+    return found;
+}
+
+/**
+ * 원시 HTML 을 넣는 자리는 **정확히 한 곳**이고, 거기서도 이스케이프를 남에게 맡긴다.
+ *
+ * 이 팩의 소스를 고치는 주체는 고객의 LLM 이다. JSON-LD 에 실리는 값(제목·작성자·태그·회사명)은
+ * 콘솔에서 사람이 적은 자유 문자열이라, 그 자리에서 `JSON.stringify` 를 직접 부르면 `</script>` 로
+ * 스크립트가 닫히고 그 뒤가 마크업이 된다. 그래서 **자리 자체**를 고정한다.
+ */
+test("원시 HTML 삽입은 5벌 모두 JsonLd 한 곳뿐이다", () => {
+    for (const [label, dir] of PACK_SRCS) {
+        const files = sourcesUnder(dir);
+        // 통제군 — 빈손이면 아래 단언이 공허참이다.
+        assert.ok(files.length > 20, `${label}: 훑은 파일이 ${files.length}개뿐이다`);
+        const offenders = files
+            .filter((path) => setsInnerHtml(sourceOf(path)))
+            .map((path) => relative(dir, path).split("\\").join("/"));
+        assert.deepEqual(offenders.sort(), ["components/JsonLd.tsx"], `${label}: 원시 HTML 자리가 늘었다`);
+    }
+});
+
+test("그 한 곳도 이스케이프를 `jsonLdScriptBody` 에 맡긴다 — 여기서 stringify 를 직접 부르지 않는다", () => {
+    for (const {label, sf} of packCopies("components/JsonLd.tsx")) {
+        assert.ok(callsFunction(sf, "jsonLdScriptBody"), `${label}: 소독기를 안 부른다`);
+        // ⚠ 문면으로 세지 마라 — 바로 위 주석이 그 이름을 적고 있어서 자기 설명에 걸린다(실측).
+        assert.equal(callsMember(sf, "JSON", "stringify"), false, `${label}: stringify 를 직접 부른다`);
+    }
+});
+
 test("본문 렌더러 5벌이 소독기를 «정본 모듈에서» 가져온다 — 동명 지역함수로 못 가린다", () => {
     const expected = ["bodyMediaSrc ← @/lib/mediaRef", "bodyVideoSrc ← @/lib/mediaRef", "safeLinkUrl ← @/lib/safeUrl"];
     for (const {label, sf} of packCopies("components/Markdown.tsx")) {

@@ -1,4 +1,5 @@
 import {schemaTypeOf} from "@/lib/blogGraph";
+import {jsonLdScriptBody} from "@/lib/jsonLdScript";
 import type {PostDetail, ProductDetail, RatingSummary, SiteConfig} from "@zalkera/client";
 import type {CommercePolicies} from "@/lib/commercePolicies";
 
@@ -18,9 +19,9 @@ export function JsonLd({data}: {data: object}) {
     return (
         <script
             type="application/ld+json"
-            // `<` 를 유니코드 이스케이프 — 데이터에 `</script>` 가 섞여도 스크립트가 조기 종료되지
-            // 않는다(JSON-LD 삽입의 고전적 XSS 벡터). JSON.stringify 는 이걸 해주지 않는다.
-            dangerouslySetInnerHTML={{__html: JSON.stringify(data).replace(/</g, "\\u003c")}}
+            // 이스케이프는 `jsonLdScriptBody` 가 소유한다 — 이 파일은 JSX 라 시험이 안 붙는다.
+            // ⚠ 여기서 `JSON.stringify` 를 직접 부르지 마라(그러면 `</script>` 로 스크립트가 닫힌다).
+            dangerouslySetInnerHTML={{__html: jsonLdScriptBody(data)}}
         />
     );
 }
