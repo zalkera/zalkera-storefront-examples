@@ -64,7 +64,10 @@ test("예산 — 같은 제목 20,000개가 1초 안에 끝난다", () => {
  * 넘친 뒤에도 **글자는 안 사라진다**: 남은 본문이 서식 없는 한 문단으로 남는다.
  */
 test("🔴 예산 — 블록이 2,000개에서 멈추고 남은 본문은 글자로 남는다", () => {
-    const blocks = parseMarkdown(Array.from({length: 20_000}, (_, i) => `## 제목 ${i}`).join("\n\n"));
+    // 🔴 **인라인 문법을 넣는다** — 꼬리를 `parseInline` 에 태우는 변이는 평문 씨앗에서 안 죽는다.
+    const blocks = parseMarkdown(
+        Array.from({length: 20_000}, (_, i) => `## 제목 ${i} [링크](/x) **굵게**`).join("\n\n"),
+    );
 
     // 구조를 만든 블록 + 남은 본문 한 문단.
     strictEqual(blocks.length, 2_001, `블록이 ${blocks.length}개 — 예산이 안 걸렸다`);
@@ -76,7 +79,7 @@ test("🔴 예산 — 블록이 2,000개에서 멈추고 남은 본문은 글자
     const text = (tail as {text: Array<{kind: string; text: string}>}).text;
     strictEqual(text.length, 1, "꼬리를 인라인 파싱했다 — 노드가 다시 는다");
     strictEqual(text[0]?.kind, "text");
-    ok(text[0]!.text.includes("## 제목 19999"), "마지막 본문이 사라졌다");
+    ok(text[0]!.text.includes("## 제목 19999 [링크](/x) **굵게**"), "마지막 본문이 사라졌다");
 });
 
 /** **양성 짝** — 예산이 정상 글을 먹으면 안 된다(제목 50개·문단 300개짜리 장문 기사). */

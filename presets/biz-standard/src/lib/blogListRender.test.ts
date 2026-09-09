@@ -22,6 +22,10 @@ const SRC = resolve(HERE, "..");
  * `BlogList` 가 `posts` 를 인자로 받으므로 네트워크 없이 그려진다 — 그 인자는 쪽 라우트가
  * 범위 밖 판정을 하려고 목록을 먼저 보기 때문에 생긴 것이고, 여기서 그대로 쓴다.
  *
+ * **쪽 라우트의 배선도 여기서 잰다.** `isOutOfRange(...) → notFound()` 한 줄을 지워도 전 게이트가
+ * 초록이었다(`npm run verify`·`typecheck`·`floor-gate`·`doc-claims` 전부 rc=0). 그래서 라우트를
+ * **호출해서** 404 가 실제로 던져지는지 본다 — 백엔드는 스텁으로 갈아 끼운다.
+ *
  * 재현: `node --experimental-strip-types --test src/lib/blogListRender.test.ts; echo rc=$?` → rc=0
  */
 
@@ -35,7 +39,19 @@ process.env.ZALKERA_SITE_URL ??= "https://render.test";
  * ⚠ `markdownRender.test.ts` 의 한 파일 전사와 다르다. `BlogList` 는 `components/JsonLd.tsx`(JSX)
  *   를 타므로 잎까지 따라가야 한다 — `--experimental-strip-types` 는 JSX 를 못 벗긴다.
  */
-let compiled: Promise<{BlogList: (props: unknown) => Promise<unknown>}> | null = null;
+const compiled = new Map<string, Promise<Record<string, never>>>();
+
+/** 라우트 시험이 쓰는 가짜 목록 모듈 — 백엔드 왕복 없이 응답을 주입한다. */
+const BLOG_LIST_STUB = `
+globalThis.__blogListStub = {posts: null, seen: []};
+export async function listBlogPage(page) {
+    globalThis.__blogListStub.seen.push(page);
+    return globalThis.__blogListStub.posts;
+}
+export function BlogList(props) {
+    return {stub: "BlogList", props};
+}
+`;
 
 /** `@/foo/bar` → 실제 파일. 확장자는 파일이 있는 쪽으로 정한다(번들러가 하던 일). */
 function sourceOf(spec: string): string | null {
@@ -46,7 +62,7 @@ function sourceOf(spec: string): string | null {
     return null;
 }
 
-function compileGraph() {
+function compileGraph(entry: string, stubs: Record<string, string> = {}) {
     // ⚠ **`/tmp` 에 쓰면 안 된다** — node 는 맨 지정자(`react`)를 **가져오는 파일 기준**으로 푼다.
     const cache = resolve(SRC, "../node_modules/.cache");
     mkdirSync(cache, {recursive: true});
@@ -54,19 +70,26 @@ function compileGraph() {
     const out = (spec: string) => join(dir, spec.replace(/\//g, "__") + ".mjs");
 
     const seen = new Set<string>();
-    const queue = ["components/BlogList"];
+    const queue = [entry];
     while (queue.length > 0) {
         const spec = queue.shift()!;
         if (seen.has(spec)) continue;
         seen.add(spec);
+        if (stubs[spec] !== undefined) {
+            writeFileSync(out(spec), stubs[spec]!);
+            continue;
+        }
         const file = sourceOf(spec);
         assert.ok(file, `@/${spec} 를 못 찾았다 — 이 시험이 헛돈다`);
         const source = ts.sys.readFile(file!);
         assert.ok(source, `${file} 를 못 읽었다 — 이 시험이 헛돈다`);
-        const rewritten = source!.replace(/(["'])@\/([^"']+)\1/g, (_m, q: string, rest: string) => {
-            queue.push(rest);
-            return `${q}${out(rest)}${q}`;
-        });
+        const rewritten = source!
+            .replace(/(["'])@\/([^"']+)\1/g, (_m, q: string, rest: string) => {
+                queue.push(rest);
+                return `${q}${out(rest)}${q}`;
+            })
+            // 맨 지정자는 번들러가 아니라 node 가 푼다 — `next` 의 하위경로는 확장자를 요구한다.
+            .replace(/(["'])next\/navigation\1/g, (_m, q: string) => `${q}next/navigation.js${q}`);
         writeFileSync(
             out(spec),
             ts.transpileModule(rewritten, {
@@ -78,16 +101,20 @@ function compileGraph() {
             }).outputText,
         );
     }
-    return import(out("components/BlogList")) as Promise<{BlogList: (props: unknown) => Promise<unknown>}>;
+    return import(out(entry)) as Promise<Record<string, never>>;
     // 전사물은 남긴다 — 적재가 지연되므로(dynamic import 안의 정적 import) 여기서 지우면 못 읽는다.
     // `node_modules/.cache` 아래이고 이미 무시 대상이다.
 }
 
 /** 그 쪽을 실제로 그린 HTML. `posts` 를 넣어 네트워크를 안 탄다. */
+async function load<T>(entry: string, stubs?: Record<string, string>): Promise<T> {
+    if (!compiled.has(entry)) compiled.set(entry, compileGraph(entry, stubs));
+    return compiled.get(entry)! as Promise<T>;
+}
+
 async function render(page: number, posts: unknown): Promise<string> {
-    compiled ??= compileGraph();
     const [{BlogList}, {renderToStaticMarkup}, {createElement}] = await Promise.all([
-        compiled,
+        load<{BlogList: (props: unknown) => Promise<unknown>}>("components/BlogList"),
         import("react-dom/server"),
         import("react"),
     ]);
@@ -155,4 +182,72 @@ test("🔴 백엔드가 죽으면 셸만 그리고 다음을 안 그린다", asy
 test("글이 있으면 ItemList 그래프를 낸다", async () => {
     const html = await render(1, pageOf(3, true));
     assert.match(html, /ItemList/, `목록 그래프가 없다: ${html}`);
+});
+
+/* ── 쪽 라우트의 배선 ────────────────────────────────────────────────────────
+ * 라우트를 **호출해서** 잰다. 목록 모듈만 스텁으로 갈아 끼워 백엔드 왕복을 없앤다 — 판정은
+ * 전부 진짜 코드가 한다(`parseBlogPageSegment` → `listBlogPage` → `isOutOfRange` → `notFound`). */
+
+const ROUTE = "app/blog/page/[n]/page";
+
+type RouteModule = {
+    default: (props: {params: Promise<{n: string}>}) => Promise<unknown>;
+};
+
+/** 스텁이 심는 자리. 전사물을 경로로 다시 열지 않으려고 전역에 둔다(이 프로세스 안에서만 산다). */
+type StubState = {posts: unknown; seen: number[]};
+const stubState = (): StubState => (globalThis as {__blogListStub?: StubState}).__blogListStub!;
+
+/** `notFound()` 가 던지는 것인가 — Next 는 `digest` 로 표시한다. */
+function isNotFound(error: unknown): boolean {
+    const digest = (error as {digest?: unknown})?.digest;
+    return typeof digest === "string" && digest.startsWith("NEXT_HTTP_ERROR_FALLBACK;404");
+}
+
+/** 그 세그먼트로 라우트를 부른다. 던지면 `threw`, 아니면 `value`. */
+async function call(n: string, posts: unknown): Promise<{threw: unknown} | {value: unknown}> {
+    const mod = await load<RouteModule>(ROUTE, {"components/BlogList": BLOG_LIST_STUB});
+    stubState().posts = posts;
+    try {
+        return {value: await mod.default({params: Promise.resolve({n})})};
+    } catch (error) {
+        return {threw: error};
+    }
+}
+
+/**
+ * 🔴 **범위 밖은 404 다.** 200 빈 목록은 소프트 404 이고, 「이전」이 무조건 그려져 `/blog` 까지
+ * 이어지는 빈 쪽 사슬의 입구가 된다.
+ *
+ * 재현: 라우트에서 `if (isOutOfRange(page, posts)) notFound();` 를 지우면 이 시험만 red 다
+ * (`npm run verify`·`typecheck`·`floor-gate`·`doc-claims` 는 그대로 rc=0).
+ */
+test("🔴 라우트 — 글 0건인 4쪽은 404 를 던진다", async () => {
+    const result = await call("4", {content: [], last: true});
+    assert.ok("threw" in result, "404 를 안 던졌다 — 빈 쪽이 200 으로 선다");
+    assert.ok(isNotFound(result.threw), `404 가 아닌 것을 던졌다: ${String(result.threw)}`);
+});
+
+/** 🔴 **백엔드 장애는 「범위 밖」이 아니다** — 404 를 내면 ISR 로 굳어 복구 뒤에도 404 가 나간다. */
+test("🔴 라우트 — 백엔드가 죽으면(null) 404 를 안 던진다", async () => {
+    const result = await call("4", null);
+    assert.ok("value" in result, `백엔드 장애에 404 를 던졌다: ${String((result as {threw: unknown}).threw)}`);
+});
+
+/** **양성 짝** — 정상 쪽을 404 로 만들면 2쪽 이후가 통째로 사라진다. */
+test("라우트 — 글이 있는 쪽은 그대로 그린다", async () => {
+    const posts = {content: [{id: 1, slug: "a", title: "가"}], last: false};
+    const result = await call("2", posts);
+    assert.ok("value" in result, `정상 쪽에서 던졌다: ${String((result as {threw: unknown}).threw)}`);
+    // 🔴 **목록을 두 번 부르지 않는다** — 범위 판정용으로 받은 것을 그대로 넘긴다.
+    assert.deepEqual((result.value as {props: {posts: unknown; page: number}}).props, {page: 2, posts});
+});
+
+/** 🔴 **1쪽 세그먼트와 다른 표기는 라우트에서 404 다** — 같은 내용이 두 주소에 서면 색인이 갈린다. */
+test("🔴 라우트 — 1쪽·다른 표기 세그먼트는 404 다", async () => {
+    const posts = {content: [{id: 1, slug: "a", title: "가"}], last: false};
+    for (const bad of ["1", "0", "03", "2.0", "abc"]) {
+        const result = await call(bad, posts);
+        assert.ok("threw" in result && isNotFound(result.threw), `${JSON.stringify(bad)} 가 열렸다`);
+    }
 });
