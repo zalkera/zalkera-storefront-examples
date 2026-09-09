@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {pageParam, routeParam} from "./routeParam.ts";
+import {routeParam} from "./routeParam.ts";
 
 /**
  * 동적 세그먼트 디코딩의 계약.
@@ -36,22 +36,4 @@ test("통제군 — `decodeURIComponent` 는 정말 던진다(이 시험의 전�
 test("이미 디코드된 값을 두 번 디코드하지 않는다 — `%25` 는 리터럴 `%` 다", () => {
     assert.equal(routeParam("100%25"), "100%");
     assert.equal(routeParam(routeParam("100%2525")), "100%");
-});
-
-test("?page= 는 1-기반이고 못 읽으면 1 이다 — 던지면 그 주소가 500 으로 굳는다", () => {
-    assert.equal(pageParam("2"), 2);
-    assert.equal(pageParam("1"), 1);
-    assert.equal(pageParam(["3", "9"]), 3); // 같은 이름이 둘이면 첫 값
-
-    // 크롤러·손편집이 실제로 보내는 것들 — 전부 1 로 접는다.
-    for (const junk of [undefined, "", "   ", "abc", "0", "-1", "1.5", "2e3x", "٣", null as unknown as string]) {
-        assert.equal(pageParam(junk), 1, `${JSON.stringify(junk)} 가 1 이 아니다`);
-    }
-    // 안전정수 밖 — `page - 1` 로 넘기면 무슨 쪽을 받을지 모른다.
-    assert.equal(pageParam("1e999"), 1, "Infinity 가 쪽 번호가 됐다");
-    assert.equal(pageParam("9007199254740993"), 1, "안전정수 밖이 통과했다");
-
-    // **양성 짝** — 이 좁힘이 정상 값을 먹으면 페이지네이션이 통째로 안 선다.
-    assert.equal(pageParam("9007199254740991"), 9007199254740991);
-    assert.equal(pageParam("42"), 42);
 });

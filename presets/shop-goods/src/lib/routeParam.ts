@@ -17,32 +17,6 @@
  * 재현: `content/pages/회사연혁.json` 을 배선하고 `npm run build` →
  * `.next/server/app/회사연혁.meta` 의 `status` 가 `404` 인지 본다.
  */
-
-/**
- * 세그먼트를 사람이 쓴 값으로 되돌린다.
- *
- * ⚠ 못 되돌리면 **원문을 그대로 준다.** `decodeURIComponent` 는 홀로 선 `%` 에 `URIError` 를 던지는데,
- *   그것은 방문자가 주소창에 아무거나 쳐도 만들 수 있는 입력이다 — 500 을 내는 대신 조회를 miss 시켜
- *   정상적인 404 로 떨어뜨린다.
- */
-/**
- * `?page=` 를 **1-기반 쪽 번호**로 읽는다 — 못 읽으면 1.
- *
- * ⚠ **던지지 않는다.** 크롤러·손편집이 `?page=abc`·`-1`·`0`·`1e999`·`?page=1&page=2` 를 보낸다.
- *   던지면 그 주소가 500 이 되고, 크롤러는 한 번 본 링크를 **다시 온다** — 500 이 굳는다.
- *   조용히 1로 접으면 첫 쪽이 나가고 그 쪽의 canonical 이 스스로를 가리킨다.
- *
- * ⚠ **안전정수 밖은 거절한다.** `Number("1e999")` 는 `Infinity` 이고 `Number("9007199254740993")` 는
- *   **다른 수로 반올림된다** — 그 값을 `page - 1` 로 백엔드에 넘기면 무슨 쪽을 받을지 모른다
- *   (`resolveMediaRef` 가 같은 이유로 안전정수를 요구한다).
- */
-export function pageParam(raw: string | string[] | undefined): number {
-    const value = Array.isArray(raw) ? raw[0] : raw;
-    if (typeof value !== "string" || value.trim() === "") return 1;
-    const n = Number(value);
-    return Number.isSafeInteger(n) && n >= 1 ? n : 1;
-}
-
 export function routeParam(raw: string): string {
     try {
         return decodeURIComponent(raw);

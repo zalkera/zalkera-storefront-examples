@@ -2,7 +2,7 @@ import {zalkera} from "@/lib/zalkera";
 import {siteUrl} from "@/lib/site";
 import {JsonLd, breadcrumbJsonLd, itemListJsonLd} from "@/components/JsonLd";
 import {formatDate} from "@/lib/datetime";
-import {BLOG_PAGE_SIZE, blogPagePath} from "@/lib/blogPaging";
+import {BLOG_PAGE_SIZE, blogPagePath, hasNextPage} from "@/lib/blogPaging";
 
 /**
  * 블로그 목록 한 쪽 — `/blog`(1쪽)와 `/blog/page/{n}`(2쪽 이상)이 **함께** 쓴다.
@@ -10,16 +10,31 @@ import {BLOG_PAGE_SIZE, blogPagePath} from "@/lib/blogPaging";
  * 쪽 주소가 왜 쿼리가 아니라 경로 세그먼트인지는 `lib/blogPaging.ts` KDoc 이 근거와 재현 명령을
  * 함께 들고 있다.
  */
-export async function BlogList({page}: {page: number}) {
-    // 백엔드가 죽어도 셸은 살아야 한다 — 실패는 삼키고 빈 목록으로 강하한다.
-    const posts = await zalkera
+/**
+ * 그 쪽의 글 — **백엔드가 죽어도 셸은 살아야 한다.** 실패는 삼키고 `null` 로 강하한다.
+ *
+ * ⚠ 쪽 라우트가 **범위 밖 판정**을 하려면 목록을 먼저 봐야 해서 밖으로 뺐다. 두 번 부르지 않도록
+ *   그 결과를 [BlogList] 에 넘긴다.
+ */
+export async function listBlogPage(page: number) {
+    return zalkera
         .listPosts({page: page - 1, size: BLOG_PAGE_SIZE, sort: "publishedAt,desc"})
         .catch(() => null);
+}
+
+export async function BlogList({
+    page,
+    posts: given,
+}: {
+    page: number;
+    posts?: Awaited<ReturnType<typeof listBlogPage>>;
+}) {
+    const posts = given !== undefined ? given : await listBlogPage(page);
     const items = posts?.content ?? [];
     const base = siteUrl();
-    // ⚠ **백엔드가 죽었을 때 「다음 쪽」을 안 그린다** — `posts` 가 null 이면 마지막 쪽인지 모른다.
-    //    모를 때는 없는 쪽으로 크롤러를 보내지 않는다.
-    const hasNext = posts !== null && posts.last === false;
+    // ⚠ **판정은 여기 없다** — `hasNextPage` 가 진다. 이 자리에 두었을 때는 `false` 로 고정하는
+    //    변이(=「다음」이 통째로 사라져 21번째 글이 다시 도달 불가)가 **전 게이트를 통과**했다.
+    const hasNext = hasNextPage(posts);
 
     return (
         <main>
