@@ -15,6 +15,17 @@ import {safeLinkUrl} from "@/lib/safeUrl";
  *   · 제목마다 `id` 가 있어 **그 절을 주소로 가리킬 수 있다**.
  *   · 링크가 요소여야 크롤러가 따라간다. 이미지가 요소여야 `alt` 가 색인된다.
  */
+/**
+ * 소독을 **통과한** 주소가 남의 호스트를 가리키는가.
+ *
+ * ⚠ 판별자를 두 자리에 베끼지 마라 — 링크 갈래(`rel` 을 다는 조건)와 이미지 갈래(자동으로 안 부르고
+ *   링크로 그리는 조건)가 **같은 물음**이다. 갈리면 한쪽이 반드시 틀린다.
+ *
+ * ⚠ [safeLinkUrl] 이 돌려준 값에만 건다. 원문에 걸면 소독기가 무력화한 값(`javascript:` → `#`)과
+ *   정규화한 값을 못 본다.
+ */
+const EXTERNAL_HREF = /^https?:\/\//i;
+
 function InlineNodes({nodes}: {nodes: Inline[]}) {
     return (
         <>
@@ -36,7 +47,7 @@ function InlineNodes({nodes}: {nodes: Inline[]}) {
                         // `target="_blank"` 를 안 쓰므로 `noopener` 는 무동작이고(짝으로 두는 관례),
                         // 같은 탭 이동에서도 `Referer` 가 지워진다. 내부 링크에는 아무것도 안 단다:
                         // `nofollow` 를 달면 크롤러가 따라가는 우리 내부 연결을 우리 손으로 끊는다.
-                        const external = /^https?:\/\//i.test(href);
+                        const external = EXTERNAL_HREF.test(href);
                         return (
                             <a
                                 key={i}
@@ -54,17 +65,31 @@ function InlineNodes({nodes}: {nodes: Inline[]}) {
                         // 요청한다. 해석은 `bodyMediaSrc` 한 곳이 한다(소독까지 포함).
                         // `next/image` 는 바이트를 Next 런타임에 태우므로 쓰지 않는다.
                         const src = bodyMediaSrc(node.src);
-                        // 못 쓰는 주소면 **안 그린다** — 깨진 아이콘과 헛된 왕복만 남는다.
-                        // 이 줄을 지우면 타입이 막는다(`null` 은 `src` 에 못 들어간다).
-                        if (src === null) return null;
+                        if (src !== null) {
+                            return (
+                                <img
+                                    key={i}
+                                    src={src}
+                                    alt={node.alt}
+                                    loading="lazy"
+                                    className="my-4 h-auto max-w-full rounded-lg"
+                                />
+                            );
+                        }
+                        // 🔴 **외부 호스트는 자동으로 안 부른다.** `<img src>` 로 두면 방문자가
+                        //    아무 조작도 안 했는데 브라우저가 그 호스트로 나가 IP·UA 를 넘긴다.
+                        //    그래서 [bodyMediaSrc] 가 우리 주소만 주고, 나머지는 여기서 **링크로**
+                        //    그린다 — 외부 영상 펜스와 **같은 판정**이다. 안 그리면 저작자가 넣은
+                        //    그림이 통째로 사라지는데, 링크는 읽는 사람도 크롤러도 그것에 닿는다.
+                        const href = safeLinkUrl(node.src);
+                        // 이미지가 될 수도 링크가 될 수도 없는 것들(`#조각`·`?질의`·`mailto:`·
+                        // 상대경로·소독기가 무력화한 `#`)은 그릴 것이 없다. 링크 갈래와 **같은
+                        // 판별자**를 쓴다 — 두 자리가 갈리면 한쪽이 반드시 틀린다.
+                        if (!EXTERNAL_HREF.test(href)) return null;
                         return (
-                            <img
-                                key={i}
-                                src={src}
-                                alt={node.alt}
-                                loading="lazy"
-                                className="my-4 h-auto max-w-full rounded-lg"
-                            />
+                            <a key={i} href={href} rel="noopener noreferrer" className="underline">
+                                {node.alt || node.src}
+                            </a>
                         );
                     }
                     default:

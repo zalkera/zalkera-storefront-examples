@@ -44,7 +44,6 @@ test("못 쓰는 주소는 «없음» 이다 — 문자열 센티넬이 아니�
     assert.equal(bodyMediaSrc("/..//evil.example/a.png"), null);
     assert.equal(bodyMediaSrc(null), null);
     assert.equal(bodyMediaSrc("/media/12"), "/media/12");
-    assert.equal(bodyMediaSrc("https://cdn.example/a.png"), "https://cdn.example/a.png");
 });
 
 test("이미지 주소는 링크 주소보다 좁다 — 소독기가 통과시키는 것도 여기서 걸린다", () => {
@@ -54,7 +53,6 @@ test("이미지 주소는 링크 주소보다 좁다 — 소독기가 통과시�
         "tel:+8210",
         "#section-2", // `src="#조각"` 은 그 쪽 HTML 을 이미지로 다시 받는다
         "?page=2",
-        "http://cdn.example/a.png", // 혼합 콘텐츠로 어차피 막힌다
         "../images/a.png", // 상대경로: 소독기가 루트로 접어 **저작기와 다른 주소**가 된다
         "images/a.png",
         "   ", // 접히면 사이트 루트가 된다 — 그것도 헛된 왕복이다
@@ -63,18 +61,45 @@ test("이미지 주소는 링크 주소보다 좁다 — 소독기가 통과시�
         assert.equal(bodyMediaSrc(notAnImage), null, `${JSON.stringify(notAnImage)} 가 이미지 주소가 됐다`);
     }
     // 그 좁힘이 정상 주소까지 먹지 않는다(음성 짝의 양성 짝).
-    assert.equal(bodyMediaSrc("HTTPS://CDN.example/a.png"), "HTTPS://CDN.example/a.png");
     assert.equal(bodyMediaSrc("/uploads/a.png?v=2"), "/uploads/a.png?v=2");
+    assert.equal(bodyMediaSrc("/media/12"), "/media/12");
 });
 
-test("스킴 판정은 문자가 아니라 파서가 한다 — 브라우저가 읽는 대로 읽는다", () => {
-    // 소독기(`safeUrl.ts`)가 못박은 규율과 같은 자리다. `/^https:/` 문자 검사로 바꾸면 아래가 갈린다.
-    // 제어문자 접두는 URL 파서가 걷어내 **https 로 읽는다** — 브라우저도 그렇게 읽으므로 통과가 옳다.
-    assert.equal(bodyMediaSrc("\u0001https://cdn.example/a.png"), "\u0001https://cdn.example/a.png");
-    // 스킴 안에 낀 탭은 파서가 URL 로 못 읽는다 — 여기서는 **안 그린다**(막는 쪽으로 어긋난다).
-    assert.equal(bodyMediaSrc("ht\tps://cdn.example/a.png"), null);
-    // 슬래시가 없는 https 도 파서가 https 로 읽는다(`https:evil…` 은 상대 경로가 아니다).
-    assert.equal(bodyMediaSrc("https:evil.example/a.png"), "https:evil.example/a.png");
+/**
+ * 🔴 **본문 이미지는 남의 호스트를 자동으로 안 부른다.**
+ *
+ * `<img src="https://남의호스트/…">` 는 방문자가 아무 조작도 안 했는데 브라우저가 그리로 나간다 —
+ * 방문자 IP·UA 가 제3자에게 간다. 팩의 인수 기준(`docs/mockup-to-pack.md` §1-6)이 요구하는
+ * 「외부 호스트 요청 0건」이 이 함수 하나에 달려 있다.
+ *
+ * ⚠ **한 판 `https:` 를 통과시켰고 시험이 그 값을 명시로 단언했다.** 그래서 이 그물은 「빠뜨린
+ *   자리」가 아니라 **뒤집은 결정**이다 — 되살리려면 인수 기준부터 고쳐야 한다.
+ *
+ * ⚠ 스킴은 문자가 아니라 **꼴**로 거른다. 여기서 재는 것은 「우리 주소인가」 하나이고, 우리 주소는
+ *   `/` 로 시작하는 절대경로뿐이다. 그래서 `ht<TAB>tps:`·제어문자 접두처럼 파서마다 달리 읽히는
+ *   값도 전부 한 갈래로 떨어진다 — 판정이 파서 해석에 안 흔들린다.
+ */
+test("\u{1f534} 외부 호스트는 이미지 주소가 못 된다 — 방문자 IP 가 제3자에게 간다", () => {
+    for (const external of [
+        "https://cdn.example/a.png",
+        "HTTPS://CDN.example/a.png", // 대소문자로 못 피한다
+        "http://cdn.example/a.png",
+        "https:evil.example/a.png", // 슬래시 없는 https — 파서는 절대 URL 로 읽는다
+        "//evil.example/a.png", // 프로토콜 상대
+        "\u0001https://cdn.example/a.png", // 제어문자 접두를 파서가 걷어낸다
+        "ht\tps://cdn.example/a.png", // 스킴 안의 탭
+        "/..//evil.example/a.png", // 정규화하면 프로토콜 상대가 된다
+    ]) {
+        assert.equal(
+            bodyMediaSrc(external),
+            null,
+            `${JSON.stringify(external)} 가 img src 로 나간다 — 방문자 브라우저가 그 호스트를 부른다`,
+        );
+    }
+    // **양성 짝** — 이 좁힘이 우리 주소까지 먹으면 본문 이미지가 통째로 죽는다.
+    assert.equal(bodyMediaSrc("media:12"), "/media/12");
+    assert.equal(bodyMediaSrc("/media/12"), "/media/12");
+    assert.equal(bodyMediaSrc("/uploads/a.png?v=2"), "/uploads/a.png?v=2");
 });
 
 /**

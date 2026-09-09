@@ -45,12 +45,22 @@ export function resolveMediaRef(raw: string | null | undefined): number | null {
  *   순간 타입이 막는다.
  *
  * ⚠ **이미지 주소는 링크 주소보다 좁다.** 소독기는 링크용이라 `mailto:`·`tel:`·`#조각`·상대경로를
- *   통과시키는데(링크로는 정당하다) 그것들은 이미지가 될 수 없다. `http:` 도 뺀다 — 사이트는
- *   https 라 혼합 콘텐츠로 어차피 막히고, 막히는 그림은 안 그리는 것이 낫다. 상대경로는
- *   **막는다**: 소독기가 루트 기준으로 정규화해 저작기 미리보기와 **다른 주소**를 그린다.
+ *   통과시키는데(링크로는 정당하다) 그것들은 이미지가 될 수 없다. 상대경로는 **막는다**: 소독기가
+ *   루트 기준으로 정규화해 저작기 미리보기와 **다른 주소**를 그린다.
  *
- * ⚠ **스킴 판정은 파서에 묻는다**(`safeUrl.ts` 와 같은 규율) — 문자로 보면 `ht<TAB>tps:` 처럼
- *   브라우저는 https 로 읽는 값을 놓친다.
+ * ## 🔴 외부 호스트를 안 준다 — 우리가 서빙하는 주소만
+ *
+ * `<img src>` 는 방문자가 아무 조작도 안 했는데 브라우저가 **그 호스트로 나간다** — 방문자 IP·UA 가
+ * 제3자에게 간다. [bodyVideoSrc] 가 자체 업로드 영상만 받는 것과 **같은 이유**이고, 팩의 인수 기준
+ * (`docs/mockup-to-pack.md` §1-6 「외부 호스트 요청 0건」)이 요구하는 바다.
+ *
+ * ⚠ **외부 주소를 「안 그리는 것」이 아니다.** 렌더러가 그것을 **링크로** 그린다 — 외부 영상 펜스와
+ *   같은 판정이다. 저작자 의도는 남고(읽는 사람도 크롤러도 그 그림에 닿는다) 방문자 브라우저는
+ *   자동으로 아무 데도 안 간다. 그래서 이 함수는 「못 쓰는 주소」와 「우리가 안 부를 주소」를
+ *   **둘 다 `null`** 로 돌려주고, 그 둘을 가르는 것은 호출자가 [safeLinkUrl] 에 다시 물어서 한다.
+ *
+ * ⛔ **여기에 `https:` 갈래를 되살리지 마라.** 한 판 그랬고, 그러면 인수 기준이 문자 그대로
+ *   거짓이 된다 — 외부 이미지가 든 글 하나가 그 검사를 떨어뜨린다.
  *
  * 경로 조각을 손으로 잇지 않고 `mediaSrc` 를 부른다 — 주소 형태의 소유자는 client 하나다.
  */
@@ -61,21 +71,12 @@ export function bodyMediaSrc(raw: string | null | undefined): string | null {
     const value = typeof raw === "string" ? raw.trim() : "";
     if (value === "") return null;
 
-    const internal = value.startsWith("/") && !value.startsWith("//");
-    if (!internal && protocolOf(value) !== "https:") return null;
+    // 내부 절대경로만 — `//` 로 시작하면 프로토콜 상대 URL 이라 **외부**다.
+    if (!value.startsWith("/") || value.startsWith("//")) return null;
 
     const safe = safeLinkUrl(value);
     // 소독기가 무력화했거나(`#`) 사이트 루트로 접혔으면(`"   "`·`/..`) 그릴 것이 없다.
     return safe === "#" || safe === "/" ? null : safe;
-}
-
-/** 브라우저와 같은 파서로 스킴을 읽는다. 절대 URL 이 아니면 `null`. */
-function protocolOf(value: string): string | null {
-    try {
-        return new URL(value).protocol;
-    } catch {
-        return null;
-    }
 }
 
 /**

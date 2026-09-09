@@ -395,9 +395,12 @@ test("본문 렌더러 5벌이 주소를 해석기·소독기에 태운다", () 
     // 값을 그대로 단언한다 — 「소독 안 한 자리가 없다」는 자리가 0개여도 참이라 공허하다.
     const expected = [
         "a.href ← safeLinkUrl()", // 본문 링크
+        // 외부 이미지 — `<img>` 로 안 그리고 링크로 그린다(방문자 브라우저가 남의 호스트를
+        // 자동으로 안 부른다). 이 줄이 사라지면 그 갈래가 통째로 없어진 것이다.
+        "a.href ← safeLinkUrl()",
         "a.href ← safeLinkUrl()", // 외부 영상 펜스
+        // 이미지·영상은 한 겹 더 좁다(외부 주소를 안 받는다) — 그래서 자기 함수다.
         "img.src ← bodyMediaSrc()",
-        // 영상은 한 겹 더 좁다(외부 주소를 안 받는다) — 그래서 자기 함수다.
         "video.src ← bodyVideoSrc()",
     ];
     for (const {label, sf} of packCopies("components/Markdown.tsx")) {
