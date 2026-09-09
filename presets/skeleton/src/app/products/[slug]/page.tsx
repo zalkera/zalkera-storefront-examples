@@ -33,8 +33,13 @@ export const revalidate = 300;
  * generateMetadata 와 페이지가 **같은 인자로** 부르므로 Next request memoization 이 1회로 합친다 —
  * 인자가 갈리면 2회가 될 수 있다 — 다만 **태그가 갈리는 것만으로는 안 그렇다**(Next 의 fetch dedupe 키에 `next.tags` 가 없다).
  */
-function loadProduct(slug: string) {
-    return zalkera.getProduct(slug, {tags: ["site-config", "products", `product:${slug}`]});
+async function loadProduct(slug: string) {
+    const product = await zalkera.getProduct(slug, {tags: ["site-config", "products", `product:${slug}`]});
+    // 🔴 **2xx 빈 본문은 `undefined` 정상 반환이다** — 실패가 아니라 `.catch` 를 안 탄다.
+    //    그대로 두면 부르는 쪽이 필드를 읽다 던져 **404 도 200 도 아닌 500** 이 된다.
+    //    판정을 여기 한 자리에 둔다 — 부르는 곳마다 두면 한 곳이 빠진다.
+    if (product == null) notFound();
+    return product;
 }
 
 /**

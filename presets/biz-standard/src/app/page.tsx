@@ -63,9 +63,12 @@ export default async function Home() {
         );
     }
 
-    // 🔴 **`.catch` 만으로는 안 된다** — 2xx 빈 본문은 실패가 아니라 `undefined` 정상 반환이다.
-    //    이 쪽은 프리렌더 대상이라 그때 던지면 **`npm run build` 가 죽는다**(실측 rc=1).
-    const categories = (await zalkera.listProductCategories({tags: ["products"]}).catch(() => [])) ?? [];
+    // 🔴 **`.catch` 만으로는 안 된다** — 2xx 빈 본문은 실패가 아니라 `undefined` **정상 반환**이다.
+    //    이 쪽은 프리렌더 대상이라 그때 던지면 **`npm run build` 가 죽는다**.
+    // 🔴 **그리고 「모름」을 「0건」으로 접지 마라** — `?? []` 로 접으면 백엔드가 안 될 때 방문자에게
+    //    「카테고리가 없습니다」라는 **거짓 진술**을 그린다. 모르면 그 칸을 안 그린다
+    //    (`products/page.tsx` 가 이미 그 형상이다).
+    const categories = (await zalkera.listProductCategories({tags: ["products"]}).catch(() => null)) ?? null;
 
     return (
         <main className="py-8">
@@ -74,15 +77,20 @@ export default async function Home() {
             {config && <JsonLd data={organizationJsonLd(config, siteUrl())} />}
             <h1>{config?.companyName ?? fallbackSiteName()}</h1>
 
-            <h2>카테고리</h2>
-            <ul className="flex flex-wrap gap-2 list-none p-0">
-                {categories.map((c) => (
-                    <li key={c.id} className="rounded-full border border-border px-3 py-1 text-sm">
-                        {c.name} <span className="text-muted">/{c.slug}</span>
-                    </li>
-                ))}
-                {categories.length === 0 && <li className="text-muted">카테고리가 없습니다.</li>}
-            </ul>
+            {/* ⚠ 「모름」이면 이 절을 통째로 안 그린다 — 빈 목록으로 그리면 거짓 진술이 된다. */}
+            {categories != null && (
+                <>
+                    <h2>카테고리</h2>
+                    <ul className="flex flex-wrap gap-2 list-none p-0">
+                        {categories.map((c) => (
+                            <li key={c.id} className="rounded-full border border-border px-3 py-1 text-sm">
+                                {c.name} <span className="text-muted">/{c.slug}</span>
+                            </li>
+                        ))}
+                        {categories.length === 0 && <li className="text-muted">카테고리가 없습니다.</li>}
+                    </ul>
+                </>
+            )}
             {/* 여기가 거래처 홈이 자랄 자리다 — 히어로·상품 그리드·예약 CTA 를 AI 로 붙인다.
                 개발자용 안내 문구는 두지 않는다: 이 골격은 거래처 사이트로 그대로 복제된다.
                 장바구니·마이페이지 링크는 SiteHeader 에 이미 있다. */}

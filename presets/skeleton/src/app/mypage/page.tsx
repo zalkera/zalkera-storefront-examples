@@ -27,7 +27,12 @@ export default async function MyPage({searchParams}: {searchParams: Promise<{r?:
 
     let me: CustomerSummary;
     try {
-        me = await zalkera.getMe(accessToken);
+        const loaded = await zalkera.getMe(accessToken);
+        // 🔴 **2xx 빈 본문은 `undefined` 정상 반환이라 `catch` 를 안 탄다** — 그대로 두면 아래
+        //    `me.name` 이 던져 마이페이지가 **500** 이 된다. 신원을 못 읽은 것이므로 갱신 경유지가
+        //    판단하게 한다(이미 갱신하고 왔으면 로그인).
+        if (loaded == null) redirect(alreadyRefreshed ? "/login" : REFRESH_PATH);
+        me = loaded;
     } catch (error) {
         if (error instanceof ZalkeraError && (error.status === 401 || error.status === 403)) {
             // 이미 갱신하고 왔는데도 거부면 갱신으로 풀 문제가 아니다 — 그때만 로그인.

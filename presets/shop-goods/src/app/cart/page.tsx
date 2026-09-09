@@ -11,7 +11,9 @@ const EMPTY: Cart = {items: [], subtotal: 0, currency: "KRW"};
 export default async function CartPage() {
     const session = await getShopSession();
     const hasIdentity = Boolean(session.accessToken || session.cartSessionKey);
-    const cart = hasIdentity ? await zalkera.getCart(session).catch(() => EMPTY) : EMPTY;
+    // 🔴 `.catch` 만으로는 안 된다 — 2xx 빈 본문은 실패가 아니라 `undefined` **정상 반환**이다.
+    //    그대로 두면 아래 `cart.items` 가 던져 장바구니가 **500** 이 된다.
+    const cart = (hasIdentity ? await zalkera.getCart(session).catch(() => EMPTY) : EMPTY) ?? EMPTY;
 
     return (
         <main className="py-8">

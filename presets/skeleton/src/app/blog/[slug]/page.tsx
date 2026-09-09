@@ -28,8 +28,13 @@ export const revalidate = 300;
  * 인자가 갈리면 2회가 된다(상품 상세와 같은 관례). ⚠ 여기서 「인자」는 **URL·헤더**다 — 태그만
  * 갈리는 것은 dedupe 키에 안 들어가 호출 수를 늘리지 않는다(Next 의 fetch dedupe 키는 method·headers·mode·redirect·credentials·referrer·integrity 뿐이고 `next.tags` 는 없다).
  */
-function loadPost(slug: string) {
-    return zalkera.getPost(slug);
+async function loadPost(slug: string) {
+    const post = await zalkera.getPost(slug);
+    // 🔴 **2xx 빈 본문은 `undefined` 정상 반환이다** — 실패가 아니라 `.catch` 를 안 탄다.
+    //    그대로 두면 부르는 쪽이 필드를 읽다 던져 **404 도 200 도 아닌 500** 이 된다.
+    //    판정을 여기 한 자리에 둔다 — 부르는 곳마다 두면 한 곳이 빠진다.
+    if (post == null) notFound();
+    return post;
 }
 
 export async function generateMetadata({params}: {params: Promise<{slug: string}>}): Promise<Metadata> {
