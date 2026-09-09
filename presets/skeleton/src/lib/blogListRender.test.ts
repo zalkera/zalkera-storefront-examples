@@ -48,6 +48,8 @@ export async function listBlogPage(page) {
     globalThis.__blogListStub.seen.push(page);
     return globalThis.__blogListStub.posts;
 }
+// 이 본문은 안 불린다 — JSX 는 컴포넌트를 호출하지 않고 엘리먼트만 만든다.
+// 단언이 읽는 props 는 그 엘리먼트의 것이다(값은 같다).
 export function BlogList(props) {
     return {stub: "BlogList", props};
 }
@@ -101,9 +103,11 @@ function compileGraph(entry: string, stubs: Record<string, string> = {}) {
             }).outputText,
         );
     }
-    return import(out(entry)) as Promise<Record<string, never>>;
-    // 전사물은 남긴다 — 적재가 지연되므로(dynamic import 안의 정적 import) 여기서 지우면 못 읽는다.
-    // `node_modules/.cache` 아래이고 이미 무시 대상이다.
+    // ⚠ **`import()` 가 풀린 **뒤에** 지운다** — 그 프로미스는 정적 import 까지 다 적재된 뒤에
+    //    풀리므로 그때는 파일이 필요 없다. 동기적으로 지우면 못 읽는다(그래서 `finally` 가 아니다).
+    return import(out(entry)).finally(() => rmSync(dir, {recursive: true, force: true})) as Promise<
+        Record<string, never>
+    >;
 }
 
 /** 그 쪽을 실제로 그린 HTML. `posts` 를 넣어 네트워크를 안 탄다. */
@@ -228,10 +232,20 @@ test("🔴 라우트 — 글 0건인 4쪽은 404 를 던진다", async () => {
     assert.ok(isNotFound(result.threw), `404 가 아닌 것을 던졌다: ${String(result.threw)}`);
 });
 
-/** 🔴 **백엔드 장애는 「범위 밖」이 아니다** — 404 를 내면 ISR 로 굳어 복구 뒤에도 404 가 나간다. */
-test("🔴 라우트 — 백엔드가 죽으면(null) 404 를 안 던진다", async () => {
-    const result = await call("4", null);
-    assert.ok("value" in result, `백엔드 장애에 404 를 던졌다: ${String((result as {threw: unknown}).threw)}`);
+/**
+ * 🔴 **백엔드 장애는 「범위 밖」이 아니다** — 404 를 내면 ISR 로 굳어 복구 뒤에도 404 가 나간다.
+ *
+ * `undefined` 도 같은 자리다: `@zalkera/client` 는 2xx **빈 본문**에 `undefined` 를 돌려주고,
+ * `=== null` 로만 갈랐을 때 라우트가 `TypeError` 로 죽었다(500).
+ */
+test("🔴 라우트 — 백엔드가 죽으면(null·undefined) 404 를 안 던진다", async () => {
+    for (const 모름 of [null, undefined]) {
+        const result = await call("4", 모름);
+        assert.ok(
+            "value" in result,
+            `${String(모름)} 에 던졌다: ${String((result as {threw: unknown}).threw)}`,
+        );
+    }
 });
 
 /** **양성 짝** — 정상 쪽을 404 로 만들면 2쪽 이후가 통째로 사라진다. */

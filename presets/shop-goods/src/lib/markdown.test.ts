@@ -44,14 +44,82 @@ test("앵커는 «이미 쓰인 id» 와도 안 겹친다 — 번호 기억이 �
  * 중복에 k번 탐침해 제목 수의 제곱이 된다(실측: 2만 개 → 파서 13.2초 · 그 쪽 첫 방문자 15.3초).
  * 재현: 이 파일을 `node --experimental-strip-types --test src/lib/markdown.test.ts` 로 돌린다.
  */
-test("예산 — 같은 제목 20,000개가 1초 안에 끝난다", () => {
+/**
+ * 🔴 **제목 원장은 예산 밖에서 재야 한다.**
+ *
+ * `parseMarkdown` 으로 재면 블록 예산이 2,000개에서 끊어 원장이 2,000번밖에 안 돈다 — 그 상태로는
+ * 원장을 `Set` 으로 되돌리는 제곱 결함(`headingId` KDoc 의 🔴)이 문턱 안에 들어와 **안 죽는다**.
+ * 그래서 술어를 직접 부른다. 예산 상수를 나중에 올려도 이 시험의 뜻이 안 바뀐다.
+ *
+ * 재현: `headingId` 의 `used.get(base) ?? 2` 를 `2` 로 되돌리면 이 시험이 red 다.
+ */
+test("🔴 원장 — 같은 제목 20,000개의 id 가 1초 안에 갈린다", () => {
+    const used = new Map<string, number>();
+    const started = process.hrtime.bigint();
+    const ids = Array.from({length: 20_000}, () => headingId("배송 안내", used));
+    const ms = Number(process.hrtime.bigint() - started) / 1e6;
+
+    strictEqual(new Set(ids).size, 20_000, "id 가 겹친다 — 같은 앵커가 둘이면 인용 주소가 갈린다");
+    ok(ms < 1000, `제목 원장이 ${ms.toFixed(0)}ms 걸렸다 — 제곱 비용이 돌아왔다`);
+});
+
+test("예산 — 같은 제목 20,000개짜리 본문이 1초 안에 끝난다", () => {
     const started = process.hrtime.bigint();
     const blocks = parseMarkdown("## 배송 안내\n\n".repeat(20_000));
     const ms = Number(process.hrtime.bigint() - started) / 1e6;
-    // 제목 원장은 여기서도 돈다(같은 문구 2만 개 → id 가 2만 개 갈린다). 블록 예산이 걸려도
-    // **그 전까지의 비용**은 그대로이므로 이 시험의 뜻은 유지된다.
     ok(blocks.length > 0);
     ok(ms < 1000, `제목 파싱이 ${ms.toFixed(0)}ms 걸렸다 — 제곱 비용이 돌아왔다`);
+});
+
+/**
+ * 🔴 **인라인 노드에도 예산이 있다.**
+ *
+ * 한 문단·한 목록은 내용이 얼마든 **블록 1개**이고 표 칸은 0개다 — 블록·칸 예산이 둘 다 「합법」
+ * 이라 답한다. 그 씨앗 하나(본문 293KB)가 힙 128MiB 에서 프로세스를 죽였다
+ * (`node --max-old-space-size=128` → rc=134).
+ *
+ * 재현: `parseInline` 의 `if (out.length >= limit) break;` 를 지우면 이 시험이 red 다.
+ */
+test("🔴 예산 — 한 문단의 인라인 노드가 20,000개에서 멈추고 남은 글자는 그대로 남는다", () => {
+    const blocks = parseMarkdown("`x`".repeat(100_000) + "끝표시");
+
+    strictEqual(blocks.length, 1, "블록 예산은 이 씨앗을 못 잡는다 — 그래서 인라인 예산이 있다");
+    const nodes = (blocks[0] as {text: Array<{kind: string; text: string}>}).text;
+    ok(nodes.length <= 20_001, `인라인 노드가 ${nodes.length}개 — 예산이 안 걸렸다`);
+
+    // 🔴 **글자가 사라지지 않는다** — 남은 것은 서식 없이 한 덩어리로 꼬리에 남는다.
+    const tail = nodes[nodes.length - 1]!;
+    strictEqual(tail.kind, "text");
+    ok(tail.text.endsWith("끝표시"), "본문 끝이 사라졌다");
+    ok(tail.text.includes("`x`"), "남은 글자가 서식째 안 남았다");
+});
+
+/** **양성 짝** — 예산이 정상 문단의 서식을 먹으면 링크·강조가 통째로 사라진다. */
+test("예산 안의 문단은 서식이 그대로 산다", () => {
+    const blocks = parseMarkdown("자세한 것은 [배송 정책](/policies) 과 **반품** 안내를 보세요.");
+    const kinds = (blocks[0] as {text: Array<{kind: string}>}).text.map((n) => n.kind);
+    ok(kinds.includes("link"), `링크가 사라졌다: ${JSON.stringify(kinds)}`);
+    ok(kinds.includes("strong"), `강조가 사라졌다: ${JSON.stringify(kinds)}`);
+});
+
+/**
+ * 표 칸도 같은 예산을 쓴다 — 칸마다 인라인 파싱을 하므로 같은 자원이다.
+ *
+ * ⚠ **총수 상한은 예산 + (블록 수 + 칸 수)** 다. 예산이 바닥나도 블록·칸마다 「남은 글자」 한
+ *   덩어리는 남기 때문이다(그게 글자를 안 잃는 방법이다). 그 합이 상한이고, 이 시험은 그것을 잰다.
+ */
+test("표 칸의 인라인도 같은 예산에서 나온다", () => {
+    const cols = 4;
+    const head = `|${Array.from({length: cols}, (_, c) => ` c${c} `).join("|")}|`;
+    const delim = `|${"---|".repeat(cols)}`;
+    const row = `|${Array.from({length: cols}, () => " `a` [b](/c) **d** ").join("|")}|`;
+    const blocks = parseMarkdown([head, delim, ...Array(3_000).fill(row)].join("\n"));
+
+    const table = blocks[0] as {rows: {length: number}[][]};
+    const nodes = table.rows.reduce((sum, r) => sum + r.reduce((n, cell) => n + cell.length, 0), 0);
+    // 20,000(예산) + 8,000(칸마다 남는 글자 한 덩어리) = 28,000 이 상한이다.
+    ok(nodes <= 28_000, `표 안 인라인 노드가 ${nodes}개 — 예산 밖이다`);
+    ok(nodes > 8_000, "칸마다 한 덩어리씩만 남았다 — 예산이 정상 표의 서식을 먹었다");
 });
 
 /**
@@ -348,6 +416,33 @@ function tableCellCount(blocks: ReturnType<typeof parseMarkdown>): number {
         return sum + t.head.length + t.rows.reduce((n, row) => n + row.length, 0);
     }, 0);
 }
+
+/**
+ * 🔴 **문단 경계와 표 판정은 같은 술어를 써야 한다.**
+ *
+ * 문단 경계에서 「표처럼 보이나」(`tableStartsAt`)로 끊고 표 판정에서는 예산까지 보면, 예산이
+ * 소진된 뒤 표처럼 생긴 줄마다 문단이 끊겨 **빈 문단이 줄 수만큼 생긴다**(그리고 블록 예산이
+ * 없으면 같은 줄을 영원히 다시 본다).
+ *
+ * 재현: `parseMarkdown` 의 문단 경계 `startsTable(i) !== null` 을 `tableStartsAt(lines, i) !== null`
+ * 로 바꾸면 이 시험이 red 다.
+ */
+test("🔴 예산 소진 뒤 표처럼 생긴 줄은 문단 하나로 남는다 — 빈 문단을 만들지 않는다", () => {
+    const wide = (cols: number, rows: number) => {
+        const head = `|${Array.from({length: cols}, (_, c) => ` c${c} `).join("|")}|`;
+        const delim = `|${"---|".repeat(cols)}`;
+        const row = `|${Array.from({length: cols}, () => " v ").join("|")}|`;
+        return [head, delim, ...Array(rows).fill(row)].join("\n");
+    };
+    // 첫 표가 칸 예산을 다 쓰고, 뒤따르는 평범한 가격표는 문단으로 남아야 한다.
+    const blocks = parseMarkdown(`${wide(4, 2_000)}\n\n${wide(4, 200)}`);
+
+    const empty = blocks.filter(
+        (b) => b.kind === "paragraph" && (b as {text: unknown[]}).text.length === 0,
+    ).length;
+    strictEqual(empty, 0, `빈 문단이 ${empty}개 생겼다 — 문단 경계가 표 판정과 갈렸다`);
+    ok(blocks.length < 100, `블록이 ${blocks.length}개 — 줄마다 문단이 끊겼다`);
+});
 
 test("🔴 예산 — 넓은 표는 칸 예산에서 멈춘다", () => {
     // 열 상한만으로는 못 막는다. 32열 표는 행이 늘수록 비용이 곱으로 는다 — 977KB 본문이

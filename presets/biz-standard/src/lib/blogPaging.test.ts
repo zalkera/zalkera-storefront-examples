@@ -103,9 +103,13 @@ test("🔴 범위 밖 쪽은 없는 쪽이다 — 200 빈 목록을 내지 않�
  * 재현: 백엔드를 내린 채 `/blog/page/4` 를 한 번 받고, 백엔드를 올린 뒤 다시 받아
  * `curl -sI localhost:3000/blog/page/4 | grep -i 'x-nextjs-cache\|HTTP/'` 를 견준다.
  */
-test("🔴 백엔드가 죽으면(null) 범위 밖이라 하지 않는다 — 404 가 캐시에 굳는다", () => {
+test("🔴 백엔드가 죽으면(null·undefined) 범위 밖이라 하지 않는다 — 404 가 캐시에 굳는다", () => {
     for (const page of [2, 4, 999]) {
         assert.equal(isOutOfRange(page, null), false, `${page}쪽이 백엔드 장애에 404 를 낸다`);
+        // 🔴 **`undefined` 도 「모름」이다** — `@zalkera/client` 는 2xx **빈 본문**에 `null` 이
+        //    아니라 `undefined` 를 돌려준다(`if (!text) return void 0`). `=== null` 로만 갈랐을 때
+        //    그 응답이 `TypeError: Cannot read properties of undefined` 였다.
+        assert.equal(isOutOfRange(page, undefined), false, `${page}쪽이 빈 본문에 던지거나 404 를 낸다`);
     }
     // **양성 짝** — 「무조건 false」면 진짜 범위 밖이 200 빈 목록으로 선다.
     assert.equal(isOutOfRange(4, {content: []}), true);
