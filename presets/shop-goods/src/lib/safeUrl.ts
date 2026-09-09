@@ -77,14 +77,23 @@ export function internalPath(raw: string): string | null {
 export function externalHref(raw: string | null | undefined): string | null {
     if (typeof raw !== "string") return null;
     const sanitized = safeLinkUrl(raw);
-    try {
-        const url = new URL(sanitized);
-        return url.protocol === "https:" || url.protocol === "http:" ? url.href : null;
-    } catch {
-        // 절대 URL 이 아니다 — 내부 경로(`/…`)·조각(`#`)·질의(`?`)·소독기가 무력화한 `#`.
-        return null;
-    }
+    // ⚠ **던지는 파싱을 본문의 모든 내부 링크마다 돌리지 않는다.** 소독기가 내부 경로·조각·질의로
+    //   접은 값에서 `new URL()` 은 **항상 던지고**, 그 예외 생성·스택 수집이 링크 하나당 3.5~5.6 µs
+    //   다(스택이 깊을수록 비싸고 React 렌더는 깊다). 그 셋은 절대 URL 일 수 없으므로 먼저 끊는다.
+    //   재현: `node -e 'const f=()=>{try{new URL("/about")}catch{}};for(let i=0;i<5000;i++)f();
+    //   const a=process.hrtime.bigint();for(let i=0;i<200000;i++)f();
+    //   console.log(Number(process.hrtime.bigint()-a)/200000+" ns/op")'`
+    const head = sanitized.charCodeAt(0);
+    if (head === SLASH || head === HASH || head === QUESTION) return null;
+    // `URL.parse` 는 못 읽으면 **던지지 않고** `null` 을 준다(Node 22+·최신 브라우저).
+    const url = URL.parse(sanitized);
+    if (url === null) return null;
+    return url.protocol === "https:" || url.protocol === "http:" ? url.href : null;
 }
+
+const SLASH = 0x2f;
+const HASH = 0x23;
+const QUESTION = 0x3f;
 
 export function safeLinkUrl(raw: string | null | undefined): string {
     if (!raw) return "#";

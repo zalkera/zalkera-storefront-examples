@@ -27,7 +27,28 @@ const SRC = resolve(HERE, "..");
  *
  * 재현: `node --experimental-strip-types --test src/lib/markdownRender.test.ts; echo rc=$?` → rc=0
  */
+/**
+ * 전사한 모듈을 **한 번만** 만든다.
+ *
+ * ⚠ 호출마다 전사하면 같은 파일을 이 파일의 호출 수만큼 다시 컴파일한다 — 이 파일 소요의 절반
+ *   가까이가 재전사였다.
+ *
+ * 재현: `compiled ??= compileMarkdown()` 을 `await compileMarkdown()` 으로 되돌리고
+ * `time node --experimental-strip-types --test src/lib/markdownRender.test.ts` 를 견준다.
+ */
+let compiled: Promise<{Markdown: (props: {source: string}) => unknown}> | null = null;
+
 async function renderMarkdown(source: string): Promise<string> {
+    compiled ??= compileMarkdown();
+    const [{Markdown}, {renderToStaticMarkup}, {createElement}] = await Promise.all([
+        compiled,
+        import("react-dom/server"),
+        import("react"),
+    ]);
+    return renderToStaticMarkup(createElement(Markdown as never, {source}));
+}
+
+async function compileMarkdown() {
     // ⚠ **`/tmp` 에 쓰면 안 된다.** node 는 맨 지정자(`react`)를 **가져오는 파일 기준**으로 푼다 —
     //    레포 밖이면 `Cannot find package 'react'` 다. `node_modules/.cache` 아래면 해석이 레포
     //    `node_modules` 로 올라간다(그 디렉터리는 이미 무시 대상이다).
@@ -52,14 +73,9 @@ async function renderMarkdown(source: string): Promise<string> {
         }).outputText;
         const file = join(dir, "Markdown.mjs");
         writeFileSync(file, js);
-
-        const [{Markdown}, {renderToStaticMarkup}] = await Promise.all([
-            import(file),
-            import("react-dom/server"),
-        ]);
-        const {createElement} = await import("react");
-        return renderToStaticMarkup(createElement(Markdown, {source}));
+        return (await import(file)) as {Markdown: (props: {source: string}) => unknown};
     } finally {
+        // 모듈은 이미 적재됐다 — 파일은 남길 이유가 없다.
         rmSync(dir, {recursive: true, force: true});
     }
 }
@@ -83,8 +99,9 @@ test("🔴 남의 호스트는 그림이 아니라 링크다 — `img src` 면 �
  * 「안 그리면 저작자의 그림이 사라진다」가 이 트랜치의 근거 문장이므로, 그 문장을 참으로
  * 유지하는 것이 이 시험이다.
  *
- * 재현: `bodyImageHref` 의 `new URL(href).protocol` 갈래를 `/^https?:\/\//i.test(href)` 로 되돌리고
- * `node --experimental-strip-types --test src/lib/markdownRender.test.ts` → 1건 red
+ * 재현: `safeUrl.ts` 의 `externalHref` 를 `/^https?:\/\//i.test(sanitized) ? sanitized : null` 로
+ * 되돌리고 `node --experimental-strip-types --test src/lib/markdownRender.test.ts` → 1건 red
+ * (판정 소유자가 `bodyImageHref` 에서 그쪽으로 옮겼다)
  */
 test("🔴 파서가 http(s) 로 읽는 꼴은 하나도 안 잃는다", async () => {
     for (const odd of [
