@@ -304,7 +304,7 @@ const MAX_LEAF_NODES_PER_DOCUMENT = 8_000;
  *
  * 재현(예산이 실제로 무는 자리 — 노드 수):
  * `node --experimental-strip-types -e 'import("./src/lib/markdown.ts").then(({parseMarkdown})=>{const b=parseMarkdown("\`x\`".repeat(1e6));console.log("블록",b.length,"인라인",b[0].text.length)})'`
- * → `블록 1 인라인 20001`
+ * → `블록 1 인라인 10001` (`` `x` `` 는 `code` 라 몫 2 — 20,000/2 = 10,000 + 꼬리 글자 1)
  *
  * ⚠ **이 상수들을 올리기 전에 산출을 재라.** 「좀 넉넉하게」로 올리면 그만큼이 그대로 한 요청의
  *   메모리·바이트가 된다. 재는 법은 `npm run build` 뒤 배송 형상(`.next/standalone/server.js`)을
@@ -312,7 +312,6 @@ const MAX_LEAF_NODES_PER_DOCUMENT = 8_000;
  *   형상이 아니다(`output: standalone`).
  */
 const MAX_BLOCKS_PER_DOCUMENT = 2_000;
-
 
 /**
  * 한 **문서**의 인라인 예산(위 가중치로 센 몫의 합).

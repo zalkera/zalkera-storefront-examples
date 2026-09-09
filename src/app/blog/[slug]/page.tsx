@@ -69,7 +69,10 @@ export async function generateMetadata({params}: {params: Promise<{slug: string}
 async function loadRelated(post: PostDetail): Promise<PostSummary[]> {
     if (post.categoryId == null) return [];
 
-    const categories = await zalkera.listCategories().catch(() => []);
+    // 🔴 **`.catch` 만으로는 안 된다.** 백엔드가 2xx 로 **빈 본문**을 주면 클라이언트가 `undefined`
+    //    를 **정상 반환**한다 — 실패가 아니라 `.catch` 를 안 탄다. 그러면 다음 줄이 던져 이 쪽이
+    //    404 도 200 도 아닌 **500** 이 된다. 결여도 「없음」으로 받는다.
+    const categories = (await zalkera.listCategories().catch(() => [])) ?? [];
     const category = categories.find((it) => it.id === post.categoryId)?.slug;
     if (!category) return [];
 

@@ -17,15 +17,15 @@ import {BLOG_PAGE_SIZE, blogPagePath, hasNextPage} from "@/lib/blogPaging";
  *   그 결과를 [BlogList] 에 넘긴다.
  */
 export async function listBlogPage(page: number) {
-    return zalkera
-        .listPosts({page: page - 1, size: BLOG_PAGE_SIZE, sort: "publishedAt,desc"})
-        .catch(() => null);
+    return zalkera.listPosts({page: page - 1, size: BLOG_PAGE_SIZE, sort: "publishedAt,desc"}).catch(() => null);
 }
 
 export async function BlogList(props: {page: number; posts?: Awaited<ReturnType<typeof listBlogPage>>}) {
     const {page} = props;
-    // ⚠ **인자가 «왔는가» 로 가른다** — `!== undefined` 로 가르면 라우트가 넘긴 값이 `undefined`
-    //    (백엔드가 2xx 빈 본문을 준 경우)일 때 가드가 풀려 **같은 쪽을 두 번** 부른다.
+    // ⚠ **인자가 «왔는가» 로 가른다.** `!== undefined` 로 가르면 라우트가 넘긴 값이 `undefined`
+    //    (백엔드가 2xx 빈 본문을 준 경우)일 때 가드가 풀려 **부르지 않기로 한 자리에서 부른다**.
+    //    ⚠ 지금 배송 형상에서는 Next 요청 메모이제이션이 그 왕복을 합쳐서 눈에 안 보인다 —
+    //    「두 번 나간다」로 적지 마라(실물에서 재현되지 않는다). 판정을 정확히 두는 것이 이유다.
     const posts = "posts" in props ? props.posts : await listBlogPage(page);
     const items = posts?.content ?? [];
     const base = siteUrl();

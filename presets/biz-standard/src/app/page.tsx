@@ -63,7 +63,9 @@ export default async function Home() {
         );
     }
 
-    const categories = await zalkera.listProductCategories({tags: ["products"]}).catch(() => []);
+    // 🔴 **`.catch` 만으로는 안 된다** — 2xx 빈 본문은 실패가 아니라 `undefined` 정상 반환이다.
+    //    이 쪽은 프리렌더 대상이라 그때 던지면 **`npm run build` 가 죽는다**(실측 rc=1).
+    const categories = (await zalkera.listProductCategories({tags: ["products"]}).catch(() => [])) ?? [];
 
     return (
         <main className="py-8">

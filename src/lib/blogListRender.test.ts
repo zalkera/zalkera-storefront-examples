@@ -43,9 +43,8 @@ const compiled = new Map<string, Promise<Record<string, never>>>();
 
 /** 라우트 시험이 쓰는 가짜 목록 모듈 — 백엔드 왕복 없이 응답을 주입한다. */
 const BLOG_LIST_STUB = `
-globalThis.__blogListStub = {posts: null, seen: []};
-export async function listBlogPage(page) {
-    globalThis.__blogListStub.seen.push(page);
+globalThis.__blogListStub = {posts: null};
+export async function listBlogPage() {
     return globalThis.__blogListStub.posts;
 }
 // 이 본문은 안 불린다 — JSX 는 컴포넌트를 호출하지 않고 엘리먼트만 만든다.
@@ -203,7 +202,7 @@ type RouteModule = {
 };
 
 /** 스텁이 심는 자리. 전사물을 경로로 다시 열지 않으려고 전역에 둔다(이 프로세스 안에서만 산다). */
-type StubState = {posts: unknown; seen: number[]};
+type StubState = {posts: unknown};
 const stubState = (): StubState => (globalThis as {__blogListStub?: StubState}).__blogListStub!;
 
 /** `notFound()` 가 던지는 것인가 — Next 는 `digest` 로 표시한다. */
@@ -245,10 +244,7 @@ test("🔴 라우트 — 글 0건인 4쪽은 404 를 던진다", async () => {
 test("🔴 라우트 — 백엔드가 죽으면(null·undefined) 404 를 안 던진다", async () => {
     for (const 모름 of [null, undefined]) {
         const result = await call("4", 모름);
-        assert.ok(
-            "value" in result,
-            `${String(모름)} 에 던졌다: ${String((result as {threw: unknown}).threw)}`,
-        );
+        assert.ok("value" in result, `${String(모름)} 에 던졌다: ${String((result as {threw: unknown}).threw)}`);
     }
 });
 

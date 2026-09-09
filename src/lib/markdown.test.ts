@@ -78,7 +78,7 @@ test("예산 — 같은 제목 20,000개짜리 본문이 1초 안에 끝난다",
  * 한 문단은 내용이 얼마든 **블록 1개**이고 잎은 0개다 — 블록·잎 예산이 둘 다 「합법」이라
  * 답한다. 인라인 문법만 이어 붙인 본문 하나가 두 예산을 통과한 채 힙을 넘긴다.
  *
- * 재현: `parseInline` 의 `if (out.length >= limit) break;` 를 지우면 이 시험이 red 다.
+ * 재현: `parseInline` 의 `if (spent >= limit) break;` 를 지우면 이 시험이 red 다.
  */
 test("🔴 예산 — 한 문단의 인라인 노드가 20,000개에서 멈추고 남은 글자는 그대로 남는다", () => {
     const blocks = parseMarkdown("`x`".repeat(100_000) + "끝표시");
@@ -114,11 +114,7 @@ test("🔴 예산 — 목록 항목이 8,000개에서 멈추고 남은 줄은 �
         //    `startsList` 에서 예산 판정을 빼면 항목 수는 그대로인데 **빈 목록 블록**이 블록 예산까지
         //    쌓인다(2,001개). 항목만 세면 그 변이가 안 죽는다.
         strictEqual(blocks.length, 2, `블록이 ${blocks.length}개 — 빈 블록이 쌓였다`);
-        strictEqual(
-            blocks.filter((b) => b.kind === "list" && b.items.length === 0).length,
-            0,
-            "빈 목록 블록이 생겼다",
-        );
+        strictEqual(blocks.filter((b) => b.kind === "list" && b.items.length === 0).length, 0, "빈 목록 블록이 생겼다");
 
         // 🔴 **글자가 사라지지 않고, 줄마다 문단이 끊기지도 않는다**(문단 경계가 같은 술어를 쓴다).
         const paragraphs = blocks.filter((b) => b.kind === "paragraph");
@@ -157,7 +153,11 @@ test("🔴 예산 — 비싼 인라인일수록 적게 받는다", () => {
     ok(image < link, `이미지 ${image} · 링크 ${link} — 가중치가 안 걸렸다`);
     ok(link < emphasis, `링크 ${link} · 강조 ${emphasis} — 가중치가 안 걸렸다`);
     // 그리고 셋 다 예산 안이다(가중치가 예산을 늘리는 방향으로 새면 안 된다).
-    for (const [name, n] of [["이미지", image], ["링크", link], ["강조", emphasis]] as const) {
+    for (const [name, n] of [
+        ["이미지", image],
+        ["링크", link],
+        ["강조", emphasis],
+    ] as const) {
         ok(n <= 20_001, `${name} 노드가 ${n}개 — 예산 밖이다`);
     }
 });
@@ -506,9 +506,7 @@ test("🔴 예산 소진 뒤 표처럼 생긴 줄은 문단 하나로 남는다 
     // 첫 표가 칸 예산을 다 쓰고, 뒤따르는 평범한 가격표는 문단으로 남아야 한다.
     const blocks = parseMarkdown(`${wide(4, 2_000)}\n\n${wide(4, 200)}`);
 
-    const empty = blocks.filter(
-        (b) => b.kind === "paragraph" && (b as {text: unknown[]}).text.length === 0,
-    ).length;
+    const empty = blocks.filter((b) => b.kind === "paragraph" && (b as {text: unknown[]}).text.length === 0).length;
     strictEqual(empty, 0, `빈 문단이 ${empty}개 생겼다 — 문단 경계가 표 판정과 갈렸다`);
     ok(blocks.length < 100, `블록이 ${blocks.length}개 — 줄마다 문단이 끊겼다`);
 });
