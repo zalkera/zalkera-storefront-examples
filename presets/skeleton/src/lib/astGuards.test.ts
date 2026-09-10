@@ -553,3 +553,159 @@ test("양성 통제군 — 그 판정이 «자기가 만든 이름» 을 구분�
     );
     assert.deepEqual(nameSources(sf), ["bodyMediaSrc ← 지역 선언", "safeLinkUrl ← @/lib/safeUrl"]);
 });
+
+/**
+ * 🔴 **섹션 렌더러 14종에는 그물이 0 이었다.**
+ *
+ * `Markdown.tsx` 는 5벌의 주소 배선을 값으로 못박는데, `components/sections/**` 는 아무것도 안
+ * 잠겨 있었다. 심의가 `HeroSection.tsx` 의 `assetPath(c?.asset)` 을 `asString(c?.asset)` 으로
+ * 바꿔 **임의 제3자 `<img src>`** 를 세웠는데 `validate`·`test`·`verify` 가 전부 초록이었다.
+ * AI 유지보수 레인 A 가 손대는 것이 정확히 이 파일들이다.
+ *
+ * ⚠ **파일마다 목록을 값으로 못박지 않는다** — 섹션은 얼굴이라 갈려도 되고, 못박으면 새 섹션이
+ *   생길 때마다 시험이 낡는다. 대신 **술어**를 건다: 주소를 내는 속성은 전부 «소독기를 거친 것»
+ *   이거나 «리터럴» 이어야 한다. 그래서 새 섹션도 자동으로 분모에 든다.
+ *
+ * ⚠ 섹션의 관례는 **`.map()` 안에서 소독하고 객체에 담아 그리는 것**이라(`{asset: assetPath(...)}`
+ *   → `item.asset`), 한 단계만 되짚는 `urlWiring` 으로는 그 꼴을 「식」으로만 읽는다. 그래서
+ *   여기서는 **객체 리터럴 프로퍼티까지** 되짚는다 — 안 그러면 안전한 자리가 전부 빨강이 돼
+ *   시험이 곧 꺼진다.
+ */
+const SECTION_URL_SANITIZERS = new Set(["assetPath", "mediaSrc", "safeLinkUrl", "blogPagePath"]);
+
+/** 주소를 내는 **HTML** 속성만(컴포넌트 prop 은 URL 이 아니다 — `JsonLd.data` 는 JSON-LD 다). */
+const SECTION_URL_ATTRS = new Set([
+    "src",
+    "srcSet",
+    "href",
+    "poster",
+    "action",
+    "formAction",
+    "ping",
+    "cite",
+    "background",
+    "style",
+]);
+
+/**
+ * 섹션 파일 하나의 «주소 속성 → 출처» 목록. 출처를 못 따라가면 그 사실을 적는다(«?» 도 값이다).
+ *
+ * 되짚는 것: 변수 선언 · **객체 리터럴 프로퍼티** · 삼항·`&&`·`??` 의 **모든 가지**.
+ */
+function sectionUrlOrigins(sf: TS.SourceFile): string[] {
+    const varInit = new Map<string, TS.Node[]>();
+    const propInit = new Map<string, TS.Node[]>();
+    const push = (m: Map<string, TS.Node[]>, k: string, v: TS.Node): void => {
+        const list = m.get(k) ?? [];
+        list.push(v);
+        m.set(k, list);
+    };
+    const collect = (node: TS.Node): void => {
+        if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer) {
+            push(varInit, node.name.text, node.initializer);
+        }
+        if (ts.isPropertyAssignment(node) && ts.isIdentifier(node.name)) {
+            push(propInit, node.name.text, node.initializer);
+        }
+        // `{asset}` 축약 — 값의 출처는 같은 이름의 변수다.
+        if (ts.isShorthandPropertyAssignment(node)) push(propInit, node.name.text, node.name);
+        ts.forEachChild(node, collect);
+    };
+    collect(sf);
+
+    const out: string[] = [];
+    const origin = (node: TS.Node, depth: number): string => {
+        if (depth > 4) return "?(너무 깊다)";
+        if (ts.isParenthesizedExpression(node)) return origin(node.expression, depth);
+        if (ts.isNonNullExpression(node) || ts.isAsExpression(node)) return origin(node.expression, depth);
+        if (ts.isJsxExpression(node)) return node.expression ? origin(node.expression, depth) : "?(빈 식)";
+        if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) return "리터럴";
+        if (ts.isTemplateExpression(node)) {
+            return node.templateSpans.map((sp) => origin(sp.expression, depth + 1)).join("+") || "리터럴";
+        }
+        if (ts.isCallExpression(node)) {
+            const callee = ts.isIdentifier(node.expression) ? node.expression.text : node.expression.getText(sf);
+            return SECTION_URL_SANITIZERS.has(callee) ? "소독" : `${callee}()`;
+        }
+        if (ts.isConditionalExpression(node)) {
+            const both = [origin(node.whenTrue, depth + 1), origin(node.whenFalse, depth + 1)];
+            return both.every((o) => o === "소독" || o === "리터럴") ? "소독" : both.join("|");
+        }
+        if (ts.isBinaryExpression(node)) {
+            const both = [origin(node.left, depth + 1), origin(node.right, depth + 1)];
+            return both.every((o) => o === "소독" || o === "리터럴") ? "소독" : both.join("|");
+        }
+        const name = ts.isIdentifier(node)
+            ? node.text
+            : ts.isPropertyAccessExpression(node)
+              ? node.name.text
+              : ts.isPropertyAccessChain(node)
+                ? node.name.text
+                : null;
+        if (name === null) return `?(${node.getText(sf).slice(0, 40)})`;
+        const seeds = [...(varInit.get(name) ?? []), ...(propInit.get(name) ?? [])].filter((n) => n !== node);
+        if (seeds.length === 0) return `?(${name})`;
+        const kinds = new Set(seeds.map((n) => origin(n, depth + 1)));
+        return kinds.size === 1 ? [...kinds][0]! : `여러 갈래(${[...kinds].sort().join("|")})`;
+    };
+
+    const visit = (node: TS.Node): void => {
+        if (ts.isJsxSelfClosingElement(node) || ts.isJsxOpeningElement(node)) {
+            const tag = node.tagName.getText(sf);
+            const isHtml = /^[a-z]/.test(tag); // 컴포넌트(대문자)의 prop 은 이 축이 아니다
+            for (const attr of node.attributes.properties) {
+                if (!ts.isJsxAttribute(attr) || !ts.isIdentifier(attr.name)) continue;
+                const an = attr.name.text;
+                if (!isHtml || !SECTION_URL_ATTRS.has(an) || attr.initializer === undefined) continue;
+                out.push(`${tag}.${an} ← ${origin(attr.initializer, 0)}`);
+            }
+        }
+        ts.forEachChild(node, visit);
+    };
+    visit(sf);
+    return out;
+}
+
+test("🔴 섹션 렌더러가 내는 주소는 전부 소독기를 거친다 — 5벌 전수", () => {
+    const dir = "components/sections";
+    const names = readdirSync(join(PACK_SRCS[0]![1], dir))
+        .filter((f) => f.endsWith(".tsx"))
+        .sort();
+    assert.ok(names.length >= 10, `섹션이 ${names.length}개뿐이다 — 분모가 무너졌다(이 시험이 공허참이다)`);
+
+    const bad: string[] = [];
+    let checked = 0;
+    for (const name of names) {
+        for (const {label, sf} of packCopies(`${dir}/${name}`)) {
+            for (const entry of sectionUrlOrigins(sf)) {
+                checked += 1;
+                const from = entry.split("← ")[1] ?? "";
+                if (from !== "소독" && from !== "리터럴") bad.push(`${label} ${name}: ${entry}`);
+            }
+        }
+    }
+    assert.deepEqual(bad, [], "소독기를 안 거친 주소 배선");
+    // 통제군 — 훑어서 본 배선이 0이면 위 단언이 공허참이다.
+    assert.ok(checked > 0, "섹션에서 주소 배선을 하나도 못 봤다 — 훑개가 죽었다");
+});
+
+test("양성 통제군 — 섹션 판정이 «소독 안 한 값» 을 구분한다", () => {
+    const mk = (code: string): TS.SourceFile =>
+        ts.createSourceFile("m.tsx", code, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    // 소독 → 통과
+    assert.deepEqual(sectionUrlOrigins(mk("const a = assetPath(x); const v = <img src={a} />;")), ["img.src ← 소독"]);
+    // `.map()` 안에서 소독하고 객체로 담는 섹션 관례 → 통과
+    assert.deepEqual(
+        sectionUrlOrigins(
+            mk("const items = raw.map((i) => ({asset: assetPath(i.a)})); const v = <img src={item.asset} />;"),
+        ),
+        ["img.src ← 소독"],
+    );
+    // 소독을 뺀 형태 → 잡힌다
+    assert.deepEqual(sectionUrlOrigins(mk("const a = asString(x); const v = <img src={a} />;")), [
+        "img.src ← asString()",
+    ]);
+    assert.deepEqual(sectionUrlOrigins(mk("const v = <img src={item.asset} />;")), ["img.src ← ?(asset)"]);
+    // 컴포넌트 prop 은 이 축이 아니다
+    assert.deepEqual(sectionUrlOrigins(mk('const v = <JsonLd data={{"@context": "https://x"}} />;')), []);
+});

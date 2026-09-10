@@ -4,6 +4,7 @@ import {dirname, join, resolve} from "node:path";
 import {fileURLToPath} from "node:url";
 import test from "node:test";
 import ts from "typescript";
+import {INLINE_COST} from "./markdown.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SRC = resolve(HERE, "..");
@@ -191,4 +192,63 @@ test("자체 영상은 video 로, 외부 영상은 링크로", async () => {
     const external = await renderMarkdown("```video\nhttps://youtu.be/abc\n```");
     assert.doesNotMatch(external, /<video/, `외부 영상이 video 로 나갔다 — preload 가 그 호스트를 부른다: ${external}`);
     assert.match(external, /<a[^>]+href="https:\/\/youtu\.be\/abc"/, `외부 영상이 링크로도 안 그려졌다: ${external}`);
+});
+
+/**
+ * 🔴 **가중치가 실제 산출과 맞는지 잰다 — `INLINE_COST` 는 «산출 크기 비율» 이라고 선언한다.**
+ *
+ * 그 선언이 참인지 아무도 안 재고 있었다. 실측하면(이 시험이 그 실측이다 —
+ * `node --experimental-strip-types --test src/lib/markdownRender.test.ts`)
+ * `text` 하나가 **역전**돼 있다: 렌더러가 글자 노드를 요소로 안 감싸(`Markdown.tsx` 의
+ * `return node.text;`) 산출이 노드당 2바이트인데 링크(36바이트)와 **같은 몫 2** 를 문다. 정상 기사에서 몫의 78% 가 그 `text` 라, 예산이
+ * 먼저 닿는 축을 사실상 이 한 값이 정한다.
+ *
+ * ⚠ 이 시험은 **현행 값을 못박는다.** `text` 를 1 로 내리면 red 다 — 그것이 의도다(제품 결정이
+ *   있어야 움직이는 값이고, 움직일 때 이 자리가 함께 움직였는지 보이게 한다).
+ */
+test("🔴 인라인 가중치와 실제 산출 — 역전된 것은 `text` 하나다", async () => {
+    const N = 500;
+    const bytes = async (source: string): Promise<number> => Buffer.byteLength(await renderMarkdown(source));
+    const blank = await bytes("x " + Array(N).fill("").join(" "));
+    const perNode: Record<string, number> = {};
+    for (const [kind, unit] of [
+        ["image", "![a](media:1)"],
+        ["code", "`c`"],
+        ["link", "[a](/x)"],
+        ["strong", "**b**"],
+        ["em", "*i*"],
+        ["text", "z "],
+    ] as Array<[string, string]>) {
+        perNode[kind] = Math.round(((await bytes("x " + Array(N).fill(unit).join(" "))) - blank) / N);
+    }
+
+    // 산출 순서는 이미지 > 코드 > 링크 > 강조 > 기울임 > 글자다.
+    const order = Object.entries(perNode).sort((a, b) => b[1] - a[1]);
+    assert.deepEqual(
+        order.map(([k]) => k),
+        ["image", "code", "link", "strong", "em", "text"],
+        `산출 순서가 바뀌었다: ${JSON.stringify(perNode)}`,
+    );
+
+    // 🔴 `text` 는 링크의 **10분의 1 아래** 산출인데 같은 몫을 문다.
+    assert.ok(
+        perNode.text! * 10 < perNode.link!,
+        `text ${perNode.text}B · link ${perNode.link}B — 역전이 사라졌다면 INLINE_COST 도 함께 움직였는가?`,
+    );
+    assert.equal(INLINE_COST.text, INLINE_COST.link, "text 몫이 바뀌었다 — 위 KDoc 과 예산 문면을 함께 고쳐라");
+});
+
+/**
+ * **「본문 + 구조」에서 «본문» 쪽도 1배가 아니다.** 이스케이프가 글자를 늘린다 — `&` 하나가
+ * `&amp;` 다섯 자다. 예산 셋을 거의 안 건드리는 형상이 가장 큰 산출을 낸다(블록 1 · 몫 2).
+ *
+ * ⚠ 쪽 전체는 여기에 RSC 사본이 더 붙는다 — 이 시험이 재는 것은 **렌더러까지**다.
+ */
+test("이스케이프 증폭 — 예산이 못 막는 축이 있다", async () => {
+    const body = "&".repeat(64 * 1024);
+    const html = await renderMarkdown(body);
+    const ratio = Buffer.byteLength(html) / Buffer.byteLength(body);
+    assert.ok(ratio > 4.5, `이스케이프 증폭이 ${ratio.toFixed(1)}배뿐이다 — 이 시험이 축을 놓쳤다`);
+    // 통제군 — 예산은 이 형상을 거의 안 본다(그래서 구조 예산으로 못 막는다).
+    assert.equal((await import("./markdown.ts")).parseMarkdown(body).length, 1);
 });
