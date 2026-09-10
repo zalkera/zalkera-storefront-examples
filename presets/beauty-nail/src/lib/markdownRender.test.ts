@@ -60,8 +60,9 @@ async function compileMarkdown() {
         // node ESM 은 확장자를 안 추론하고, 대상은 전부 `.ts`(JSX 없음)라 그대로 실행된다.
         const tsx = ts.sys.readFile(join(SRC, "components/Markdown.tsx"));
         assert.ok(tsx, "Markdown.tsx 를 못 읽었다 — 이 시험이 헛돈다");
-        const resolved = tsx!.replace(/from "@\/([^"]+)"/g, (_m, rest: string) =>
-            `from "${SRC}/${rest}${rest.endsWith(".ts") ? "" : ".ts"}"`,
+        const resolved = tsx!.replace(
+            /from "@\/([^"]+)"/g,
+            (_m, rest: string) => `from "${SRC}/${rest}${rest.endsWith(".ts") ? "" : ".ts"}"`,
         );
         const js = ts.transpileModule(resolved, {
             compilerOptions: {
@@ -111,7 +112,11 @@ test("🔴 파서가 http(s) 로 읽는 꼴은 하나도 안 잃는다", async (
         "https://cdn.example/a.png",
     ]) {
         const html = await renderMarkdown(`![캡션](${odd})`);
-        assert.match(html, /<a[^>]+href=/, `${JSON.stringify(odd)} 가 아무것도 안 그렸다 — 저작자의 그림이 사라진다: ${html}`);
+        assert.match(
+            html,
+            /<a[^>]+href=/,
+            `${JSON.stringify(odd)} 가 아무것도 안 그렸다 — 저작자의 그림이 사라진다: ${html}`,
+        );
         assert.doesNotMatch(html, /<img/, `${JSON.stringify(odd)} 가 img 로 나갔다: ${html}`);
     }
 });
@@ -143,7 +148,7 @@ function offOriginRefs(html: string): string[] {
         const value = m[1] ?? "";
         for (const candidate of [value, ...[...value.matchAll(/url\(\s*['"]?([^'")]+)/gi)].map((u) => u[1] ?? "")]) {
             const v = candidate.trim();
-            if (v === "" || v.startsWith("/") && !v.startsWith("//")) continue;
+            if (v === "" || (v.startsWith("/") && !v.startsWith("//"))) continue;
             if (v.startsWith("#") || v.startsWith("?")) continue;
             found.push(v);
         }
