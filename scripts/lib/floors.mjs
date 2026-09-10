@@ -49,7 +49,7 @@ export const REQUIRED_FLOORS = {
     "scripts/lib/childEnv.test.mjs": 12,
     "scripts/lib/vendorSet.test.mjs": 3,
     "scripts/workflow-syntax.test.mjs": 35,
-    "scripts/lib/floorGate.test.mjs": 11,
+    "scripts/lib/floorGate.test.mjs": 13,
     "scripts/lib/contentRoutes.test.mjs": 12,
     "src/lib/preview.test.ts": 4,
     "src/lib/siteVerification.test.ts": 23,

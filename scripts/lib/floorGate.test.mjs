@@ -25,7 +25,7 @@ import {mkdtempSync, mkdirSync, writeFileSync, rmSync} from "node:fs";
 import {dirname, join} from "node:path";
 import {tmpdir} from "node:os";
 import {fileURLToPath} from "node:url";
-import {REQUIRED_FLOORS} from "./floors.mjs";
+import {REPO_ONLY_FLOORS, REQUIRED_FLOORS} from "./floors.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const GATE = join(HERE, "floor-gate.mjs");
@@ -62,7 +62,24 @@ function tree(patch = {}) {
     if (patch.table !== null) {
         const tablePath = join(root, "scripts", "lib", "test-floors.json");
         mkdirSync(dirname(tablePath), {recursive: true});
-        writeFileSync(tablePath, patch.table ?? JSON.stringify(REQUIRED_FLOORS, null, 2));
+        // ⚠ 정본 트리에서는 요구가 `REQUIRED_FLOORS + REPO_ONLY_FLOORS` 라, 표에도 둘 다 있어야
+        //    「표 항목이 모자랍니다」로 먼저 반려되지 않는다.
+        const table = patch.canonical ? {...REQUIRED_FLOORS, ...REPO_ONLY_FLOORS} : REQUIRED_FLOORS;
+        writeFileSync(tablePath, patch.table ?? JSON.stringify(table, null, 2));
+    }
+    // 「정본 저장소인가」 판정은 `presets/` 와 `scripts/pack-preset.mjs` 의 존재로 한다
+    // (`isCanonicalRepo`). 여유 검사는 그 트리에서만 서므로 시험이 그것을 만들 수 있어야 한다.
+    // ⚠ 정본이면 `REPO_ONLY_FLOORS` 까지 요구되므로 그 스위트도 함께 만든다 — 안 만들면
+    //    「요구 스위트가 없습니다」로 먼저 반려돼 여유 검사에 **닿지도 못한다**.
+    if (patch.canonical) {
+        mkdirSync(join(root, "presets"), {recursive: true});
+        writeFileSync(join(root, "scripts", "pack-preset.mjs"), "// 정본 표식\n");
+        for (const [file, min] of Object.entries(REPO_ONLY_FLOORS)) {
+            if (patch.omit?.includes(file)) continue;
+            const full = join(root, file);
+            mkdirSync(dirname(full), {recursive: true});
+            writeFileSync(full, suite(patch.counts?.[file] ?? min));
+        }
     }
     return root;
 }
@@ -162,4 +179,32 @@ test("표 밖 금지가 정상 트리를 막지 않는다", () => {
     // 이 통제군이 없으면 「무엇이든 반려」로도 위 시험이 초록이 된다.
     const {rc} = runGate(tree());
     assert.equal(rc, 0);
+});
+
+/**
+ * 🔴 **하한에 여유가 있으면 그만큼 시험을 지워도 초록이다.**
+ *
+ * 표가 스스로 「현재치와 같게 둔다」고 적는데 그것을 재는 자리가 없으면, 한 칸의 여유가
+ * 그 스위트의 가드 하나를 조용히 지울 수 있게 만든다. `pack-preset.mjs` 가 그 표를 고객 zip 에
+ * 그대로 실으므로 테넌트 트리에서도 안 물린다.
+ */
+test("🔴 정본 저장소에서 하한에 여유가 있으면 반려한다", () => {
+    const file = "scripts/lib/floors.test.mjs";
+    const {rc, out} = runGate(tree({canonical: true, counts: {[file]: REQUIRED_FLOORS[file] + 1}}));
+    assert.equal(rc, 1, out.slice(-600));
+    assert.match(out, /하한에 여유가 있습니다/);
+    assert.match(out, /floors\.test\.mjs/);
+});
+
+/**
+ * **음성 짝** — 팩·테넌트 트리에서는 여유를 안 따진다.
+ *
+ * 고객이 자기 시험을 더하면 현재치가 하한을 넘는다. 그것을 반려하면 「시험을 더하지 마라」가 되고,
+ * 그 순간 이 게이트는 고객이 가장 먼저 꺼 버리는 물건이 된다.
+ */
+test("팩·테넌트 트리에서는 여유를 반려하지 않는다 — 고객이 시험을 더할 수 있어야 한다", () => {
+    const file = "scripts/lib/floors.test.mjs";
+    const {rc, out} = runGate(tree({counts: {[file]: REQUIRED_FLOORS[file] + 1}}));
+    assert.equal(rc, 0, out.slice(-600));
+    assert.match(out, /스위트별 하한 통과/);
 });
