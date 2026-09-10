@@ -86,8 +86,9 @@ export function isOutOfRange(page: number, posts: {content?: unknown[]} | null |
     //    `if (posts == null) return false;` 를 지운 채 백엔드를 내리고
     //    `curl -sI localhost:3000/blog/page/4` → 404, 백엔드를 올린 뒤 같은 명령 → 여전히 404 에
     //    `x-nextjs-cache: HIT`. 지우지 않은 지금은 두 번 다 200 이다.
-    //    ⚠ **`undefined` 도 같은 「모름」이다** — `@zalkera/client` 는 2xx 빈 본문에 `null` 이
-    //       아니라 `undefined` 를 돌려준다. `=== null` 로만 갈랐을 때 그 응답이 `TypeError` 였다.
+    //    ⚠ **`undefined` 도 같은 「모름」이다** — `.catch(() => null)` 이 주는 `null` 과, 호출부가
+    //       값을 안 넘겼을 때의 `undefined` 를 **함께** 받아야 한다. `=== null` 로만 갈랐을 때
+    //       그 자리가 `TypeError` 였다.
     if (posts == null) return false;
     return page > 1 && (posts.content?.length ?? 0) === 0;
 }

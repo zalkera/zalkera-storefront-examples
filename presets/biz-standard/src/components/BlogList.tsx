@@ -23,11 +23,11 @@ export async function listBlogPage(page: number) {
 export async function BlogList(props: {page: number; posts?: Awaited<ReturnType<typeof listBlogPage>>}) {
     const {page} = props;
     // ⚠ **인자가 «왔는가» 로 가른다.** `!== undefined` 로 가르면 라우트가 넘긴 값이 `undefined`
-    //    (백엔드가 2xx 빈 본문을 준 경우)일 때 가드가 풀려 **부르지 않기로 한 자리에서 부른다**.
+    //    일 때 가드가 풀려 **부르지 않기로 한 자리에서 부른다**.
     //    ⚠ 지금 배송 형상에서는 Next 요청 메모이제이션이 그 왕복을 합쳐서 눈에 안 보인다 —
     //    「두 번 나간다」로 적지 마라(실물에서 재현되지 않는다). 판정을 정확히 두는 것이 이유다.
     const posts = "posts" in props ? props.posts : await listBlogPage(page);
-    // 🔴 **「모름」과 「0건」을 가른다.** `?? []` 로 접으면 백엔드가 안 될 때 방문자·답변 엔진에게
+    // 🔴 **「모름」과 「0건」을 가른다.** `?? []` 로 접으면 상류가 안 될 때 방문자·답변 엔진에게
     //    「게시글이 없습니다」라는 **거짓 진술**을 그리고, 이 쪽은 `force-static`+`revalidate` 라
     //    그것이 그대로 굳는다. 모르면 그 자리를 **안 그린다**(형제 `app/page.tsx` 와 같은 형상).
     const items = posts?.content;

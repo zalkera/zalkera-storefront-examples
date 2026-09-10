@@ -35,8 +35,10 @@ export const revalidate = 300;
  */
 async function loadProduct(slug: string) {
     const product = await zalkera.getProduct(slug, {tags: ["site-config", "products", `product:${slug}`]});
-    // 🔴 **2xx 빈 본문은 `undefined` 정상 반환이다** — 실패가 아니라 `.catch` 를 안 탄다.
-    //    그대로 두면 부르는 쪽이 필드를 읽다 던져 **404 도 200 도 아닌 500** 이 된다.
+    // 🔴 **결여는 두 얼굴로 온다.** `@zalkera/client` 0.35.0 부터 2xx 빈 본문·봉투의 `data` 키
+    //    부재는 **502 로 던지므로** `.catch` 가 받는다. 그러나 `data: null` 은 그대로 통과하니
+    //    **값 판정은 여전히 필요하다**(그 전 판에서는 빈 본문까지 `undefined` 로 흘러 `.catch` 를
+    //    안 타고 부르는 쪽에서 `TypeError` 가 됐다).
     //    판정을 여기 한 자리에 둔다 — 부르는 곳마다 두면 한 곳이 빠진다.
     if (product == null) notFound();
     return product;

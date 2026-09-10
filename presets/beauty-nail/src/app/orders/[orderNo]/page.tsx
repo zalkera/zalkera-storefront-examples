@@ -33,8 +33,9 @@ export default async function OrderPage({
     let order;
     try {
         order = await zalkera.getOrder(orderNo, access);
-        // 🔴 **2xx 빈 본문은 `undefined` 정상 반환이라 `catch` 를 안 탄다** — 그대로 두면 아래에서
-        //    던져 이 쪽이 **500** 이 된다. 바로 옆에 곱게 지는 가지가 있으므로 그리로 보낸다.
+        // 🔴 **결여는 두 얼굴로 온다.** 0.35.0 부터 빈 본문·`data` 키 부재는 502 로 던져 아래
+        //    `catch` 가 받지만 `data: null` 은 통과한다. 그대로 두면 아래에서 던져 이 쪽이 **500**
+        //    이 되므로, 바로 옆에 곱게 지는 가지로 보낸다.
         if (order == null) throw new Error("주문 응답이 비었습니다.");
     } catch (error) {
         const msg = error instanceof ZalkeraError ? error.message : "조회 실패";

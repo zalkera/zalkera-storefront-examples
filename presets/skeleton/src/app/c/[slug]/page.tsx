@@ -38,10 +38,10 @@ const PAGE_SIZE = 24;
  */
 async function findCategory(slug: string): Promise<ProductCategory> {
     const categories = await zalkera.listProductCategories({tags: ["site-config", "products"]});
-    // 🔴 **빈 본문도 「못 받았다」다.** 2xx 로 본문이 비면 클라이언트가 `undefined` 를 정상 반환하는데,
-    //    그대로 두면 다음 줄이 `TypeError` 로 죽어 원인이 안 읽힌다. 위 판단대로 **404 가 아니라
-    //    실패**로 세우되, 무엇이 실패했는지 말한다.
-    if (categories == null) throw new Error("카테고리 목록을 못 받았습니다 — 응답 본문이 비었습니다.");
+    // 🔴 **결여도 「못 받았다」다.** 0.35.0 부터 빈 본문·`data` 키 부재는 502 로 던지지만
+    //    `data: null` 은 통과한다 — 그대로 두면 다음 줄이 `TypeError` 로 죽어 원인이 안 읽힌다.
+    //    위 판단대로 **404 가 아니라 실패**로 세우되, 무엇이 실패했는지 말한다.
+    if (categories == null) throw new Error("카테고리 목록을 못 받았습니다 — 응답에 목록이 없습니다.");
     const category = categories.find((c) => c.slug === slug);
     if (!category) notFound();
     return category;

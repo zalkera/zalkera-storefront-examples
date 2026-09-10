@@ -28,9 +28,10 @@ export default async function MyPage({searchParams}: {searchParams: Promise<{r?:
     let me: CustomerSummary;
     try {
         const loaded = await zalkera.getMe(accessToken);
-        // 🔴 **2xx 빈 본문은 `undefined` 정상 반환이라 `catch` 를 안 탄다** — 그대로 두면 아래
-        //    `me.name` 이 던져 마이페이지가 **500** 이 된다. 신원을 못 읽은 것이므로 갱신 경유지가
-        //    판단하게 한다(이미 갱신하고 왔으면 로그인).
+        // 🔴 **결여는 두 얼굴로 온다.** 0.35.0 부터 빈 본문·`data` 키 부재는 502 로 던져 아래
+        //    `catch` 가 받지만 `data: null` 은 통과한다. 그대로 두면 `me.name` 이 던져 마이페이지가
+        //    **500** 이 된다. 신원을 못 읽은 것이므로 갱신 경유지가 판단하게 한다(이미 갱신하고
+        //    왔으면 로그인).
         if (loaded == null) redirect(alreadyRefreshed ? "/login" : REFRESH_PATH);
         me = loaded;
     } catch (error) {
