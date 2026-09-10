@@ -260,6 +260,57 @@ test("예산 안의 장문 기사는 그대로 구조가 된다", () => {
     ok(leaves < 2_000 / 2, `잎 ${leaves}개 — 정상 글이 예산의 절반을 넘었다`);
 });
 
+/**
+ * 🔴 **세 축 중 «몫» 이 먼저 닿는다 — 위 시험은 그 축을 안 잰다.**
+ *
+ * 위 시험은 블록과 잎만 본다. 그런데 같은 기사의 실제 소비는 블록 377/1,000 · 잎 942/2,000 ·
+ * **몫 4,084/5,000** 이라, 「예산의 절반을 안 쓴다」가 참인 축은 둘뿐이다. 안 재는 축 하나가
+ * 예산 전체를 「병적인 문서만 잘린다」로 잘못 읽히게 만든다.
+ *
+ * 그래서 **행위로** 잰다 — 수를 세지 않고, 문단이 링크를 **잃었는가**를 본다.
+ * ⚠ 절 수를 줄이면(예: 60→50) 이 시험은 「닿는 자리」를 못 보고 조용히 초록이 된다.
+ */
+test("🔴 세 축 중 몫이 먼저 닿는다 — 절 60개는 서식이 서고, 절 70개는 잃는다(글자는 남는다)", () => {
+    const table = ["| a | b | c | d |", "|---|---|---|---|", ...Array(20).fill("| 1 | 2 | 3 | 4 |")].join("\n");
+    const list = Array.from({length: 6}, (_, i) => `- 항목 ${i}`).join("\n");
+    const article = (sections: number): string =>
+        Array.from({length: sections}, (_, h) =>
+            [
+                `## 절 ${h}`,
+                ...Array.from({length: 6}, (_, p) => `문단 ${h}-${p} 입니다. [링크](/x) **굵게**`),
+                ...(h % 5 === 0 ? [table] : []),
+                ...(h % 3 === 0 ? [list] : []),
+            ].join("\n\n"),
+        ).join("\n\n");
+
+    const linked = (source: string): {kept: number; total: number} => {
+        const paragraphs = parseMarkdown(source).filter((b) => b.kind === "paragraph") as Array<{
+            text: Array<{kind: string}>;
+        }>;
+        return {
+            kept: paragraphs.filter((p) => p.text.some((n) => n.kind === "link")).length,
+            total: paragraphs.length,
+        };
+    };
+
+    // 절 60개(본문 23KB) — 정상 장문 기사다. 서식이 **하나도** 안 깎여야 한다.
+    const ok60 = linked(article(60));
+    strictEqual(ok60.kept, ok60.total, `절 60개인데 문단 ${ok60.total - ok60.kept}개가 링크를 잃었다`);
+    ok(ok60.total > 300, `분모가 너무 작다(${ok60.total}) — 이 시험이 닿는 자리를 못 본다`);
+
+    // 절 70개(본문 27KB) — 여기서 몫이 닿는다. **양성 짝**: 예산이 실제로 무는 것을 보인다.
+    const over = linked(article(70));
+    ok(over.kept < over.total, `절 70개인데 아무 문단도 서식을 안 잃었다 — 몫 예산이 안 물고 있다`);
+
+    // ⚠ 강하는 **서식만** 잃는다 — 마지막 절의 글자가 산출에 그대로 남아야 한다.
+    const rendered = parseMarkdown(article(70))
+        .map((b) =>
+            b.kind === "paragraph" ? (b as {text: Array<{text?: string}>}).text.map((n) => n.text ?? "").join("") : "",
+        )
+        .join("\n");
+    ok(rendered.includes("문단 69-5 입니다."), "예산을 넘긴 뒤 글자가 사라졌다 — 강하는 서식만 잃어야 한다");
+});
+
 test("한글 제목도 id 를 얻는다 — 라틴만 남기면 전 문서가 «section» 이 된다", () => {
     const id = headingId("반품·교환 안내", new Map());
     ok(id.length > 0 && id !== "section", `얻은 id: ${id}`);
