@@ -307,7 +307,7 @@ const MAX_LEAF_NODES_PER_DOCUMENT = 2_000;
  *
  * ⛔ **이 값을 올리려면 박스 크기부터 확인하라.** 「좀 넉넉하게」로 올리면 그만큼이 그대로 한
  *    요청의 메모리가 되고, 두 번째 요청이 그 사이트를 죽인다. 재는 법은 배송 형상
- *    (`.next/standalone/server.js`)을 메모리 상한 아래 띄우고 같은 쪽을 **동시에** 치는 것이다.
+ *    (`.next/standalone` 산출물(`node server.js`))을 메모리 상한 아래 띄우고 같은 쪽을 **동시에** 치는 것이다.
  * 재현: `node --experimental-strip-types --test src/lib/markdown.test.ts` 의 「예산 안의 장문 기사」·
  * 「좁은 표는 넓은 표보다 훨씬 긴 행을 받는다」.
  *
@@ -332,7 +332,7 @@ const MAX_LEAF_NODES_PER_DOCUMENT = 2_000;
  * → `블록 1 인라인 10001` (`` `x` `` 는 `code` 라 몫 2 — 20,000/2 = 10,000 + 꼬리 글자 1)
  *
  * ⚠ **이 상수들을 올리기 전에 산출을 재라.** 「좀 넉넉하게」로 올리면 그만큼이 그대로 한 요청의
- *   메모리·바이트가 된다. 재는 법은 `npm run build` 뒤 배송 형상(`.next/standalone/server.js`)을
+ *   메모리·바이트가 된다. 재는 법은 `npm run build` 뒤 배송 형상(`.next/standalone` 산출물(`node server.js`))을
  *   메모리 상한을 건 채 띄우고 그 쪽을 받아 크기를 보는 것이다 — `next start` 는 이 레포의 배송
  *   형상이 아니다(`output: standalone`).
  */

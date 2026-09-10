@@ -366,7 +366,7 @@ shadcn 소스는 자기 변수층(`--card`·`--muted-foreground` …)을 전제�
 (실측: 한 판 이 값이 4배였을 때 예산을 지킨 문서 하나가 동시 요청 2에서 컨테이너를 OOM 시켰다).
 
 올려야 할 이유가 생기면 **재고 올려라**: `npm run build` 뒤 배송 형상
-(`.next/standalone/server.js`)을 그 사이트의 메모리 상한 아래 띄우고, 최악 문서를 담은 쪽을
+(`.next/standalone` 산출물(`node server.js`))을 그 사이트의 메모리 상한 아래 띄우고, 최악 문서를 담은 쪽을
 **동시에** 치면서 peak 을 본다. 상수를 고치면 `src/lib/markdown.test.ts` 의 문턱 단언과
 `scripts/lib/test-floors.json` 도 함께 움직여야 한다.
 
