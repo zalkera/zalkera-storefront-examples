@@ -95,7 +95,7 @@
 | `/[slug]` | **소스가 갖는 고정 페이지**(회사소개·이용안내 등) — `content/pages/<slug>.json` 의 섹션 배열로 그린다. 얼굴이 소스 정본이라 `force-static` 이고, 고치려면 재업로드한다 |
 | `/products` | **상품 목록** — 카탈로그 허브(`ItemList`) |
 | `/products/[slug]` | 상품 상세 + 장바구니 담기 (예약 상품이면 슬롯 선택) |
-| `/blog`, `/blog/[slug]` | 글 목록·상세 (공지·블로그) |
+| `/blog`, `/blog/page/[n]`, `/blog/[slug]` | 글 목록(20건씩 쪽 나눔)·상세 (공지·블로그). 본문은 **마크다운**이고 상세에 목차·관련 글이 붙는다 |
 | `/contact` | 문의 폼 (제출은 BFF 경유) |
 | `/policies` | 구매 정책 — 반품·교환·배송·A/S 표시면 |
 | `/cart` | 장바구니 (현재가 재계산) |
@@ -159,7 +159,7 @@ npm run dev                    # http://localhost:3000
 | `/[slug]` (고정 페이지) | **정적 프리렌더** (`force-static`) | **소스가 갖는 콘텐츠**라 재검증할 것이 없다 — 고치면 재업로드하고, 그때 새로 구워진다. (빌드 표에는 `●` 로 나온다 — 프리렌더된 경로가 있다는 뜻이고, 옆의 재검증 값은 Next 기본값이다) |
 | `/products` (상품 목록) | **ISR** (`revalidate=300`) | 카탈로그 허브. **`searchParams` 를 안 받는 것이 의도** — 정렬·필터를 쿼리로 받으면 동적 렌더로 강등된다 |
 | `/products/[slug]` (상품 상세) | **ISR** (`revalidate=300`) | 카탈로그 = 공개 읽기. 재고·가격은 결제 시점에 백엔드가 재검증하므로 stale 안전 |
-| `/blog`·`/blog/[slug]` (글) | **ISR** (`revalidate=300`) | 발행글 = 세션 무관 공개 읽기 |
+| `/blog`·`/blog/page/[n]`·`/blog/[slug]` (글) | **ISR** (`revalidate=300`) | 발행글 = 세션 무관 공개 읽기 |
 | `/c/[slug]` (카테고리) | **ISR** | 카탈로그 = 공개 읽기. `/products` 와 같은 근거 |
 | `/contact`·`/policies` | **ISR/static** | 폼 셸·정책 표시면. 제출만 아일랜드→BFF |
 | `/cart`·`/mypage`·`/orders/[orderNo]` | **동적(ƒ)** | 쿠키(세션 토큰·게스트 카트키)를 **서버에서** 읽음 → 요청별 렌더 필수 |
@@ -205,7 +205,7 @@ npm run dev                    # http://localhost:3000
 - **결제 확정은 백엔드 웹훅이 합니다.** returnUrl 의 "성공"을 믿지 말고 `/orders/[orderNo]` 로 상태를 확인하세요.
 - **variant 가 판매 단위** — 담기·주문은 항상 `variant.id`.
 - **미디어는 `/media/{id}` 안정 URL** 로 렌더합니다(presigned URL 직접 사용 금지, `next/image` 대신 `<img>`).
-- **공개 페이지는 JSON-LD 를 냅니다** — 홈 `Organization`, 상품 상세 `Product`+`Offer`, 목록(`/products`·`/blog`) `ItemList`, 고정 페이지 `WebPage`, 글 상세 `BlogPosting`, 그리고 `BreadcrumbList`. 규범 정본은 `llms.txt` §5.1 이고 **어느 파일이 어느 규범을 구현하는지는 [`AGENTS.md`](AGENTS.md) 의 좌표표**에 있습니다(여기서 사본을 만들지 않습니다). 규율은 하나입니다 — **페이지에 없는 것을 그래프에 쓰지 않습니다**: 후기 0건이면 평점을, 항목 0건이면 `ItemList` 를 아예 내지 않고, 빈 목록은 `sitemap` 에도 싣지 않습니다.
+- **공개 페이지는 JSON-LD 를 냅니다** — 홈 `Organization`, 상품 상세 `Product`+`Offer`, 목록(`/products`·`/blog`) `ItemList`, 글 상세 `BlogPosting`(+`author`·`dateModified`), 고정 페이지 `WebPage`, 글 상세 `BlogPosting`, 그리고 `BreadcrumbList`. 규범 정본은 `llms.txt` §5.1 이고 **어느 파일이 어느 규범을 구현하는지는 [`AGENTS.md`](AGENTS.md) 의 좌표표**에 있습니다(여기서 사본을 만들지 않습니다). 규율은 하나입니다 — **페이지에 없는 것을 그래프에 쓰지 않습니다**: 후기 0건이면 평점을, 항목 0건이면 `ItemList` 를 아예 내지 않고, 빈 목록은 `sitemap` 에도 싣지 않습니다.
 
 ## 검사기 — 소스 하나, 산출물 하나
 

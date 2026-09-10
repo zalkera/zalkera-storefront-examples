@@ -174,15 +174,25 @@ test("🔴 2쪽의 이전은 /blog 다 — /blog/page/1 이 아니다", async ()
  * 🔴 **백엔드가 죽어도 셸은 산다.** 그리고 마지막 쪽인지 모르는 상태에서 「다음」을 그리면
  * 없는 쪽으로 크롤러를 보낸다.
  */
-test("🔴 백엔드가 죽으면 셸만 그리고 다음을 안 그린다", async () => {
+test("🔴 백엔드가 죽으면 셸만 그리고 «없다»고 말하지 않는다", async () => {
     // 🔴 **`undefined` 도 넣는다** — `@zalkera/client` 는 2xx **빈 본문**에 `undefined` 를 준다.
     //    한 판 술어 하나만 그것을 받게 넓혔더니 이 컴포넌트가 던져 공개 쪽이 **500** 이 됐다.
     for (const 모름 of [null, undefined]) {
         const html = await render(1, 모름);
-        assert.match(html, /게시글이 없습니다/, `${String(모름)} 에 셸이 안 섰다: ${html}`);
+        assert.match(html, /블로그/, `${String(모름)} 에 셸이 안 섰다: ${html}`);
+        // 🔴 **「게시글이 없습니다」는 거짓 진술이다** — 모르는 것이지 없는 것이 아니고, 이 쪽은
+        //    `force-static`+`revalidate` 라 그 거짓이 굳는다. AEO 가 이 제품의 셀링이다.
+        assert.doesNotMatch(html, /게시글이 없습니다/, `모르는데 «없다»고 말했다: ${html}`);
         assert.doesNotMatch(html, /rel="next"/, "모르는데 다음을 그렸다");
         assert.doesNotMatch(html, /ItemList/, "글 0건인데 목록 그래프를 냈다 — 보이지 않는 것을 서술한다");
     }
+});
+
+/** **양성 짝** — 진짜로 0건이면 그때는 말해야 한다(빈 선반을 침묵으로 두면 저작자가 헷갈린다). */
+test("진짜 0건이면 «게시글이 없습니다» 를 그린다", async () => {
+    const html = await render(1, {content: [], last: true});
+    assert.match(html, /게시글이 없습니다/, `0건인데 아무 말도 안 했다: ${html}`);
+    assert.doesNotMatch(html, /ItemList/, "글 0건인데 목록 그래프를 냈다");
 });
 
 /** 글이 있으면 목록 그래프를 낸다 — 답변 엔진이 상세로 가는 허브로 읽는 자리다. */

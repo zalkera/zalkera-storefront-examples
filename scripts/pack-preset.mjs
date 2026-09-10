@@ -155,6 +155,14 @@ const SOURCE_EXCLUDES = [
     "scripts/lib/packGate.test.mjs",
     "scripts/gen-preset-assets.mjs",
     "scripts/preset-canvas.mjs",
+    // ⚠ **우리 릴리스 런북이다** — 굽기 순서·`npm view` 발행 절차·비공개 `doc/RELEASE.md §2.1-c`
+    // 좌표, 그리고 **우리 AI 공동저자 트레일러로 고객 레포에 커밋하는 줄**이 들어 있다.
+    // 고객이 부를 표면이 아니고 어떤 배송 문서도 안내하지 않는데(`grep -rn finish-pack *.md docs/`
+    // → 0건) 4벌 전부에 실리고 있었다(심의 보안축 실측).
+    // 🔴 **부르면 부작용이 먼저 난다** — 이 스크립트가 호출하는 셋(`pack-preset.mjs`·`doc-claims`·
+    // `wiring-parity`)이 배송본에 없는데 존재 검사가 앞에 없어, `npm install` → `npm run verify` →
+    // `git commit` 이 먼저 돌고 나서 죽는다.
+    "scripts/finish-pack.sh",
     // ⚠ **카탈로그 미리보기를 굽는 사내 도구다**(promote 절차·스모크 테넌트·`dist-preview` S3 프리픽스).
     // 고객이 부를 표면이 아니고 어떤 배송 문서도 안내하지 않는데 38KB 가 전 테넌트에 복제되고 있었다
     // (심의 보안축 실측). 형제들(`pack-preset`·`gen-preset-assets`·`preset-canvas`)은 이미 빠져 있었고

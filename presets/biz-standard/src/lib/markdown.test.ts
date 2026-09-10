@@ -68,7 +68,7 @@ test("예산 — 같은 제목 20,000개짜리 본문이 1초 안에 끝난다",
     const blocks = parseMarkdown("## 배송 안내\n\n".repeat(20_000));
     const ms = Number(process.hrtime.bigint() - started) / 1e6;
     // ⚠ **정확값으로 단언한다** — `> 0` 으로 두면 파서가 블록 1개만 내도 초록이다.
-    strictEqual(blocks.length, 2_001, `블록이 ${blocks.length}개 — 예산이 안 걸렸다`);
+    strictEqual(blocks.length, 1_001, `블록이 ${blocks.length}개 — 예산이 안 걸렸다`);
     ok(ms < 1000, `제목 파싱이 ${ms.toFixed(0)}ms 걸렸다 — 제곱 비용이 돌아왔다`);
 });
 
@@ -80,12 +80,12 @@ test("예산 — 같은 제목 20,000개짜리 본문이 1초 안에 끝난다",
  *
  * 재현: `parseInline` 의 `if (spent >= limit) break;` 를 지우면 이 시험이 red 다.
  */
-test("🔴 예산 — 한 문단의 인라인 노드가 20,000개에서 멈추고 남은 글자는 그대로 남는다", () => {
+test("🔴 예산 — 한 문단의 인라인 노드가 5,000개에서 멈추고 남은 글자는 그대로 남는다", () => {
     const blocks = parseMarkdown("`x`".repeat(100_000) + "끝표시");
 
     strictEqual(blocks.length, 1, "블록 예산은 이 씨앗을 못 잡는다 — 그래서 인라인 예산이 있다");
     const nodes = (blocks[0] as {text: Array<{kind: string; text: string}>}).text;
-    ok(nodes.length <= 20_001, `인라인 노드가 ${nodes.length}개 — 예산이 안 걸렸다`);
+    ok(nodes.length <= 5_001, `인라인 노드가 ${nodes.length}개 — 예산이 안 걸렸다`);
 
     // 🔴 **글자가 사라지지 않는다** — 남은 것은 서식 없이 한 덩어리로 꼬리에 남는다.
     const tail = nodes[nodes.length - 1]!;
@@ -102,13 +102,13 @@ test("🔴 예산 — 한 문단의 인라인 노드가 20,000개에서 멈추�
  *
  * 재현: `startsList` 의 `&& leafUsed < MAX_LEAF_NODES_PER_DOCUMENT` 를 지우면 이 시험이 red 다.
  */
-test("🔴 예산 — 목록 항목이 8,000개에서 멈추고 남은 줄은 문단으로 남는다", () => {
+test("🔴 예산 — 목록 항목이 2,000개에서 멈추고 남은 줄은 문단으로 남는다", () => {
     for (const n of [10_000, 50_000]) {
         const source = Array.from({length: n}, (_, i) => `- 항목 ${i}`).join("\n");
         const blocks = parseMarkdown(source);
 
         const items = blocks.reduce((sum, b) => sum + (b.kind === "list" ? b.items.length : 0), 0);
-        strictEqual(items, 8_000, `${n}줄에서 항목이 ${items}개 — 예산이 안 걸렸다`);
+        strictEqual(items, 2_000, `${n}줄에서 항목이 ${items}개 — 예산이 안 걸렸다`);
 
         // 🔴 **목록 하나 + 꼬리 문단 하나. 그것뿐이다.**
         //    `startsList` 에서 예산 판정을 빼면 항목 수는 그대로인데 **빈 목록 블록**이 블록 예산까지
@@ -158,7 +158,7 @@ test("🔴 예산 — 비싼 인라인일수록 적게 받는다", () => {
         ["링크", link],
         ["강조", emphasis],
     ] as const) {
-        ok(n <= 20_001, `${name} 노드가 ${n}개 — 예산 밖이다`);
+        ok(n <= 5_001, `${name} 노드가 ${n}개 — 예산 밖이다`);
     }
 });
 
@@ -185,9 +185,9 @@ test("표 칸의 인라인도 같은 예산에서 나온다", () => {
 
     const table = blocks[0] as {rows: {length: number}[][]};
     const nodes = table.rows.reduce((sum, r) => sum + r.reduce((n, cell) => n + cell.length, 0), 0);
-    // 20,000(예산) + 8,000(잎마다 남는 글자 한 덩어리) = 28,000 이 상한이다.
-    ok(nodes <= 28_000, `표 안 인라인 노드가 ${nodes}개 — 예산 밖이다`);
-    ok(nodes > 8_000, "칸마다 한 덩어리씩만 남았다 — 예산이 정상 표의 서식을 먹었다");
+    // 5,000(예산) + 2,000(잎마다 남는 글자 한 덩어리) = 7,000 이 상한이다.
+    ok(nodes <= 7_000, `표 안 인라인 노드가 ${nodes}개 — 예산 밖이다`);
+    ok(nodes > 2_000, "칸마다 한 덩어리씩만 남았다 — 예산이 정상 표의 서식을 먹었다");
 });
 
 /**
@@ -199,18 +199,18 @@ test("표 칸의 인라인도 같은 예산에서 나온다", () => {
  *
  * 넘친 뒤에도 **글자는 안 사라진다**: 남은 본문이 서식 없는 한 문단으로 남는다.
  */
-test("🔴 예산 — 블록이 2,000개에서 멈추고 남은 본문은 글자로 남는다", () => {
+test("🔴 예산 — 블록이 1,000개에서 멈추고 남은 본문은 글자로 남는다", () => {
     // 🔴 **인라인 문법을 넣는다** — 꼬리를 `parseInline` 에 태우는 변이는 평문 씨앗에서 안 죽는다.
     const blocks = parseMarkdown(
         Array.from({length: 20_000}, (_, i) => `## 제목 ${i} [링크](/x) **굵게**`).join("\n\n"),
     );
 
     // 구조를 만든 블록 + 남은 본문 한 문단.
-    strictEqual(blocks.length, 2_001, `블록이 ${blocks.length}개 — 예산이 안 걸렸다`);
-    strictEqual(blocks.filter((b) => b.kind === "heading").length, 2_000);
+    strictEqual(blocks.length, 1_001, `블록이 ${blocks.length}개 — 예산이 안 걸렸다`);
+    strictEqual(blocks.filter((b) => b.kind === "heading").length, 1_000);
 
     // 🔴 **글자가 사라지지 않는다** — 마지막 제목이 꼬리 문단 안에 그대로 있다.
-    const tail = blocks[2_000];
+    const tail = blocks[1_000];
     strictEqual(tail?.kind, "paragraph");
     const text = (tail as {text: Array<{kind: string; text: string}>}).text;
     strictEqual(text.length, 1, "꼬리를 인라인 파싱했다 — 노드가 다시 는다");
@@ -218,15 +218,46 @@ test("🔴 예산 — 블록이 2,000개에서 멈추고 남은 본문은 글자
     ok(text[0]!.text.includes("## 제목 19999 [링크](/x) **굵게**"), "마지막 본문이 사라졌다");
 });
 
-/** **양성 짝** — 예산이 정상 글을 먹으면 안 된다(제목 50개·문단 300개짜리 장문 기사). */
+/**
+ * **양성 짝** — 예산이 «현실적인 장문 기사» 를 먹으면 안 된다.
+ *
+ * 이 씨앗이 예산 상수의 **근거**다: 50절 × 문단 6 + 표 10개(4×20) + 목록 16개(6항목). 실제 글에서
+ * 이보다 큰 것은 병적인 문서다. 상수를 고치려는 사람은 **이 시험이 여전히 여유롭게 통과하는지**
+ * 부터 보라 — 여기가 빡빡해지면 정상 글을 자르기 시작한 것이다.
+ */
 test("예산 안의 장문 기사는 그대로 구조가 된다", () => {
+    const table = ["| a | b | c | d |", "|---|---|---|---|", ...Array(20).fill("| 1 | 2 | 3 | 4 |")].join("\n");
+    const list = Array.from({length: 6}, (_, i) => `- 항목 ${i}`).join("\n");
     const source = Array.from({length: 50}, (_, h) =>
-        [`## 절 ${h}`, ...Array.from({length: 6}, (_, p) => `문단 ${h}-${p} 입니다.`)].join("\n\n"),
+        [
+            `## 절 ${h}`,
+            ...Array.from({length: 6}, (_, p) => `문단 ${h}-${p} 입니다. [링크](/x) **굵게**`),
+            ...(h % 5 === 0 ? [table] : []),
+            ...(h % 3 === 0 ? [list] : []),
+        ].join("\n\n"),
     ).join("\n\n");
     const blocks = parseMarkdown(source);
 
+    // 잘린 흔적이 없어야 한다 — 제목 50개·문단 300개·표 10개·목록 17개가 그대로 선다.
     strictEqual(blocks.filter((b) => b.kind === "heading").length, 50);
     strictEqual(blocks.filter((b) => b.kind === "paragraph").length, 300);
+    strictEqual(blocks.filter((b) => b.kind === "table").length, 10);
+    strictEqual(blocks.filter((b) => b.kind === "list").length, 17);
+
+    // 그리고 **예산의 절반도 안 쓴다** — 이 여유가 상수를 정한 근거다.
+    ok(blocks.length < 1_000 / 2, `블록 ${blocks.length}개 — 정상 글이 예산의 절반을 넘었다`);
+    const leaves = blocks.reduce(
+        (sum, b) =>
+            sum +
+            (b.kind === "table"
+                ? (b as {head: unknown[]; rows: unknown[][]}).head.length +
+                  (b as {rows: unknown[][]}).rows.reduce((n, r) => n + r.length, 0)
+                : b.kind === "list"
+                  ? (b as {items: unknown[]}).items.length
+                  : 0),
+        0,
+    );
+    ok(leaves < 2_000 / 2, `잎 ${leaves}개 — 정상 글이 예산의 절반을 넘었다`);
 });
 
 test("한글 제목도 id 를 얻는다 — 라틴만 남기면 전 문서가 «section» 이 된다", () => {
@@ -437,16 +468,47 @@ test("🔴 표가 거절돼도 진행이 멈추지 않는다 — 칸 수가 안 
     );
 });
 
+/**
+ * **양성 짝** — 예산이 «정상» 표를 먹으면 안 된다.
+ *
+ * ⚠ 씨앗은 **칸 수**로 잡는다(예산이 세는 단위다). 8열 × 200행 = 1,600칸은 사람이 읽는 사양표의
+ *   현실 범위 안이다. 열이 아주 넓으면(32열) 행이 그만큼 적게 들어가는 것이 **의도**다 —
+ *   그 조합은 아래 「좁은 표는 넓은 표보다 훨씬 긴 행을 받는다」가 잰다.
+ */
 test("상한 안의 표는 그대로 그린다 — 좁힘이 정상 표를 먹지 않는다", () => {
-    const head = `|${Array.from({length: 32}, (_, c) => ` c${c} `).join("|")}|`;
-    const delim = `|${"---|".repeat(32)}`;
-    const row = `|${Array.from({length: 32}, (_, c) => ` v${c} `).join("|")}|`;
+    const head = `|${Array.from({length: 8}, (_, c) => ` c${c} `).join("|")}|`;
+    const delim = `|${"---|".repeat(8)}`;
+    const row = `|${Array.from({length: 8}, (_, c) => ` v${c} `).join("|")}|`;
     const [block] = parseMarkdown([head, delim, ...Array(200).fill(row)].join("\n"));
 
     strictEqual(block?.kind, "table");
     const table = block as {head: unknown[]; rows: unknown[]};
-    strictEqual(table.head.length, 32);
+    strictEqual(table.head.length, 8);
     strictEqual(table.rows.length, 200);
+});
+
+/**
+ * 🔴 **주소의 균형 잡힌 괄호는 주소의 일부다.**
+ *
+ * 첫 `)` 에서 끊으면 위키 주소(`타입_(프로그래밍)`)가 **조용히 다른 주소**가 되고, 중복 내려받기
+ * 파일명(`a_(1).png`)은 깨진 이미지가 된다. 저작기(react-markdown + remark-gfm)는 정상으로 그리므로
+ * **저작자는 사이트에서만 깨진 것을 볼 방법이 없다.**
+ *
+ * 재현: 패턴의 `(?:[^()\s]|\([^()\s]{0,64}\))` 를 `[^)\s]` 로 되돌리면 이 시험이 red 다.
+ */
+test("🔴 주소 안의 균형 괄호가 잘리지 않는다", () => {
+    const link = parseInline("[위키](https://ko.wikipedia.org/wiki/타입_(프로그래밍))");
+    deepStrictEqual(link, [{kind: "link", href: "https://ko.wikipedia.org/wiki/타입_(프로그래밍)", text: "위키"}]);
+
+    const image = parseInline("![도면](https://ex.com/a_(1).png)");
+    deepStrictEqual(image, [{kind: "image", src: "https://ex.com/a_(1).png", alt: "도면"}]);
+
+    // **양성 짝** — 평범한 주소가 그대로여야 한다(넓힘이 정상을 안 먹는다).
+    deepStrictEqual(parseInline("[정상](/policies)"), [{kind: "link", href: "/policies", text: "정상"}]);
+    deepStrictEqual(parseInline("![우리](media:12)"), [{kind: "image", src: "media:12", alt: "우리"}]);
+
+    // **음성 짝** — 안 닫힌 괄호는 링크가 아니다(글자로 남는다 — 글자는 안 사라진다).
+    deepStrictEqual(parseInline("[안닫힘](https://ex.com/a(b"), [{kind: "text", text: "[안닫힘](https://ex.com/a(b"}]);
 });
 
 /* ── 저작기가 실제로 내는 꼴 ─────────────────────────────────────────────── */
@@ -522,7 +584,7 @@ test("🔴 예산 — 넓은 표는 칸 예산에서 멈춘다", () => {
     const ms = Number(process.hrtime.bigint() - started) / 1e6;
 
     strictEqual(blocks[0]?.kind, "table");
-    ok(tableCellCount(blocks) <= 8_000, `칸이 ${tableCellCount(blocks)}개 — 예산이 안 걸렸다`);
+    ok(tableCellCount(blocks) <= 2_000, `칸이 ${tableCellCount(blocks)}개 — 예산이 안 걸렸다`);
     // 넘친 줄은 사라지지 않는다 — 문단으로 남는다.
     strictEqual(blocks[1]?.kind, "paragraph");
     ok(ms < 500, `${ms.toFixed(0)}ms 걸렸다 — 칸 예산이 비용을 못 묶는다`);
@@ -544,7 +606,8 @@ test("🔴 예산 — 좁은 표는 넓은 표보다 훨씬 긴 행을 받는다
     const narrow = rowsOf(2);
     const wide = rowsOf(32);
     ok(narrow > wide * 10, `2열 ${narrow}행 · 32열 ${wide}행 — 행으로 세고 있다`);
-    ok(narrow >= 1_000, `2열 표가 ${narrow}행에서 잘린다 — 현실적인 가격표가 안 들어간다`);
+    // 2열 999행이면 사람이 읽는 가격표의 현실 범위 밖이다(위 「장문 기사」 시험이 그 여유를 잰다).
+    ok(narrow >= 500, `2열 표가 ${narrow}행에서 잘린다 — 현실적인 가격표가 안 들어간다`);
 });
 
 test("🔴 예산 — 상한 안의 표를 100개 쌓아도 즉시 끝난다", () => {
@@ -568,6 +631,6 @@ test("🔴 예산 — 상한 안의 표를 100개 쌓아도 즉시 끝난다", (
     );
     ok(blocks.filter((b) => b.kind === "paragraph").length >= 84, "넘친 표가 문단으로 안 남았다");
     // 칸 총수가 문서 예산에서 멈춘다 — 표당 상한만으로는 여기서 5만 칸이 된다.
-    ok(tableCellCount(blocks) <= 8_000, `표 칸이 ${tableCellCount(blocks)}개 — 문서 예산이 안 걸렸다`);
+    ok(tableCellCount(blocks) <= 2_000, `표 칸이 ${tableCellCount(blocks)}개 — 문서 예산이 안 걸렸다`);
     ok(ms < 500, `${ms.toFixed(0)}ms 걸렸다 — 본문 바이트당 비용이 열 수만큼 곱해진다`);
 });

@@ -37,7 +37,7 @@
 | 브랜드 색·폰트·모서리·밀도 | **소스** — `src/app/globals.css` 의 `@theme` 토큰 한 자리가 정본이다(§색은 소스가 정본이다) |
 | 회사명·연락처·주소·사이트 기본 SEO | DB — `getSiteConfig()` |
 | 상품·가격·재고·카테고리·후기·예약 슬롯 | DB — 콘솔·`@zalkera/client`. 소스는 **handle 로 가리킬 뿐** |
-| 게시글(블로그) | DB — `listPosts`/`getPost` |
+| 게시글(블로그) | DB — `listPosts`/`getPost`. **본문은 마크다운**이고 `src/lib/markdown.ts` 가 구조로 바꾼다 |
 
 **확인은 `next dev` 로 한다.** `content/**` 의 json 은 `content/index.ts` 가 정적 import 하므로 파일을 고치면 HMR 로 화면이 바로 바뀐다. 런타임 `fs` 읽기로 바꾸지 마라 — HMR 도 `next build`(standalone) 트레이싱도 함께 잃는다.
 
@@ -196,7 +196,7 @@ const access = {accessToken, phone, context: {clientIp: visitorIp(await headers(
 | **기업 홈페이지** (항상 필요) | — | — | `getSiteConfig` · `content/` 로더 |
 | **쇼핑몰** | `src/app/{cart,checkout,payment,orders,mypage,login,auth}/` · `src/app/api/{cart,checkout,orders,payment,auth,reviews,consents}/` · `src/app/products/` · `src/app/c/` · `src/components/{Review*,LogoutButton,MarketingConsent}.tsx` · `src/lib/{oauth,oauthState}.ts` · 헤더의 장바구니·로그인 (⚠ `src/lib/session.ts` 가 `oauthState` 를 씁니다 — 그 파일도 같이 지우거나 그 import 를 걷으십시오) | `src/app/page.tsx` 가 상품 진열을 부르면 그 줄도 (얼굴 파일이라 프리셋마다 다릅니다) · **`src/lib/reservedSegments.ts` 와 `robots.ts` 의 `disallow` 에서 지운 이름 빼기** | `listProducts` · `getProduct` · `listProductCategories` · 장바구니·주문 계열 |
 | **예약** | `src/app/api/booking/` · `src/components/ProductRail.tsx`(시술 진열) | `ProductRail` 을 부르는 `src/app/page.tsx` 의 줄 · `src/app/products/[slug]/BookingPanel.tsx` (쇼핑몰 행의 `products/` 안에 삽니다) | 예약 슬롯 계열 |
-| **게시판·블로그** | `src/app/blog/` · `src/app/api/posts/` | **`src/lib/reservedSegments.ts` 에서 `blog` 빼기** | `listPosts` · `getPost` |
+| **게시판·블로그** | `src/app/blog/`(목록 · `page/[n]` 쪽 나눔 · `[slug]` 상세) · `src/app/api/posts/` · `src/components/{BlogList,Markdown,TableOfContents,RelatedPosts}.tsx` · `src/lib/{markdown,blogPaging,blogGraph}.ts` | **`src/lib/reservedSegments.ts` 에서 `blog` 빼기** · **이 문서의 §본문 렌더 절도 함께 지우기**(안 지우면 `validate` 가 `[D1]`) | `listPosts` · `getPost` |
 | **문의·리드** | `src/app/contact/` · `src/app/api/{inquiry,lead}/` | ⚠ `src/components/LeadForm.tsx` 는 **계약 어휘 섹션**(`LeadCtaSection`)이 씁니다. 지우려면 그 섹션과 그것을 쓰는 `content/` 페이지도 같이 지우십시오 · **`src/lib/reservedSegments.ts` 에서 `contact` 빼기** | 리드 제출 |
 
 **중립 배선 — 지우지 마십시오** (능력이 아니라 플랫폼 계약입니다):
@@ -228,6 +228,7 @@ const access = {accessToken, phone, context: {clientIp: visitorIp(await headers(
 | 목록·상세엔 `BreadcrumbList` | `breadcrumbJsonLd` + 각 라우트 `page.tsx` |
 | 목록 라우트의 `ItemList`(그리는 그 순서·그 항목 · 0건이면 미산출) | `src/app/products/page.tsx` · `src/app/blog/page.tsx` · `itemListJsonLd` |
 | 예약 유형의 목록 보장 = 개시된 페이지 어딘가의 `ItemList`(운반체는 소스가 정한다) | `src/app/products/page.tsx` · `src/components/ProductRail.tsx` |
+| 글 상세 = `BlogPosting`(또는 `NewsArticle`·`Article` — 갈래는 `schemaTypeOf`) + `author` + `dateModified` | `src/app/blog/[slug]/page.tsx` · `blogPostingJsonLd`(`src/lib/blogGraph.ts`) |
 | CMS 고정 페이지 = `WebPage` + `BreadcrumbList` | `src/app/[slug]/page.tsx` · `webPageJsonLd` |
 | `FAQ_LIST` 섹션 = `FAQPage` 직접 산출 | `src/components/sections/FaqListSection.tsx` |
 | `sitemap.ts`·`robots.ts` 필수 · 목록 라우트 등재 · 빈 목록 미등재 | `src/app/sitemap.ts` · `src/app/robots.ts` |
@@ -336,6 +337,41 @@ shadcn 소스는 자기 변수층(`--card`·`--muted-foreground` …)을 전제�
   빈 진열대는 방문자에게 거짓이고, "상품을 등록하면 여기 표시됩니다" 같은 안내도 넣지 마라 — 그 문장의
   독자는 사장이고 사장의 표면은 콘솔이다.
 - `TESTIMONIALS` 에 `Review`·`AggregateRating` 을 내지 않는다 — 자사 후기 별점은 정책 위반이다. 누락이 아니라 결정이다.
+
+## 글 본문 렌더 — 마크다운 부분집합과 그 **예산**
+
+글 본문(`post.content`)은 콘솔의 마크다운 저작기에서 온다. `src/lib/markdown.ts` 가 그것을
+**데이터**(블록·인라인 배열)로 바꾸고 `src/components/Markdown.tsx` 가 React 로 그린다 —
+`dangerouslySetInnerHTML` 이 없으므로 본문에 `<script>` 가 와도 **글자로 보일 뿐**이다.
+
+| 무엇 | 어디 |
+|---|---|
+| 파서(문법·예산) | `src/lib/markdown.ts` |
+| 렌더러(태그·클래스) | `src/components/Markdown.tsx` |
+| 목차(`#앵커` 내부 링크) | `src/components/TableOfContents.tsx` — 제목 id 는 파서가 준다 |
+| 관련 글 | `src/components/RelatedPosts.tsx` |
+| 목록·쪽 나눔 | `src/components/BlogList.tsx` · `src/lib/blogPaging.ts` |
+
+**지원 문법**: 제목·문단·목록·인용·코드 펜스·표·링크·이미지·강조. 저작기 삽입 버튼이 내는 셋
+(`![alt](media:12)` · ```` ```video ```` · ```` ```videofile ```` 펜스)도 여기 있다.
+**미지원**(의도): 각주·HTML 패스스루·중첩 목록·참조 링크·취소선·체크박스 — 그것들은 **글자로 남는다**.
+
+### ⛔ 예산 상수를 그냥 올리지 마라
+
+`markdown.ts` 에 문서 단위 상한이 셋 있다 — 블록 수 · 잎(표 칸 + 목록 항목) 수 · 인라인 **몫**.
+넘으면 남은 본문이 **서식 없는 한 문단**으로 남는다(글자 손실 0).
+
+이 값들은 임의로 고른 것이 아니라 **서빙 컨테이너 메모리에서 역산한 것**이다. 올리면 그만큼이
+그대로 한 요청의 메모리가 되고, 같은 쪽을 **두 번째로 치는 요청**이 그 사이트를 죽인다
+(실측: 한 판 이 값이 4배였을 때 예산을 지킨 문서 하나가 동시 요청 2에서 컨테이너를 OOM 시켰다).
+
+올려야 할 이유가 생기면 **재고 올려라**: `npm run build` 뒤 배송 형상
+(`.next/standalone/server.js`)을 그 사이트의 메모리 상한 아래 띄우고, 최악 문서를 담은 쪽을
+**동시에** 치면서 peak 을 본다. 상수를 고치면 `src/lib/markdown.test.ts` 의 문턱 단언과
+`scripts/lib/test-floors.json` 도 함께 움직여야 한다.
+
+⚠ **본문 «크기» 는 이 예산이 못 묶는다.** 예산은 «증폭» 을 없앨 뿐이고, 예산을 넘긴 글자는
+원문 그대로 남으므로 산출은 늘 «본문 + 구조» 다. 아주 큰 본문의 상한은 본문을 받는 API 가 정한다.
 
 ## 색은 소스가 정본이다 — `globals.css` 의 `@theme`
 

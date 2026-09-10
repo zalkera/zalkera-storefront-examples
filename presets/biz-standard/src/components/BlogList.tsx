@@ -27,7 +27,10 @@ export async function BlogList(props: {page: number; posts?: Awaited<ReturnType<
     //    ⚠ 지금 배송 형상에서는 Next 요청 메모이제이션이 그 왕복을 합쳐서 눈에 안 보인다 —
     //    「두 번 나간다」로 적지 마라(실물에서 재현되지 않는다). 판정을 정확히 두는 것이 이유다.
     const posts = "posts" in props ? props.posts : await listBlogPage(page);
-    const items = posts?.content ?? [];
+    // 🔴 **「모름」과 「0건」을 가른다.** `?? []` 로 접으면 백엔드가 안 될 때 방문자·답변 엔진에게
+    //    「게시글이 없습니다」라는 **거짓 진술**을 그리고, 이 쪽은 `force-static`+`revalidate` 라
+    //    그것이 그대로 굳는다. 모르면 그 자리를 **안 그린다**(형제 `app/page.tsx` 와 같은 형상).
+    const items = posts?.content;
     const base = siteUrl();
     // ⚠ **판정은 여기 없다** — `hasNextPage` 가 진다. 이 **배선**은 `lib/blogListRender.test.ts` 가
     //    실제로 렌더해서 잰다(술어만 재면 `const hasNext = false` 로 고정하는 변이가 통과한다 —
@@ -37,7 +40,7 @@ export async function BlogList(props: {page: number; posts?: Awaited<ReturnType<
     return (
         <main>
             {/* 목록 그래프 — 글이 0건이면 안 낸다(빈 목록을 그래프로 주장할 이유가 없다). */}
-            {items.length > 0 && (
+            {items != null && items.length > 0 && (
                 <JsonLd data={itemListJsonLd(items.map((p) => ({name: p.title, url: `${base}/blog/${p.slug}`})))} />
             )}
             <JsonLd
@@ -47,7 +50,7 @@ export async function BlogList(props: {page: number; posts?: Awaited<ReturnType<
                 ])}
             />
             <h1>블로그</h1>
-            {items.length === 0 ? (
+            {items == null ? null : items.length === 0 ? (
                 <p className="text-muted">게시글이 없습니다.</p>
             ) : (
                 <ul className="grid list-none gap-4 p-0">
