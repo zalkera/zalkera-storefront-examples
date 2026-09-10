@@ -1,7 +1,7 @@
 # 잘커라(Zalkera) 스토어프론트 Tier2 게이팅 CI.
 #
 # 잘커라 배포 게이트가 GitHub Checks API 로 이 워크플로의 성공을 확인한 뒤에만
-# Tier2(코드 배포) 를 진행한다. 세 단계는 27-real-codegen-deploy-pipeline.md §7.1·§9.3(T0)
+# Tier2(코드 배포) 를 진행한다. 세 단계는 백엔드 설계 메모(비공개)가 정본이다
 # 의 정본:
 #   1) validate     — 키트 validator(scripts/validate-storefront.mjs, llms.txt §5 규약)
 #   2) tsc --noEmit  — 타입 정합

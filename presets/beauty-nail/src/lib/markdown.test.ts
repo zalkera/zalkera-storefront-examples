@@ -1,6 +1,7 @@
 import {deepStrictEqual, ok, strictEqual} from "node:assert/strict";
 import {test} from "node:test";
-import {headingId, headings, inlineText, parseInline, parseMarkdown} from "./markdown.ts";
+import {INLINE_COST, headingId, headings, inlineText, parseInline, parseMarkdown} from "./markdown.ts";
+import type {Inline} from "./markdown.ts";
 
 /**
  * **재는 것은 「구조가 생기는가」다** — 글자가 아니라 `h2`·`a`·`img`·`li` 의 경계.
@@ -267,8 +268,14 @@ test("예산 안의 장문 기사는 그대로 구조가 된다", () => {
  * **몫 4,084/5,000** 이라, 「예산의 절반을 안 쓴다」가 참인 축은 둘뿐이다. 안 재는 축 하나가
  * 예산 전체를 「병적인 문서만 잘린다」로 잘못 읽히게 만든다.
  *
- * 그래서 **행위로** 잰다 — 수를 세지 않고, 문단이 링크를 **잃었는가**를 본다.
- * ⚠ 절 수를 줄이면(예: 60→50) 이 시험은 「닿는 자리」를 못 보고 조용히 초록이 된다.
+ * 그래서 **행위로** 잰다 — 문단이 링크를 **잃었는가**를 보고, KDoc 이 적은 수치를 **그대로**
+ * 단언한다. 수치만 적고 재는 자리를 안 두면 상수를 조금 움직였을 때 문서가 조용히 거짓이 된다
+ * (예산을 5,000→5,400 으로 하면 「54개」가 24개가 되는데 「잃은 문단이 있다」만 재면 초록이다).
+ *
+ * ⚠ 절 수를 55 이하로 줄이면 이 시험은 「닿는 자리」를 못 본다 — 60→50 은 `total > 300` 통제군이
+ *   잡지만 60→55 는 **조용히 초록**이다. 확인:
+ *   `article(60)` 을 `article(55)` 로 바꾸고
+ *   `node --experimental-strip-types --test src/lib/markdown.test.ts` → 0건 red.
  */
 test("🔴 세 축 중 몫이 먼저 닿는다 — 절 60개는 서식이 서고, 절 70개는 잃는다(글자는 남는다)", () => {
     const table = ["| a | b | c | d |", "|---|---|---|---|", ...Array(20).fill("| 1 | 2 | 3 | 4 |")].join("\n");
@@ -283,6 +290,24 @@ test("🔴 세 축 중 몫이 먼저 닿는다 — 절 60개는 서식이 서고
             ].join("\n\n"),
         ).join("\n\n");
 
+    /** 한 블록이 쓴 **몫** — 가중치는 파서가 쓰는 것을 그대로 가져온다(사본을 두면 갈린다). */
+    const inlineQuota = (b: unknown): number => {
+        const block = b as {
+            kind: string;
+            text?: unknown[];
+            head?: unknown[][];
+            rows?: unknown[][][];
+            items?: unknown[][];
+        };
+        const nodes: unknown[] =
+            block.kind === "table"
+                ? [...(block.head ?? []).flat(), ...(block.rows ?? []).flat(2)]
+                : block.kind === "list"
+                  ? (block.items ?? []).flat()
+                  : (block.text ?? []);
+        return nodes.reduce<number>((sum, n) => sum + (INLINE_COST[(n as Inline).kind] ?? 0), 0);
+    };
+
     const linked = (source: string): {kept: number; total: number} => {
         const paragraphs = parseMarkdown(source).filter((b) => b.kind === "paragraph") as Array<{
             text: Array<{kind: string}>;
@@ -293,14 +318,33 @@ test("🔴 세 축 중 몫이 먼저 닿는다 — 절 60개는 서식이 서고
         };
     };
 
+    // 절 50개(본문 20KB) — KDoc 이 적은 세 축의 소비를 **그대로** 단언한다.
+    const blocks50 = parseMarkdown(article(50));
+    const leaves50 = blocks50.reduce(
+        (sum, b) =>
+            sum +
+            (b.kind === "table"
+                ? (b as {head: unknown[]}).head.length +
+                  (b as {rows: unknown[][]}).rows.reduce((n, r) => n + r.length, 0)
+                : b.kind === "list"
+                  ? (b as {items: unknown[]}).items.length
+                  : 0),
+        0,
+    );
+    const quota50 = blocks50.reduce((sum, b) => sum + inlineQuota(b), 0);
+    strictEqual(blocks50.length, 377, "KDoc 의 「블록 377」이 낡았다");
+    strictEqual(leaves50, 942, "KDoc 의 「잎 942」가 낡았다");
+    strictEqual(quota50, 4_084, "KDoc 의 「몫 4,084」가 낡았다");
+
     // 절 60개(본문 23KB) — 정상 장문 기사다. 서식이 **하나도** 안 깎여야 한다.
     const ok60 = linked(article(60));
     strictEqual(ok60.kept, ok60.total, `절 60개인데 문단 ${ok60.total - ok60.kept}개가 링크를 잃었다`);
     ok(ok60.total > 300, `분모가 너무 작다(${ok60.total}) — 이 시험이 닿는 자리를 못 본다`);
 
-    // 절 70개(본문 27KB) — 여기서 몫이 닿는다. **양성 짝**: 예산이 실제로 무는 것을 보인다.
+    // 절 70개(본문 27KB) — 여기서 몫이 닿는다. **양성 짝**이자 KDoc 의 「54개」를 못박는 자리다.
     const over = linked(article(70));
     ok(over.kept < over.total, `절 70개인데 아무 문단도 서식을 안 잃었다 — 몫 예산이 안 물고 있다`);
+    strictEqual(over.total - over.kept, 54, "KDoc 의 「문단 54개가 잃는다」가 낡았다");
 
     // ⚠ 강하는 **서식만** 잃는다 — 마지막 절의 글자가 산출에 그대로 남아야 한다.
     const rendered = parseMarkdown(article(70))

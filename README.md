@@ -205,7 +205,7 @@ npm run dev                    # http://localhost:3000
 - **결제 확정은 백엔드 웹훅이 합니다.** returnUrl 의 "성공"을 믿지 말고 `/orders/[orderNo]` 로 상태를 확인하세요.
 - **variant 가 판매 단위** — 담기·주문은 항상 `variant.id`.
 - **미디어는 `/media/{id}` 안정 URL** 로 렌더합니다(presigned URL 직접 사용 금지, `next/image` 대신 `<img>`).
-- **공개 페이지는 JSON-LD 를 냅니다** — 홈 `Organization`, 상품 상세 `Product`+`Offer`, 목록(`/products`·`/blog`) `ItemList`, 글 상세 `BlogPosting`(+`author`·`dateModified`), 고정 페이지 `WebPage`, 글 상세 `BlogPosting`, 그리고 `BreadcrumbList`. 규범 정본은 `llms.txt` §5.1 이고 **어느 파일이 어느 규범을 구현하는지는 [`AGENTS.md`](AGENTS.md) 의 좌표표**에 있습니다(여기서 사본을 만들지 않습니다). 규율은 하나입니다 — **페이지에 없는 것을 그래프에 쓰지 않습니다**: 후기 0건이면 평점을, 항목 0건이면 `ItemList` 를 아예 내지 않고, 빈 목록은 `sitemap` 에도 싣지 않습니다.
+- **공개 페이지는 JSON-LD 를 냅니다** — 홈 `Organization`, 상품 상세 `Product`+`Offer`, 목록(`/products`·`/blog`) `ItemList`, 글 상세 `BlogPosting`(+`author`·`dateModified`), 고정 페이지 `WebPage`, 그리고 `BreadcrumbList`. 규범 정본은 `llms.txt` §5.1 이고 **어느 파일이 어느 규범을 구현하는지는 [`AGENTS.md`](AGENTS.md) 의 좌표표**에 있습니다(여기서 사본을 만들지 않습니다). 규율은 하나입니다 — **페이지에 없는 것을 그래프에 쓰지 않습니다**: 후기 0건이면 평점을, 항목 0건이면 `ItemList` 를 아예 내지 않고, 빈 목록은 `sitemap` 에도 싣지 않습니다.
 
 ## 검사기 — 소스 하나, 산출물 하나
 
