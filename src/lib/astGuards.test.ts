@@ -573,7 +573,13 @@ test("양성 통제군 — 그 판정이 «자기가 만든 이름» 을 구분�
  */
 const SECTION_URL_SANITIZERS = new Set(["assetPath", "mediaSrc", "safeLinkUrl", "blogPagePath"]);
 
-/** 주소를 내는 **HTML** 속성만(컴포넌트 prop 은 URL 이 아니다 — `JsonLd.data` 는 JSON-LD 다). */
+/**
+ * 주소를 내는 속성 이름.
+ *
+ * ⛔ **태그가 HTML 인가로 가르지 마라.** `next/link` 의 `<Link href>` 는 정확히 `<a href>` 로
+ *    나간다 — 대문자 태그를 빼면 이 트리의 링크 소독이 통째로 그물 밖에 선다.
+ *    **속성 이름으로** 가른다. 대신 URL 이 아닌 동명 prop(`JsonLd.data`)은 이름 목록에서 뺀다.
+ */
 const SECTION_URL_ATTRS = new Set([
     "src",
     "srcSet",
@@ -586,6 +592,8 @@ const SECTION_URL_ATTRS = new Set([
     "background",
     "style",
 ]);
+// ⚠ `data` 는 뺐다 — HTML 의 `<object data>` 보다 `JsonLd data` 가 이 트리에서 훨씬 흔하고,
+//   그 값은 주소가 아니라 JSON-LD 객체다. `<object>` 는 이 팩에 0건이다.
 
 /**
  * 섹션 파일 하나의 «주소 속성 → 출처» 목록. 출처를 못 따라가면 그 사실을 적는다(«?» 도 값이다).
@@ -652,11 +660,10 @@ function sectionUrlOrigins(sf: TS.SourceFile): string[] {
     const visit = (node: TS.Node): void => {
         if (ts.isJsxSelfClosingElement(node) || ts.isJsxOpeningElement(node)) {
             const tag = node.tagName.getText(sf);
-            const isHtml = /^[a-z]/.test(tag); // 컴포넌트(대문자)의 prop 은 이 축이 아니다
             for (const attr of node.attributes.properties) {
                 if (!ts.isJsxAttribute(attr) || !ts.isIdentifier(attr.name)) continue;
                 const an = attr.name.text;
-                if (!isHtml || !SECTION_URL_ATTRS.has(an) || attr.initializer === undefined) continue;
+                if (!SECTION_URL_ATTRS.has(an) || attr.initializer === undefined) continue;
                 out.push(`${tag}.${an} ← ${origin(attr.initializer, 0)}`);
             }
         }
@@ -706,6 +713,9 @@ test("양성 통제군 — 섹션 판정이 «소독 안 한 값» 을 구분한
         "img.src ← asString()",
     ]);
     assert.deepEqual(sectionUrlOrigins(mk("const v = <img src={item.asset} />;")), ["img.src ← ?(asset)"]);
-    // 컴포넌트 prop 은 이 축이 아니다
+    // 🔴 `next/link` 의 `href` 는 `<a href>` 가 된다 — 대문자 태그라고 빼면 안 된다.
+    assert.deepEqual(sectionUrlOrigins(mk("const v = <Link href={item.href}>t</Link>;")), ["Link.href ← ?(href)"]);
+    assert.deepEqual(sectionUrlOrigins(mk("const v = <Link href={safeLinkUrl(u)}>t</Link>;")), ["Link.href ← 소독"]);
+    // URL 이 아닌 동명 prop 은 이름 목록에서 뺐다.
     assert.deepEqual(sectionUrlOrigins(mk('const v = <JsonLd data={{"@context": "https://x"}} />;')), []);
 });
