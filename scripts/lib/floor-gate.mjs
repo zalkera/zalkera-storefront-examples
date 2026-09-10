@@ -33,7 +33,7 @@ import {tmpdir} from "node:os";
 import {dirname, join, relative, resolve} from "node:path";
 import {fileURLToPath} from "node:url";
 import {childEnv} from "./childEnv.mjs";
-import {judgeFloors, REQUIRED_FLOORS} from "./floors.mjs";
+import {isCanonicalRepo, judgeFloors, REQUIRED_FLOORS} from "./floors.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 // ⚠ **실경로로 맞춘다.** node 러너는 시험 파일을 realpath 로 보고한다. 뿌리에 심링크가 끼어 있으면
@@ -158,6 +158,33 @@ if (short.length) {
     for (const s of short) console.error(`   · ${s}`);
     console.error("\n   이 스위트들이 그 가드가 옳은지 재는 유일한 자리입니다.");
     process.exit(1);
+}
+
+/**
+ * 🔴 **정본 저장소에서는 「하한 = 현재치」까지 요구한다.**
+ *
+ * 표가 스스로 「현재치와 같게 둔다 — 여유는 그만큼 시험을 지울 수 있게 한다」고 적는데 그것을
+ * 집행하는 자리가 없었다. 여유가 한 칸이라도 남으면 **그만큼의 시험이 조용히 지워져도 초록**이고,
+ * `pack-preset.mjs` 가 그 표를 그대로 고객 zip 에 실어 테넌트 트리에서도 안 물린다.
+ *
+ * ⚠ **팩·테넌트 트리에서는 요구하지 않는다.** 고객이 자기 시험을 더하면 현재치가 하한을 넘는데,
+ *   그것을 반려하면 「시험을 더하지 마라」가 된다. 그쪽에서 지키는 것은 하한 하나다.
+ *
+ * 재현: 이 저장소에서 표의 한 칸을 1 내리고 `node scripts/lib/floor-gate.mjs` → rc=1
+ */
+if (isCanonicalRepo((f) => existsSync(join(root, f)))) {
+    const slack = [];
+    for (const [f, min] of Object.entries(effective)) {
+        const got = counted.get(f) ?? 0;
+        if (got > min) slack.push(`${f} — 통과 ${got}건인데 하한 ${min}(여유 ${got - min})`);
+    }
+    if (slack.length) {
+        console.error("❌ 가드 회귀 스위트 — 하한에 여유가 있습니다(정본 저장소):");
+        for (const s of slack) console.error(`   · ${s}`);
+        console.error("\n   여유만큼 시험을 지워도 초록입니다. scripts/lib/test-floors.json 과");
+        console.error("   scripts/lib/floors.mjs 의 값을 현재치로 올리십시오.");
+        process.exit(1);
+    }
 }
 
 console.log(`✅ 가드 회귀 스위트 — 스위트별 하한 통과(${Object.keys(effective).length}개)`);
