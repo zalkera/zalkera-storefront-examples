@@ -3,7 +3,7 @@ import {zalkera} from "@/lib/zalkera";
 import {siteUrl} from "@/lib/site";
 import {JsonLd, breadcrumbJsonLd, itemListJsonLd} from "@/components/JsonLd";
 import {formatDate} from "@/lib/datetime";
-import {BLOG_PAGE_SIZE, PAGE_NOT_ADDRESSABLE, blogPagePath, hasNextPage} from "@/lib/blogPaging";
+import {BLOG_PAGE_SIZE, OFFSET_EXCEEDED_CODE, PAGE_NOT_ADDRESSABLE, blogPagePath, hasNextPage} from "@/lib/blogPaging";
 
 /**
  * 블로그 목록 한 쪽 — `/blog`(1쪽)와 `/blog/page/{n}`(2쪽 이상)이 **함께** 쓴다.
@@ -19,11 +19,16 @@ import {BLOG_PAGE_SIZE, PAGE_NOT_ADDRESSABLE, blogPagePath, hasNextPage} from "@
  */
 export async function listBlogPage(page: number) {
     return zalkera.listPosts({page: page - 1, size: BLOG_PAGE_SIZE, sort: "publishedAt,desc"}).catch((error: unknown) =>
-        // 🔴 **400 은 「모름」이 아니라 「없음」이다.** 이 호출이 낼 수 있는 400 은 하나뿐이다 —
-        //    백엔드 공개 목록의 오프셋 상한(10,000행) 밖(`size`·`sort` 는 여기서 고정이다).
-        //    `null` 로 접으면 `n >= 501` 이 전부 200 소프트 404 로 서고 그 주소는 무한하다.
+        // 🔴 **오프셋 상한 거절만 「없음」이다 — 나머지는 전부 「모름」.** 그 쪽이 주소로 없다는 것은
+        //    백엔드가 `PUBLIC_LIST_OFFSET_EXCEEDED` 로 **말해 준다**. 「모름」으로 접으면 `n >= 501` 이
+        //    전부 200 소프트 404 로 서고 그 주소 집합은 무한하다.
         //    형제 `blog/[slug]`·`products/[slug]` 가 404 를 `notFound()` 로 옮기는 것과 같은 자리다.
-        error instanceof ZalkeraError && error.status === 400 ? PAGE_NOT_ADDRESSABLE : null,
+        //
+        // ⛔ **상태(400)로 가르지 마라.** 한 판 `error.status === 400` 이었는데, 400 은 이 호출에서
+        //    하나가 아니다 — 테넌트 헤더 누락(`TENANT_HEADER_MISSING`) · 중간 장비의 비JSON 400 ·
+        //    그리고 이 파일을 고치는 사람이 `listPosts` 에 인자를 하나 붙이는 순간 열리는 검증 400.
+        //    그때 설정 오류 하나가 블로그 **전 쪽**을 404 로 만들고 `revalidate` 동안 굳는다(보안 축 심의 🟠).
+        error instanceof ZalkeraError && error.code === OFFSET_EXCEEDED_CODE ? PAGE_NOT_ADDRESSABLE : null,
     );
 }
 

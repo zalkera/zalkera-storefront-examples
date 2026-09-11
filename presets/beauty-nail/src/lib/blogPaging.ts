@@ -39,6 +39,19 @@ export const BLOG_PAGE_SIZE = 20;
  */
 export const PAGE_NOT_ADDRESSABLE = "page-not-addressable" as const;
 
+/**
+ * 백엔드가 「그 쪽은 주소로 받지 않는다」고 **말할 때 쓰는 코드**(`ZalkeraError.code`).
+ *
+ * ⛔ **HTTP 상태로 가르지 마라.** 이 호출이 낼 수 있는 400 은 하나가 아니다 — 테넌트 헤더 누락 ·
+ * 중간 장비의 비JSON 400 · 목록 호출에 인자를 붙이면 열리는 검증 400. 상태로 가르면 그 전부가
+ * 「그 쪽은 없다」가 되어, 설정 오류 하나가 블로그 **전 쪽**을 404 로 만들고 `revalidate` 동안 굳는다.
+ *
+ * ⚠ 이 문자열은 백엔드 `CommonErrorCode` 의 enum 이름이고 공개 계약이라 리네임되지 않는다. 다만 여기
+ * 있는 것은 **옮겨 적은 값**이고, 두 레포를 실제로 통과시켜 재는 축은 아직 없다. 백엔드가 이 코드를
+ * 안 내면 그 쪽은 「모름」이 되어 — 200 빈 쪽이 아니라 종전처럼 **셸만** 선다(안전한 쪽으로 틀린다).
+ */
+export const OFFSET_EXCEEDED_CODE = "PUBLIC_LIST_OFFSET_EXCEEDED" as const;
+
 /** 목록 한 쪽을 읽은 결과의 세 상태 — 있음 · 모름(`null`·`undefined`) · 없음([PAGE_NOT_ADDRESSABLE]). */
 export type BlogPageState<T> = T | null | undefined | typeof PAGE_NOT_ADDRESSABLE;
 

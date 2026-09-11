@@ -202,6 +202,19 @@ test("🔴 백엔드가 죽으면 셸만 그리고 «없다»고 말하지 않�
     }
 });
 
+/**
+ * 🔴 **거절된 쪽도 «없다»고 말하지 않는다.** 라우트가 그 앞에서 404 를 내므로 지금은 도달 불가지만,
+ * 「그물 없음」은 「도달 불가」가 아니다 — 목록을 그리는 라우트가 하나 더 생기면 그때 조용히 열린다.
+ * `?? []` 로 접는 변이(거절을 0건으로 읽음)가 여기서 red 다(기능 축 심의 🟡).
+ */
+test("🔴 백엔드가 거절한 쪽도 «게시글이 없습니다» 를 그리지 않는다", async () => {
+    const html = await render(1, PAGE_NOT_ADDRESSABLE);
+    assert.match(html, /블로그/, `셸이 안 섰다: ${html}`);
+    assert.doesNotMatch(html, /게시글이 없습니다/, `거절을 «0건» 으로 읽어 거짓 진술을 그렸다: ${html}`);
+    assert.doesNotMatch(html, /rel="next"/, "거절된 쪽에서 다음을 그렸다");
+    assert.doesNotMatch(html, /ItemList/, "거절된 쪽에서 목록 그래프를 냈다");
+});
+
 /** **양성 짝** — 진짜로 0건이면 그때는 말해야 한다(빈 선반을 침묵으로 두면 저작자가 헷갈린다). */
 test("진짜 0건이면 «게시글이 없습니다» 를 그린다", async () => {
     const html = await render(1, {content: [], last: true});
@@ -314,7 +327,7 @@ test("🔴 라우트 — 백엔드가 거절한 쪽(400)은 404 를 던진다", 
  * ⚠ **양성 짝이 본체다.** 「무조건 없음」으로 고치면 백엔드 장애(5xx·네트워크)가 404 로 굳어
  *   복구 뒤에도 그 쪽이 안 산다 — 그래서 400 만 「없음」이고 나머지는 「모름」이어야 한다.
  */
-test("🔴 listBlogPage — 400 만 «없음» 이고 그 밖의 실패는 «모름» 이다", async () => {
+test("🔴 listBlogPage — 오프셋 거절 코드만 «없음» 이고 그 밖의 실패는 «모름» 이다", async () => {
     const {ZalkeraError} = await import("@zalkera/client");
     const mod = (await compileGraph("components/BlogList", {"lib/zalkera": ZALKERA_THROWING_STUB})) as unknown as {
         listBlogPage: (page: number) => Promise<unknown>;
@@ -323,13 +336,26 @@ test("🔴 listBlogPage — 400 만 «없음» 이고 그 밖의 실패는 «모
 
     thrown.error = new ZalkeraError("공개 목록은 10000행 앞까지만 쪽으로 읽을 수 있습니다", {
         status: 400,
-        code: "INVALID_INPUT_VALUE",
+        code: "PUBLIC_LIST_OFFSET_EXCEEDED",
     });
     assert.equal(
         await mod.listBlogPage(501),
         PAGE_NOT_ADDRESSABLE,
         "400 을 «모름» 으로 접었다 — /blog/page/501 부터 무한히 많은 주소가 200 소프트 404 로 선다",
     );
+
+    // 🔴 **다른 코드의 400 은 «모름» 이다.** 이것이 이 시험의 본체다 — 상태로 가르면 여기가 red 다.
+    //    테넌트 헤더가 비면 백엔드는 400 `TENANT_HEADER_MISSING` 을 낸다. 그것을 「없음」으로 읽으면
+    //    설정 오류 하나가 블로그 전 쪽을 404 로 만들고 `revalidate` 동안 굳는다.
+    thrown.error = new ZalkeraError("테넌트 헤더가 없습니다", {status: 400, code: "TENANT_HEADER_MISSING"});
+    assert.equal(
+        await mod.listBlogPage(2),
+        null,
+        "설정 오류 400 을 «그 쪽은 없다» 로 읽었다 — 블로그 전 쪽이 404 로 굳는다(상태가 아니라 코드로 갈라야 한다)",
+    );
+    // 코드 없는 400(중간 장비의 비JSON 응답)도 같다.
+    thrown.error = new ZalkeraError("Bad Request", {status: 400, code: null});
+    assert.equal(await mod.listBlogPage(2), null, "코드 없는 400 을 «없음» 으로 읽었다");
 
     // **양성 짝** — 장애는 「모름」이다. 404 를 내면 ISR 로 굳어 복구 뒤에도 404 가 나간다.
     thrown.error = new ZalkeraError("게이트웨이가 안 붙는다", {status: 503, code: "UPSTREAM_UNAVAILABLE"});

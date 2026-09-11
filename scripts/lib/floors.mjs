@@ -27,7 +27,7 @@ export const REQUIRED_FLOORS = {
     "src/lib/oauthState.test.ts": 11,
     "src/lib/routeParam.test.ts": 5,
     "src/lib/blogPaging.test.ts": 8,
-    "src/lib/blogListRender.test.ts": 12,
+    "src/lib/blogListRender.test.ts": 13,
     "src/lib/content.test.ts": 3,
     "src/lib/blogGraph.test.ts": 6,
     "src/lib/jsonLdScript.test.ts": 5,
