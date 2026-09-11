@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {blogPagePath, hasNextPage, isOutOfRange, parseBlogPageSegment} from "./blogPaging.ts";
+import {PAGE_NOT_ADDRESSABLE, blogPagePath, hasNextPage, isOutOfRange, parseBlogPageSegment} from "./blogPaging.ts";
 
 /**
  * 블로그 쪽 나눔의 **판정 셋** — 발견 경로를 실제로 만드는 자리다.
@@ -133,4 +133,45 @@ test("🔴 백엔드가 죽으면(null·undefined) 범위 밖이라 하지 않�
     assert.equal(isOutOfRange(4, {content: []}), true);
     // `content` 자체가 없는 응답도 「모름」이 아니라 빈 쪽이다(백엔드가 답은 했다).
     assert.equal(isOutOfRange(4, {}), true);
+});
+
+/**
+ * 🔴 **백엔드가 거절한 쪽(400)은 「모름」이 아니라 「없음」이다.**
+ *
+ * 백엔드 공개 목록은 오프셋 10,000행 앞까지만 쪽으로 받고 그 너머는 빈 쪽이 아니라 **400** 이다.
+ * 이 팩의 쪽 크기가 20 이므로 `/blog/page/501` 부터가 그 자리다. 그 던짐을 `null` 로 접으면
+ * 종전에 404 이던 주소가 **200 소프트 404** 로 서고, `n` 이 무한하므로 그 주소 집합이 무한해진다.
+ *
+ * 재현: 글이 몇 건이든 `curl -sI localhost:3000/blog/page/501` — 404 여야 한다. 200 이면
+ * `BlogList.listBlogPage` 의 `catch` 가 400 을 `null` 로 접고 있다.
+ */
+test("🔴 백엔드가 거절한 쪽은 곧바로 404 다 — 접으면 200 소프트 404 주소가 무한히 선다", () => {
+    for (const page of [2, 501, 999999999]) {
+        assert.equal(
+            isOutOfRange(page, PAGE_NOT_ADDRESSABLE),
+            true,
+            `${page}쪽이 백엔드 거절(400)에 200 을 낸다 — 소프트 404 사슬의 입구다`,
+        );
+    }
+    // 🔴 **1쪽도 그렇다 — 여기가 「빈 쪽」 규칙과 갈리는 자리다.**
+    //    빈 쪽(`{content: []}`)은 1쪽을 일부러 봐준다(글 0건인 블로그의 첫 쪽은 404 가 아니다).
+    //    거절은 다르다: 백엔드가 「그 쪽은 주소로 받지 않는다」고 **답한** 것이므로 쪽 번호와
+    //    무관하게 없음이다. 이 단언이 없으면 위 셋은 전부 **우연히** 초록이다 — 문자열에
+    //    `.content` 를 물으면 `undefined` 라 「0건」과 구별이 안 되어, 이름으로 적은 판정을
+    //    통째로 지워도 `page > 1` 갈래가 같은 답을 낸다(변이 P3 실측 — 재현:
+    //    `blogPaging.ts` 의 `if (posts === PAGE_NOT_ADDRESSABLE) return true;` 한 줄을 지우고
+    //    `node --experimental-strip-types --test src/lib/blogPaging.test.ts; echo rc=$?` ·
+    //    이 단언이 없으면 rc=0, 있으면 rc=1).
+    assert.equal(
+        isOutOfRange(1, PAGE_NOT_ADDRESSABLE),
+        true,
+        "거절을 «0건인 첫 쪽» 과 같이 읽는다 — 판정이 이름이 아니라 우연에 기대고 있다",
+    );
+
+    // 「다음」도 안 그린다 — 거절된 쪽 뒤에 쪽이 있을 수 없다.
+    assert.equal(hasNextPage(PAGE_NOT_ADDRESSABLE), false, "거절된 쪽에서 다음을 그린다 — 없는 쪽으로 크롤러를 보낸다");
+
+    // **양성 짝** — 세 상태가 실제로 갈리는가. 이 셋이 같은 답을 내면 위 단언은 「무조건 true」와 구별되지 않는다.
+    assert.equal(isOutOfRange(2, null), false, "모름을 없음으로 읽는다 — 백엔드 장애가 404 로 굳는다");
+    assert.equal(isOutOfRange(2, {content: new Array(20)}), false, "글이 있는 쪽을 없는 쪽이라 한다");
 });
