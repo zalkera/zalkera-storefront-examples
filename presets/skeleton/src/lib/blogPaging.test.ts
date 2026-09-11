@@ -158,7 +158,10 @@ test("🔴 백엔드가 거절한 쪽은 곧바로 404 다 — 접으면 200 소
     //    거절은 다르다: 백엔드가 「그 쪽은 주소로 받지 않는다」고 **답한** 것이므로 쪽 번호와
     //    무관하게 없음이다. 이 단언이 없으면 위 셋은 전부 **우연히** 초록이다 — 문자열에
     //    `.content` 를 물으면 `undefined` 라 「0건」과 구별이 안 되어, 이름으로 적은 판정을
-    //    통째로 지워도 `page > 1` 갈래가 같은 답을 낸다(변이 P3 실측).
+    //    통째로 지워도 `page > 1` 갈래가 같은 답을 낸다(변이 P3 실측 — 재현:
+    //    `blogPaging.ts` 의 `if (posts === PAGE_NOT_ADDRESSABLE) return true;` 한 줄을 지우고
+    //    `node --experimental-strip-types --test src/lib/blogPaging.test.ts; echo rc=$?` ·
+    //    이 단언이 없으면 rc=0, 있으면 rc=1).
     assert.equal(
         isOutOfRange(1, PAGE_NOT_ADDRESSABLE),
         true,
