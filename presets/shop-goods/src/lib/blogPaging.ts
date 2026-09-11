@@ -24,6 +24,25 @@
 export const BLOG_PAGE_SIZE = 20;
 
 /**
+ * **「그 쪽은 주소로 받지 않는다」** — 백엔드가 오프셋 상한 밖이라고 **거절한** 상태(HTTP 400).
+ *
+ * 🔴 `null`(모름)과 **갈라야 한다.** 백엔드 공개 목록은 오프셋 10,000행 앞까지만 쪽으로 받고
+ * 그 너머는 빈 쪽이 아니라 **400** 이다(`PublicListPaging.MAX_OFFSET`). 그래서 이 팩에서는
+ * `n >= 501`(500쪽 × [BLOG_PAGE_SIZE] = 10,000)부터 목록 호출이 던진다.
+ *
+ * 그 던짐을 `null` 로 접으면 [isOutOfRange] 가 「모름」으로 읽어 **200 을 낸다** — `page > 1` 이라
+ * 「← 이전」까지 그려지고, 이 라우트는 `force-static` + `revalidate` 라 그대로 굳는다. `n` 이
+ * 무한하므로 **200 을 내는 주소 집합이 무한**해진다. 이 파일이 금지한 「소프트 404 · 빈 쪽 사슬」
+ * 그 자체다.
+ *
+ * 그래서 상태가 셋이다: **있음**(쪽) · **모름**(`null`·`undefined`) · **없음**(이 값).
+ */
+export const PAGE_NOT_ADDRESSABLE = "page-not-addressable" as const;
+
+/** 목록 한 쪽을 읽은 결과의 세 상태 — 있음 · 모름(`null`·`undefined`) · 없음([PAGE_NOT_ADDRESSABLE]). */
+export type BlogPageState<T> = T | null | undefined | typeof PAGE_NOT_ADDRESSABLE;
+
+/**
  * 쪽 번호 → 주소. **1쪽은 `/blog` 다** — `/blog/page/1` 을 따로 두면 같은 내용이 두 주소에 서서
  * 색인이 갈린다. 받는 쪽(`app/blog/page/[n]`)도 1쪽을 404 로 거절한다: 한쪽만 하면 크롤러가
  * 만든 적 없는 주소로 들어올 때 열린다.
@@ -65,7 +84,11 @@ export function parseBlogPageSegment(raw: string): number | null {
  *   함수를 안 넓혔더니, 「모름」이 범위 판정을 통과한 뒤 여기서 던져 공개 쪽이 **404 가 아니라
  *   500** 이 됐다. 두 술어는 같은 값을 받으므로 **같은 관용을 가져야 한다.**
  */
-export function hasNextPage(posts: {last?: boolean} | null | undefined): boolean {
+export function hasNextPage(posts: BlogPageState<{last?: boolean}>): boolean {
+    // ⚠ **「없음」은 「모름」이 아니다.** 백엔드가 그 쪽을 거절했으면 그 뒤 쪽도 없다.
+    //    이 줄이 없으면 문자열에 `.last` 를 물어 `undefined` 라 마침 `false` 가 나오는데,
+    //    그 초록은 **우연**이다 — 판정을 이름으로 적는다.
+    if (posts === PAGE_NOT_ADDRESSABLE) return false;
     return posts?.last === false;
 }
 
@@ -77,7 +100,10 @@ export function hasNextPage(posts: {last?: boolean} | null | undefined): boolean
  *   쪽이 그 상태로 남는다. 같은 판단이 `sitemap.ts`(「빈 목록 페이지를 색인시킬 이유가 없다」)와
  *   `BlogList`(글 0건이면 `ItemList` 를 안 낸다)에 이미 있다 — 라우트에만 없었다.
  */
-export function isOutOfRange(page: number, posts: {content?: unknown[]} | null | undefined): boolean {
+export function isOutOfRange(page: number, posts: BlogPageState<{content?: unknown[]}>): boolean {
+    // 🔴 **백엔드가 「그 쪽은 없다」고 답한 것**은 모름이 아니다 — 곧바로 404 다. 이 줄이 없으면
+    //    `n >= 501` 이 전부 200 소프트 404 로 서고, 그 주소 집합은 무한하다([PAGE_NOT_ADDRESSABLE]).
+    if (posts === PAGE_NOT_ADDRESSABLE) return true;
     // ⚠ **`null` 은 「모름」이지 「범위 밖」이 아니다.** 백엔드가 죽었을 때 404 를 내면 그것이
     //    ISR 로 `revalidate` 동안 굳어, **백엔드가 살아난 뒤에도** 그 쪽이 404 를 낸다 —
     //    캐시는 디스크에 있어 프로세스를 다시 띄워도 산다(응답에 `x-nextjs-cache: HIT`).

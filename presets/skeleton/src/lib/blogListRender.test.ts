@@ -4,6 +4,7 @@ import {dirname, join, resolve} from "node:path";
 import {fileURLToPath} from "node:url";
 import test from "node:test";
 import ts from "typescript";
+import {PAGE_NOT_ADDRESSABLE} from "./blogPaging.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SRC = resolve(HERE, "..");
@@ -52,6 +53,19 @@ export async function listBlogPage() {
 export function BlogList(props) {
     return {stub: "BlogList", props};
 }
+`;
+
+/**
+ * 백엔드가 **던지는** 것을 심는 목록 클라이언트 스텁 — `listBlogPage` 의 `catch` 가 그 던짐을
+ * 어떻게 읽는지(「모름」인가 「없음」인가) 보려는 자리다.
+ */
+const ZALKERA_THROWING_STUB = `
+globalThis.__zalkeraThrow = {error: null};
+export const zalkera = {
+    listPosts: async () => {
+        throw globalThis.__zalkeraThrow.error;
+    },
+};
 `;
 
 /** `@/foo/bar` → 실제 파일. 확장자는 파일이 있는 쪽으로 정한다(번들러가 하던 일). */
@@ -274,4 +288,52 @@ test("🔴 라우트 — 1쪽·다른 표기 세그먼트는 404 다", async () 
         const result = await call(bad, posts);
         assert.ok("threw" in result && isNotFound(result.threw), `${JSON.stringify(bad)} 가 열렸다`);
     }
+});
+
+/**
+ * 🔴 **백엔드가 거절한 쪽(400)은 라우트가 404 로 옮긴다.**
+ *
+ * 백엔드 공개 목록은 오프셋 10,000행 앞까지만 쪽으로 받는다(`PublicListPaging.MAX_OFFSET`) —
+ * 이 팩의 쪽 크기가 20 이므로 `/blog/page/501` 부터가 그 자리다. 종전에는 그 주소가 **빈 쪽**으로
+ * 와서 404 였는데, 이제는 **400** 이 온다. 그것을 「모름」으로 접으면 그 주소들이 전부
+ * **200 소프트 404** 로 서고 `n` 이 무한하므로 그 집합이 무한해진다.
+ */
+test("🔴 라우트 — 백엔드가 거절한 쪽(400)은 404 를 던진다", async () => {
+    const result = await call("501", PAGE_NOT_ADDRESSABLE);
+    assert.ok("threw" in result, "400 을 받고도 200 을 냈다 — 무한한 소프트 404 주소가 선다");
+    assert.ok(isNotFound(result.threw), `404 가 아닌 것을 던졌다: ${String(result.threw)}`);
+});
+
+/**
+ * 🔴 **그 400 을 「없음」으로 옮기는 자리는 `listBlogPage` 의 `catch` 다.**
+ *
+ * 위 라우트 시험은 스텁이 이미 「없음」을 준 상태를 재므로, `catch` 를 `() => null` 로 되돌리는
+ * 변이를 **안 잡는다**(술어만 재면 호출부가 안 잠기는 것과 같은 자리다 — 이 파일이 존재하는 이유).
+ * 그래서 여기서는 클라이언트가 **실제로 던지게** 하고 그 반환값을 본다.
+ *
+ * ⚠ **양성 짝이 본체다.** 「무조건 없음」으로 고치면 백엔드 장애(5xx·네트워크)가 404 로 굳어
+ *   복구 뒤에도 그 쪽이 안 산다 — 그래서 400 만 「없음」이고 나머지는 「모름」이어야 한다.
+ */
+test("🔴 listBlogPage — 400 만 «없음» 이고 그 밖의 실패는 «모름» 이다", async () => {
+    const {ZalkeraError} = await import("@zalkera/client");
+    const mod = (await compileGraph("components/BlogList", {"lib/zalkera": ZALKERA_THROWING_STUB})) as unknown as {
+        listBlogPage: (page: number) => Promise<unknown>;
+    };
+    const thrown = (globalThis as {__zalkeraThrow?: {error: unknown}}).__zalkeraThrow!;
+
+    thrown.error = new ZalkeraError("공개 목록은 10000행 앞까지만 쪽으로 읽을 수 있습니다", {
+        status: 400,
+        code: "INVALID_INPUT_VALUE",
+    });
+    assert.equal(
+        await mod.listBlogPage(501),
+        PAGE_NOT_ADDRESSABLE,
+        "400 을 «모름» 으로 접었다 — /blog/page/501 부터 무한히 많은 주소가 200 소프트 404 로 선다",
+    );
+
+    // **양성 짝** — 장애는 「모름」이다. 404 를 내면 ISR 로 굳어 복구 뒤에도 404 가 나간다.
+    thrown.error = new ZalkeraError("게이트웨이가 안 붙는다", {status: 503, code: "UPSTREAM_UNAVAILABLE"});
+    assert.equal(await mod.listBlogPage(2), null, "5xx 를 «없음» 으로 읽었다 — 장애가 404 로 굳는다");
+    thrown.error = new Error("fetch failed");
+    assert.equal(await mod.listBlogPage(2), null, "네트워크 실패를 «없음» 으로 읽었다 — 장애가 404 로 굳는다");
 });

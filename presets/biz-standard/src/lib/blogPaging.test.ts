@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {blogPagePath, hasNextPage, isOutOfRange, parseBlogPageSegment} from "./blogPaging.ts";
+import {PAGE_NOT_ADDRESSABLE, blogPagePath, hasNextPage, isOutOfRange, parseBlogPageSegment} from "./blogPaging.ts";
 
 /**
  * 블로그 쪽 나눔의 **판정 셋** — 발견 경로를 실제로 만드는 자리다.
@@ -133,4 +133,30 @@ test("🔴 백엔드가 죽으면(null·undefined) 범위 밖이라 하지 않�
     assert.equal(isOutOfRange(4, {content: []}), true);
     // `content` 자체가 없는 응답도 「모름」이 아니라 빈 쪽이다(백엔드가 답은 했다).
     assert.equal(isOutOfRange(4, {}), true);
+});
+
+/**
+ * 🔴 **백엔드가 거절한 쪽(400)은 「모름」이 아니라 「없음」이다.**
+ *
+ * 백엔드 공개 목록은 오프셋 10,000행 앞까지만 쪽으로 받고 그 너머는 빈 쪽이 아니라 **400** 이다.
+ * 이 팩의 쪽 크기가 20 이므로 `/blog/page/501` 부터가 그 자리다. 그 던짐을 `null` 로 접으면
+ * 종전에 404 이던 주소가 **200 소프트 404** 로 서고, `n` 이 무한하므로 그 주소 집합이 무한해진다.
+ *
+ * 재현: 글이 몇 건이든 `curl -sI localhost:3000/blog/page/501` — 404 여야 한다. 200 이면
+ * `BlogList.listBlogPage` 의 `catch` 가 400 을 `null` 로 접고 있다.
+ */
+test("🔴 백엔드가 거절한 쪽은 곧바로 404 다 — 접으면 200 소프트 404 주소가 무한히 선다", () => {
+    for (const page of [2, 501, 999999999]) {
+        assert.equal(
+            isOutOfRange(page, PAGE_NOT_ADDRESSABLE),
+            true,
+            `${page}쪽이 백엔드 거절(400)에 200 을 낸다 — 소프트 404 사슬의 입구다`,
+        );
+    }
+    // 「다음」도 안 그린다 — 거절된 쪽 뒤에 쪽이 있을 수 없다.
+    assert.equal(hasNextPage(PAGE_NOT_ADDRESSABLE), false, "거절된 쪽에서 다음을 그린다 — 없는 쪽으로 크롤러를 보낸다");
+
+    // **양성 짝** — 세 상태가 실제로 갈리는가. 이 셋이 같은 답을 내면 위 단언은 「무조건 true」와 구별되지 않는다.
+    assert.equal(isOutOfRange(2, null), false, "모름을 없음으로 읽는다 — 백엔드 장애가 404 로 굳는다");
+    assert.equal(isOutOfRange(2, {content: new Array(20)}), false, "글이 있는 쪽을 없는 쪽이라 한다");
 });
