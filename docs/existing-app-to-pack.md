@@ -147,8 +147,8 @@ grep -rhoE "from ['\"][^'\"./][^'\"]*['\"]" app components lib hooks \
 
 ### 2-1. 그대로 옮기는 것
 
-소스·에셋·빌드 설정 전부입니다. **한 글자도 고치지 않는 것이 기본값이고**, §2-2·§2-2b·§2-4 에
-해당하는 자리만 예외입니다.
+소스·에셋·빌드 설정 전부입니다. **한 글자도 고치지 않는 것이 기본값이고**, §2-2·§2-2b·§2-2c·§2-4 에
+해당하는 자리만 예외입니다(§2-2c 는 다른 도메인에 임베드하는 사이트만).
 
 **레이아웃을 먼저 확인하십시오** — 이 문서의 예시 경로는 루트 `app/` 기준이라 그대로 안 맞을 수
 있습니다.
@@ -223,13 +223,15 @@ export const dynamic = 'force-dynamic'
 마커가 있으면 error 가 warning 으로 내려갑니다. **이유 칸을 비우지 마십시오** — 빈 사유는
 면제가 안 됩니다.
 
-> 이것이 §2-1 「한 글자도 고치지 않는 것이 기본값」의 **세 번째 예외**입니다(앞 둘은 §2-2·§2-4).
+> 이것이 §2-1 「한 글자도 고치지 않는 것이 기본값」의 **세 번째 예외**입니다(앞 둘은 §2-2·§2-4 · 넷째는 §2-2c 의 임베드 헤더).
 > 원본이 동적 SSR 로 돌고 있었다고 해서 그대로 통과하지 않습니다.
 
-### 2-2c. 서빙이 채우는 응답 헤더 — 사이트를 다른 도메인의 iframe 에 넣어야 한다면
+### 2-2c. 서빙이 채우는 보안 헤더 셋 — 사이트를 다른 도메인의 iframe 에 넣어야 한다면
 
-서빙은 방문자 응답에 아래 셋을 **앱이 같은 이름으로 내지 않았을 때만** 채웁니다. 앱이 그 이름으로
-헤더를 내면 앱 값이 그대로 나갑니다(우리가 덮지 않습니다).
+서빙은 방문자 응답에 아래 **셋에 한해** 앱이 같은 이름으로 내지 않았을 때만 채웁니다. 앱이 그 이름으로
+헤더를 내면 앱 값이 그대로 나갑니다. (이 셋 밖에서 서빙이 손대는 헤더는 따로 있습니다 — `cache-control`
+은 §2-2b 의 서빙 규칙대로 바뀔 수 있고, 플랫폼 주소(`*.zalkera.com`)로 볼 때는 `X-Robots-Tag: noindex` 가
+붙습니다. 이 절은 아래 셋만 다룹니다.)
 
 | 헤더 | 우리 기본값 |
 | --- | --- |
@@ -237,36 +239,50 @@ export const dynamic = 'force-dynamic'
 | `Referrer-Policy` | `strict-origin-when-cross-origin` |
 | `X-Frame-Options` | `SAMEORIGIN` |
 
-셋째가 걸리는 경우가 하나 있습니다 — **사이트(또는 그 한 페이지)를 다른 도메인의 `<iframe>` 에 넣어야
-할 때**(예: 파트너 사이트에 예약 위젯을 임베드). 그러면 `next.config.ts` 의 `headers()` 로 그 경로에
-둘을 함께 내십시오.
+셋째가 걸리는 경우가 하나 있습니다 — **사이트의 한 경로를 다른 도메인의 `<iframe>` 에 넣어야 할 때**(예:
+파트너 사이트에 예약 위젯을 임베드). 그러면 `next.config.ts` 에 `headers()` 를 **더해** 그 경로에
+`frame-ancestors` 를 내십시오. 기존 설정(`output: "standalone"`)은 그대로 둡니다 — 지우면 §5-1 대로
+서빙에서 반려됩니다.
 
 ```ts
-// next.config.ts
-export default {
+// next.config.ts — 기존 설정에 headers() 만 더한다
+import type {NextConfig} from "next";
+
+const config: NextConfig = {
+  output: "standalone",
   async headers() {
     return [{
       source: '/embed/:path*',
       headers: [
-        // 누가 프레임에 넣어도 되는지 — 브라우저가 실제로 보는 규칙은 이것입니다.
+        // 누가 프레임에 넣어도 되는지. 오리진을 하나씩 적습니다.
         { key: 'Content-Security-Policy', value: "frame-ancestors 'self' https://partner.example" },
-        // ⚠ 이 이름으로도 내야 우리 기본값 SAMEORIGIN 이 물러섭니다. frame-ancestors 가 있으면
-        //   브라우저는 X-Frame-Options 를 무시하므로 값은 판정에 쓰이지 않지만, 안 내면 우리가
-        //   SAMEORIGIN 을 채워 frame-ancestors 를 모르는 오래된 브라우저에서 막힙니다.
-        { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
       ],
     }]
   },
 }
+export default config
 ```
 
-- `frame-ancestors` **만** 내고 `X-Frame-Options` 를 안 내면: 최신 브라우저는 됩니다(CSP 가 우선) ·
-  오래된 브라우저는 우리가 채운 `SAMEORIGIN` 으로 막힙니다.
-- `X-Frame-Options` 에는 「모두 허용」 값이 없습니다. 허용 목록은 `frame-ancestors` 로만 적습니다.
-- **정적 업로드(빌드 산출물만 올리는 사이트)는 헤더를 낼 자리가 없어** 지금은 이 기본값을 못 끕니다.
-  임베드가 필요하면 Next 앱으로 올리십시오.
-- `nosniff` 는 **선언한 content-type 이 틀린** 스타일시트·스크립트를 무시가 아니라 **차단**합니다.
-  옮긴 트리에 `.css` 를 `text/plain` 으로 내는 자리가 있으면 여기서 처음 드러납니다.
+- 우리가 채운 `X-Frame-Options: SAMEORIGIN` 은 그대로 **함께** 나갑니다. `frame-ancestors` 를 아는
+  브라우저(현행 브라우저 전부)는 규격상 그것만 보고 `X-Frame-Options` 를 무시하므로 임베드가 됩니다.
+  모르는 브라우저(IE11 · 구형 웹뷰 등)에서는 위젯이 **안 뜨는 쪽**으로 막힙니다 — 열리는 쪽이 아니라
+  막히는 쪽이라 그대로 두어도 됩니다. 앱이 `X-Frame-Options: SAMEORIGIN` 을 스스로 내는 것은 우리 값과
+  같아 아무것도 바꾸지 않습니다. 표준 값(`DENY`·`SAMEORIGIN`)에는 특정 도메인만 허용하는 것이 없습니다.
+- 그 브라우저에서도 꼭 열어야 하면 `X-Frame-Options` 를 **그 이름으로** 표준에 없는 값(예: `ALLOWALL`)으로
+  내십시오. 그러면 우리 값이 물러서고, 브라우저는 규격상 헤더가 없는 것처럼 굽니다 — 그 대가는 **그
+  브라우저에서는 누구나** 프레임에 넣을 수 있다는 것입니다(허용 목록은 `frame-ancestors` 를 아는 브라우저에서만
+  섭니다).
+- ⚠ `frame-ancestors` 에 `*` 나 `https://*.zalkera.com` 을 적지 마십시오. 같은 `*.zalkera.com` 의 **다른
+  사이트**가 프레임에 넣으면 방문자의 로그인 쿠키가 그 프레임에 실립니다(세션 쿠키가 `SameSite=Lax` 라
+  같은 등록 도메인 안에서는 실립니다 · 우리가 `SAMEORIGIN` 을 기본으로 두는 이유). 오리진을 하나씩
+  적으십시오.
+- 이 헤더에 `frame-ancestors` 외의 지시어(`script-src` 등)를 더하지 마십시오 — 마케팅 픽셀·태그가 조용히
+  끊깁니다(서빙이 CSP 를 안 거는 이유).
+- **정적 업로드(빌드 산출물만 올리는 사이트)는 헤더를 낼 자리가 없어** 이 기본값을 못 끕니다. 임베드가
+  필요하면 Next 앱으로 올리십시오.
+- `nosniff` 로 **처음** 드러나는 것은 잘못된 content-type 으로 나가던 **스크립트**입니다(`text/plain` 등으로
+  나가면 실행되던 것이 차단됩니다). 스타일시트는 표준 모드에서 이미 `text/css` 가 아니면 적용되지 않던
+  것이라 새로 깨지지 않습니다.
 
 ### 2-3. 빼는 것 — `.env` 는 팩에 실리지 않는다
 
