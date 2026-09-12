@@ -226,6 +226,48 @@ export const dynamic = 'force-dynamic'
 > 이것이 §2-1 「한 글자도 고치지 않는 것이 기본값」의 **세 번째 예외**입니다(앞 둘은 §2-2·§2-4).
 > 원본이 동적 SSR 로 돌고 있었다고 해서 그대로 통과하지 않습니다.
 
+### 2-2c. 서빙이 채우는 응답 헤더 — 사이트를 다른 도메인의 iframe 에 넣어야 한다면
+
+서빙은 방문자 응답에 아래 셋을 **앱이 같은 이름으로 내지 않았을 때만** 채웁니다. 앱이 그 이름으로
+헤더를 내면 앱 값이 그대로 나갑니다(우리가 덮지 않습니다).
+
+| 헤더 | 우리 기본값 |
+| --- | --- |
+| `X-Content-Type-Options` | `nosniff` |
+| `Referrer-Policy` | `strict-origin-when-cross-origin` |
+| `X-Frame-Options` | `SAMEORIGIN` |
+
+셋째가 걸리는 경우가 하나 있습니다 — **사이트(또는 그 한 페이지)를 다른 도메인의 `<iframe>` 에 넣어야
+할 때**(예: 파트너 사이트에 예약 위젯을 임베드). 그러면 `next.config.ts` 의 `headers()` 로 그 경로에
+둘을 함께 내십시오.
+
+```ts
+// next.config.ts
+export default {
+  async headers() {
+    return [{
+      source: '/embed/:path*',
+      headers: [
+        // 누가 프레임에 넣어도 되는지 — 브라우저가 실제로 보는 규칙은 이것입니다.
+        { key: 'Content-Security-Policy', value: "frame-ancestors 'self' https://partner.example" },
+        // ⚠ 이 이름으로도 내야 우리 기본값 SAMEORIGIN 이 물러섭니다. frame-ancestors 가 있으면
+        //   브라우저는 X-Frame-Options 를 무시하므로 값은 판정에 쓰이지 않지만, 안 내면 우리가
+        //   SAMEORIGIN 을 채워 frame-ancestors 를 모르는 오래된 브라우저에서 막힙니다.
+        { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
+      ],
+    }]
+  },
+}
+```
+
+- `frame-ancestors` **만** 내고 `X-Frame-Options` 를 안 내면: 최신 브라우저는 됩니다(CSP 가 우선) ·
+  오래된 브라우저는 우리가 채운 `SAMEORIGIN` 으로 막힙니다.
+- `X-Frame-Options` 에는 「모두 허용」 값이 없습니다. 허용 목록은 `frame-ancestors` 로만 적습니다.
+- **정적 업로드(빌드 산출물만 올리는 사이트)는 헤더를 낼 자리가 없어** 지금은 이 기본값을 못 끕니다.
+  임베드가 필요하면 Next 앱으로 올리십시오.
+- `nosniff` 는 **선언한 content-type 이 틀린** 스타일시트·스크립트를 무시가 아니라 **차단**합니다.
+  옮긴 트리에 `.css` 를 `text/plain` 으로 내는 자리가 있으면 여기서 처음 드러납니다.
+
 ### 2-3. 빼는 것 — `.env` 는 팩에 실리지 않는다
 
 **vsix·CLI 로 발행하면** 포장기가 `.env` 로 시작하는 모든 것을 뺍니다(`.envrc`·`.env~` 포함).
