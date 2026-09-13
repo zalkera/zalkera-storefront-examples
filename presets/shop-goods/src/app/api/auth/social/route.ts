@@ -3,6 +3,7 @@ import {NextResponse} from "next/server";
 import type {SocialProvider} from "@zalkera/client";
 import {zalkera} from "@/lib/zalkera";
 import {assertJsonContentType, assertSameOrigin, errorResponse} from "@/lib/http";
+import {requestOrigin} from "@/lib/crossOrigin";
 import {consumeOAuthState, setCustomerTokens} from "@/lib/session";
 import {setAuthHint} from "@/lib/authHint";
 import {callbackPath, parseProviderParam} from "@/lib/oauth";
@@ -63,7 +64,7 @@ export async function POST(req: Request) {
         }
         // `redirect_uri` 를 **본문에서 받지 않는다** — 요청이 도달한 오리진에서 파생한다(개시와 같은
         // 방식이라 두 값이 반드시 일치한다). 클라이언트가 준 값을 그대로 실으면 열린 리다이렉터가 된다.
-        const origin = req.headers.get("origin")!; // assertSameOrigin 이 존재·일치를 보장한다.
+        const origin = requestOrigin(req); // assertSameOrigin 이 보장한 뒤라 파싱이 안전하다.
         redirectUri = `${origin}${callbackPath(social)}`;
     }
 
