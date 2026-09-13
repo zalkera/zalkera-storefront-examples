@@ -1,5 +1,6 @@
 // 서버 전용. 클라이언트 컴포넌트에서 import 하지 말 것 — baseUrl 이 노출된다.
-import {createZalkeraClient} from "@zalkera/client";
+import type {cookies} from "next/headers";
+import {createZalkeraClient, type SocialLoginInput} from "@zalkera/client";
 import {apiBase, storefrontKey, tenantCode} from "@/lib/env";
 import {bindSocialExchange} from "@/lib/oauthState";
 
@@ -20,4 +21,15 @@ const {socialLogin, ...client} = createZalkeraClient({
 
 export const zalkera = client;
 
-export const exchangeSocialLogin = bindSocialExchange(socialLogin, () => process.env.NODE_ENV === "production");
+const exchange = bindSocialExchange(socialLogin, () => process.env.NODE_ENV === "production");
+
+/**
+ * 항아리는 `next/headers` 의 `cookies()` 가 돌려주는 것만 받는다 — 요청 쪽 쿠키(`req.cookies`)는 타입이 달라 거절된다.
+ * 그 항아리에서 지운 것은 응답에 실리지 않아 1회용 소각이 브라우저에 닿지 않기 때문이다. `cookies()` 를 이 파일에서
+ * 부르지 않는 것은 이 파일을 가져오는 SEO 페이지가 요청마다 렌더되지 않게 하려는 것이다(검사기 C1).
+ */
+export const exchangeSocialLogin = (
+    jar: Awaited<ReturnType<typeof cookies>>,
+    state: unknown,
+    input: SocialLoginInput,
+) => exchange(jar, state, input);
