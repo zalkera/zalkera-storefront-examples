@@ -62,8 +62,8 @@ export function resolveMediaRef(raw: string | null | undefined): number | null {
  *   자동으로 아무 데도 안 간다. 그래서 이 함수는 「못 쓰는 주소」와 「우리가 안 부를 주소」를
  *   **둘 다 `null`** 로 돌려주고, 그 둘을 가르는 것은 호출자가 [safeLinkUrl] 에 다시 물어서 한다.
  *
- * ⛔ **여기에 `https:` 갈래를 되살리지 마라.** 한 판 그랬고, 그러면 인수 기준이 문자 그대로
- *   거짓이 된다 — 외부 이미지가 든 글 하나가 그 검사를 떨어뜨린다.
+ * ⛔ **여기에 `https:` 갈래를 두지 마라** — 두면 인수 기준이 문자 그대로 거짓이 된다. 외부 이미지가
+ *   든 글 하나가 그 검사를 떨어뜨린다.
  *
  * 경로 조각을 손으로 잇지 않고 `mediaSrc` 를 부른다 — 주소 형태의 소유자는 client 하나다.
  */
@@ -100,15 +100,15 @@ export function bodyMediaSrc(raw: string | null | undefined): string | null {
  *   `cp /tmp/m.bak presets/skeleton/src/lib/mediaRef.ts`
  *
  * ⚠ **판정을 여기 적지 않는다** — [externalHref] 하나가 진다. 본문 **링크** 갈래가 같은 물음을
- *   묻기 때문이고, 두 자리에 적으면 한쪽이 반드시 틀린다(한 판 이미지는 파서로·링크는 문자로
- *   물었고, 링크 쪽이 `http:/evil.example/q` 를 내부로 판정해 `rel` 을 안 달았다).
+ *   묻기 때문이고, 두 자리에 적으면 한쪽이 반드시 틀린다(이미지는 파서로·링크는 문자로 물으면
+ *   링크 쪽이 `http:/evil.example/q` 를 내부로 판정해 `rel` 을 안 단다).
  *
  * ⚠ `http:` 도 링크로는 받는다 — 저작자가 넣은 그림에 닿게 하는 것이 목적이고, 링크는 방문자가
  *   **누를 때만** 나간다(혼합 콘텐츠로 막히는 `<img>` 와 다르다).
  */
 export function bodyImageHref(raw: string | null | undefined): string | null {
     // 판정은 [externalHref] 하나가 진다 — 본문 **링크** 갈래도 같은 물음을 묻고, 두 자리에 적으면
-    // 한쪽이 반드시 틀린다(실제로 한 판 이미지는 파서로·링크는 문자로 물었다).
+    // 한쪽이 반드시 틀린다(위 KDoc).
     return externalHref(raw);
 }
 

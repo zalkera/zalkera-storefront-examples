@@ -7,9 +7,8 @@ import {CheckoutForm} from "./CheckoutForm";
  * 에 계좌를 채웠을 때만 무통장 선택지가 폼에 간다.
  *
  * ⛔ **폼에는 「있다/없다」만 내려보낸다.** 계좌 문자열을 넘기면 화면에 안 그려도 RSC 페이로드에
- * 실린다 — 3.5.0 심의가 기능·보안 두 축에서 그것을 잡았다(내가 「안 내려보낸다」고 적어 놓고
- * 객체를 넘겼다). 지금 값은 공개 사이트설정이라 비밀이 아니지만, 그 주석을 근거로 다음 사람이
- * 비밀인 칸(가상계좌 발급 키 등)을 얹으면 그때 샌다. **주석이 참이 되게 코드를 고쳤다.**
+ * 실린다. 지금 값은 공개 사이트설정이라 비밀이 아니지만, 객체를 넘기는 형상이 서 있으면 다음 사람이
+ * 비밀인 칸(가상계좌 발급 키 등)을 얹을 때 그대로 샌다. 그 형상은 `astGuards.test.ts` 가 잠근다.
  */
 export default async function CheckoutPage() {
     const config = await zalkera.getSiteConfig({tags: ["site-config"]}).catch(() => null);

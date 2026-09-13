@@ -21,7 +21,7 @@ const SRC = resolve(HERE, "..");
  * `astGuards` 는 **0건 red**, 이 파일은 **3건 red** 다 —
  * `node --experimental-strip-types --test src/lib/astGuards.test.ts src/lib/markdownRender.test.ts`
  *
- * ⚠ **「이 하네스로는 렌더 시험이 안 된다」는 한 판 적힌 거짓이다.** 러너가 `.test.ts` 만 잡고
+ * ⚠ **「이 하네스로는 렌더 시험이 안 된다」는 거짓이다.** 러너가 `.test.ts` 만 잡고
  *   `--experimental-strip-types` 가 JSX 를 못 벗기는 것은 맞지만, `typescript`(이미 devDependency
  *   이고 `astGuards.test.ts` 가 쓴다)로 TSX 를 전사해 dynamic import 하면 `react-dom/server` 로
  *   렌더된다. 새 의존성 0 이다.
@@ -136,7 +136,7 @@ test("이미지도 링크도 될 수 없는 주소는 아무것도 안 그린다
  *
  * ⚠ 「`<img>` 가 없다 · `<a>` 가 없다」로 재면 **다른 태그로 새면 그만**이다. `<div
  *   style="background-image:url(//evil.example/x.png)">` 는 방문자 조작 없이 그 호스트를 부르는데
- *   두 단언을 다 통과한다(심의가 프리셋 한 벌을 그렇게 바꿔 전 게이트를 초록으로 만들었다).
+ *   두 단언을 다 통과한다.
  *   그래서 **속성을 전수로** 훑는다.
  */
 const REQUESTING_ATTRS =
