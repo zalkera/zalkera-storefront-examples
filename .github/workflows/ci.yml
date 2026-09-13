@@ -94,6 +94,24 @@ jobs:
       - name: Typecheck (tsc --noEmit)
         run: npm run typecheck
 
+      - name: 잘커라 레포 전용 — 배송 포맷 규약
+        # 팩 검수의 「배송 포맷 규약」이 prettier 로 zip 을 반려한다 —
+        # 재현: `npx prettier --check .; echo rc=$?` → rc=1 인 파일이 하나라도 있으면
+        # `node scripts/pack-preset.mjs --version <판>` 이 zip 을 하나도 쓰지 않고 멈춘다.
+        # 그 검사가 굽는 자리에만 있으면 어긋난 파일이 **CI 초록인 채 main 에 올라가** 판을
+        # 굽는 날 처음 막힌다.
+        #
+        # ⚠ **정본 전용이다.** 이 워크플로는 고객 zip 에 실린다(`SOURCE_EXCLUDES` 밖). 무조건
+        # 부르면 고객이 자기 취향대로 쓴 소스에서 **CI 가 영구 적색**이 되고, 배포 게이트가 이
+        # 워크플로를 읽으므로 그 사이트는 "말로 고치기"가 막힌다. 그래서 아래 스텝들과 같은
+        # 판별자(존재 두 개의 교집합)를 쓴다.
+        run: |
+          if [ -d presets ] && [ -f scripts/pack-preset.mjs ]; then
+            npx prettier --check .
+          else
+            echo "고객 레포로 판정 — 건너뜁니다(포맷은 고객 취향입니다)."
+          fi
+
       - name: Test (교차사이트·미리보기 가드 회귀 픽스처)
         # 판정 규칙은 한 줄만 흔들려도 조용히 열린다. Node 기본 러너 + 타입 스트리핑이라
         # devDependency 추가가 0이다(node 22 필요). 검사기 X1 은 "가드를 불렀는가"만 보므로

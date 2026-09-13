@@ -76,7 +76,8 @@ function parse(path: string): TS.SourceFile {
 function calls(root: TS.Node, name: string): boolean {
     let found = false;
     const visit = (node: TS.Node): void => {
-        if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === name) found = true;
+        if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === name)
+            found = true;
         ts.forEachChild(node, visit);
     };
     visit(root);
@@ -97,12 +98,14 @@ function exportedHandlers(sf: TS.SourceFile): {name: string; body: TS.Node}[] {
     const exported = (node: TS.Node): boolean =>
         ts.canHaveModifiers(node) && !!ts.getModifiers(node)?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword);
     for (const st of sf.statements) {
-        if (ts.isFunctionDeclaration(st) && st.name && st.body && exported(st)) out.push({name: st.name.text, body: st.body});
+        if (ts.isFunctionDeclaration(st) && st.name && st.body && exported(st))
+            out.push({name: st.name.text, body: st.body});
         if (ts.isVariableStatement(st) && exported(st)) {
             for (const d of st.declarationList.declarations) {
                 if (!ts.isIdentifier(d.name) || !d.initializer) continue;
                 const init = d.initializer;
-                if (ts.isArrowFunction(init) || ts.isFunctionExpression(init)) out.push({name: d.name.text, body: init.body});
+                if (ts.isArrowFunction(init) || ts.isFunctionExpression(init))
+                    out.push({name: d.name.text, body: init.body});
             }
         }
     }
@@ -156,7 +159,9 @@ function survey(): Row[] {
     for (const [label, dir] of PACK_SRCS) {
         for (const path of routeFiles(dir)) {
             const sf = parse(path);
-            const route = relative(join(dir, "app", "api"), path).split("\\").join("/");
+            const route = relative(join(dir, "app", "api"), path)
+                .split("\\")
+                .join("/");
             for (const h of exportedHandlers(sf)) {
                 rows.push({
                     label,
@@ -180,10 +185,19 @@ test("통제군 — 라우트를 실제로 읽는다(변이 문과 본문 필수
     // ⚠ **사본 수를 단언하지 않는다.** 고객 zip 에는 `presets/` 가 없어(`SOURCE_EXCLUDES`) 거기서는 이 그물이
     //    **자기 트리 하나**를 감사한다. 사본 대조는 정본 레포에서만 뜻이 있다(그 자리는 아래 5벌 시험).
     if (existsSync(PRESETS)) {
-        assert.ok(PACK_SRCS.length >= 2, `정본 레포인데 프리셋 사본을 못 찾았다: ${PACK_SRCS.map(([l]) => l).join(",")}`);
+        assert.ok(
+            PACK_SRCS.length >= 2,
+            `정본 레포인데 프리셋 사본을 못 찾았다: ${PACK_SRCS.map(([l]) => l).join(",")}`,
+        );
     }
-    assert.ok(rows.some((r) => r.bodyRequired), "본문 필수 문이 하나도 안 잡혔다 — 판정이 죽었다");
-    assert.ok(rows.some((r) => r.mutation && !r.bodyRequired), "본문 없는 변이 문이 하나도 안 잡혔다 — 판정이 죽었다");
+    assert.ok(
+        rows.some((r) => r.bodyRequired),
+        "본문 필수 문이 하나도 안 잡혔다 — 판정이 죽었다",
+    );
+    assert.ok(
+        rows.some((r) => r.mutation && !r.bodyRequired),
+        "본문 없는 변이 문이 하나도 안 잡혔다 — 판정이 죽었다",
+    );
 });
 
 test("🔴 본문 필수 문에는 ③층이 있다", () => {
@@ -220,7 +234,11 @@ test("🔴 ①층 면제는 목록과 정확히 같다 — 마커 복붙으로 �
         for (const path of routeFiles(dir)) {
             const text = readFileSync(path, "utf8");
             if (!text.includes("zalkera-allow-cross-origin")) continue;
-            found.add(relative(join(dir, "app", "api"), path).split("\\").join("/"));
+            found.add(
+                relative(join(dir, "app", "api"), path)
+                    .split("\\")
+                    .join("/"),
+            );
         }
     }
     assert.deepEqual([...found].sort(), [...CROSS_ORIGIN_EXEMPT].sort(), "면제 마커가 붙은 라우트 집합이 바뀌었다");
@@ -264,13 +282,16 @@ test("프리셋 5벌의 판정이 정본과 같다 — 한 벌만 고치는 사�
     const byRoute = new Map<string, Map<string, string>>();
     for (const r of rows) {
         if (!byRoute.has(`${r.route}#${r.method}`)) byRoute.set(`${r.route}#${r.method}`, new Map());
-        byRoute.get(`${r.route}#${r.method}`)!.set(r.label, `${r.mutation}/${r.bodyRequired}/${r.hasCtGuard}/${r.hasOriginGuard}`);
+        byRoute
+            .get(`${r.route}#${r.method}`)!
+            .set(r.label, `${r.mutation}/${r.bodyRequired}/${r.hasCtGuard}/${r.hasOriginGuard}`);
     }
     const drift: string[] = [];
     for (const [route, byLabel] of byRoute) {
         const shapes = new Set(byLabel.values());
         if (shapes.size > 1) drift.push(`${route}: ${[...byLabel].map(([l, s]) => `${l}=${s}`).join(" · ")}`);
-        if (byLabel.size !== PACK_SRCS.length) drift.push(`${route}: 사본 ${byLabel.size}/${PACK_SRCS.length} 벌에만 있다`);
+        if (byLabel.size !== PACK_SRCS.length)
+            drift.push(`${route}: 사본 ${byLabel.size}/${PACK_SRCS.length} 벌에만 있다`);
     }
     assert.deepEqual(drift, [], "프리셋 사본 사이에 ③층 배선이 갈렸다");
 });
