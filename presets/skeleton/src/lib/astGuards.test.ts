@@ -181,10 +181,82 @@ test("양성 통제군 — 금액의 `toLocaleString` 은 안 걸린다(시간�
  * 「계좌가 있다」는 사실뿐이므로 **불리언 하나**가 맞는 형상이다.
  */
 test("CheckoutForm 은 «계좌가 있다»만 받는다 — 계좌 문자열을 클라이언트로 넘기지 않는다", () => {
-    const sf = ourSourceFiles().find((f) => relPath(f) === "app/checkout/CheckoutForm.tsx");
-    // 결제 화면을 지운 고객 트리(`AGENTS.md` 능력 삭제표)에는 잴 폼이 없다. 정본은 지울 수 없다.
-    if (!sf && !CANONICAL && !existsSync(join(ROOT, "src", "app", "checkout"))) return;
-    assert.ok(sf, "CheckoutForm.tsx 를 프로그램에서 못 찾았다");
+    // ⑴ **어느 트리에서나 — 경로가 아니라 타입으로.** 클라이언트 모듈(`"use client"`)이 export 하는 컴포넌트의 props 에
+    //    계좌 칸(`@zalkera/client` `commercePolicies.bankTransfer` 계약의 이름)이 있으면 red. 폼을 어디로 옮겨도 잡힌다.
+    const BANK_FIELDS = new Set(["bankName", "accountNo", "holder"]);
+    const isClientModule = (sf: TS.SourceFile): boolean => {
+        const first = sf.statements[0];
+        return (
+            !!first &&
+            ts.isExpressionStatement(first) &&
+            ts.isStringLiteral(first.expression) &&
+            first.expression.text === "use client"
+        );
+    };
+    const ours = (sym: TS.Symbol | undefined): boolean =>
+        !!sym?.declarations?.some((d) => {
+            const f = d.getSourceFile();
+            return !f.isDeclarationFile || f.fileName.includes("@zalkera/client");
+        });
+    const bankField = (type: TS.Type, depth: number, seen: Set<TS.Type>): string | null => {
+        if (depth > 3 || seen.has(type)) return null;
+        seen.add(type);
+        const parts = type.isUnion() || type.isIntersection() ? type.types : [type];
+        for (const part of parts) {
+            for (const prop of checker.getPropertiesOfType(part)) {
+                if (BANK_FIELDS.has(prop.name)) return prop.name;
+                const propType = checker.getTypeOfSymbol(prop);
+                if (ours(propType.getSymbol() ?? propType.aliasSymbol) || propType.isUnion()) {
+                    const hit = bankField(propType, depth + 1, seen);
+                    if (hit) return `${prop.name}.${hit}`;
+                }
+            }
+        }
+        return null;
+    };
+    const leaks: string[] = [];
+    let clientModules = 0;
+    let componentsRead = 0;
+    for (const f of ourSourceFiles()) {
+        if (!isClientModule(f) || /\.test\.tsx?$/.test(f.fileName)) continue;
+        clientModules++;
+        const fns: [string, TS.ParameterDeclaration | undefined][] = [];
+        for (const st of f.statements) {
+            const exp =
+                ts.canHaveModifiers(st) && ts.getModifiers(st)?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword);
+            if (!exp) continue;
+            if (ts.isFunctionDeclaration(st) && st.name) fns.push([st.name.text, st.parameters[0]]);
+            if (ts.isVariableStatement(st)) {
+                for (const d of st.declarationList.declarations) {
+                    const init = d.initializer;
+                    if (ts.isIdentifier(d.name) && init && (ts.isArrowFunction(init) || ts.isFunctionExpression(init)))
+                        fns.push([d.name.text, init.parameters[0]]);
+                }
+            }
+        }
+        for (const [name, param] of fns) {
+            if (!param) continue;
+            componentsRead++;
+            const hit = bankField(checker.getTypeAtLocation(param), 0, new Set());
+            if (hit) leaks.push(`${relPath(f)}#${name} — ${hit}`);
+        }
+    }
+    assert.ok(
+        clientModules === 0 || componentsRead > 0,
+        `클라이언트 모듈 ${clientModules}개에서 props 를 하나도 못 읽었다 — 판정이 죽었다`,
+    );
+    assert.deepEqual(
+        leaks,
+        [],
+        "클라이언트 컴포넌트가 계좌 칸을 props 로 받는다 — 정적 프리렌더에 구워져 모든 방문자에게 나간다. 폼에는 «계좌가 있다»(불리언)만 넘긴다",
+    );
+
+    // ⑵ **폼의 형상 — 이름으로 찾는다.** 정본은 반드시 있고, 고객 트리에서 결제 폼을 지웠으면 잴 폼이 없다.
+    const sf = ourSourceFiles().find((f) =>
+        f.statements.some((st) => ts.isFunctionDeclaration(st) && st.name?.text === "CheckoutForm"),
+    );
+    if (!sf && !CANONICAL) return;
+    assert.ok(sf, "CheckoutForm 을 프로그램에서 못 찾았다");
 
     let props: TS.Type | undefined;
     const walk = (node: TS.Node): void => {

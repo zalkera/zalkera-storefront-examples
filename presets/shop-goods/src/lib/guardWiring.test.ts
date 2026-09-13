@@ -101,28 +101,87 @@ function calls(root: TS.Node, name: string): boolean {
  * 첫 인자 이름도 돌려준다 — 본문 읽기를 **그 이름으로** 판정한다. `req` 로 고정하면 `(r: Request)` 로 쓴
  * 본문 필수 문이 「본문 없는 문」으로 읽혀 ③층을 떼라는 거짓 문면이 선다.
  */
+const HTTP_METHODS = new Set(["GET", "HEAD", "OPTIONS", "POST", "PUT", "PATCH", "DELETE"]);
+
+type Fn = TS.FunctionDeclaration | TS.ArrowFunction | TS.FunctionExpression;
 type Handler = {name: string; body: TS.Node; param: string | null};
+
+function isExported(node: TS.Node): boolean {
+    return ts.canHaveModifiers(node) && !!ts.getModifiers(node)?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword);
+}
+
+/** 식이 함수면 그 함수 — 괄호·`as`·`satisfies` 를 벗기고, 래퍼 호출(`wrap(async (req) => {…})`)이면 인자로 넘긴 함수. */
+function asFn(e: TS.Expression | undefined): Fn | null {
+    if (!e) return null;
+    while (ts.isParenthesizedExpression(e) || ts.isAsExpression(e) || ts.isSatisfiesExpression(e)) e = e.expression;
+    if (ts.isArrowFunction(e) || ts.isFunctionExpression(e)) return e;
+    if (ts.isCallExpression(e)) {
+        for (const a of e.arguments) {
+            const f = asFn(a);
+            if (f) return f;
+        }
+    }
+    return null;
+}
+
+/**
+ * 읽는 꼴: `export async function POST` · `export const POST = async (req) => {}` · `export const POST = wrap(async (req) => {})`
+ * · `export {POST}`·`export {handler as POST}`(같은 파일의 함수·상수). 그 밖의 꼴로 export 한 메서드는
+ * [unreadableMethods] 가 돌려주고 통제군이 red 로 세운다 — 못 읽는 핸들러는 가드를 잴 수 없는 핸들러다.
+ */
 function exportedHandlers(sf: TS.SourceFile): Handler[] {
     const out: Handler[] = [];
-    const firstParam = (fn: {parameters: TS.NodeArray<TS.ParameterDeclaration>}): string | null => {
+    const firstParam = (fn: Fn): string | null => {
         const p = fn.parameters[0];
         return p && ts.isIdentifier(p.name) ? p.name.text : null;
     };
-    const exported = (node: TS.Node): boolean =>
-        ts.canHaveModifiers(node) && !!ts.getModifiers(node)?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword);
+    const local = new Map<string, Fn>();
     for (const st of sf.statements) {
-        if (ts.isFunctionDeclaration(st) && st.name && st.body && exported(st))
-            out.push({name: st.name.text, body: st.body, param: firstParam(st)});
-        if (ts.isVariableStatement(st) && exported(st)) {
+        if (ts.isFunctionDeclaration(st) && st.name && st.body) local.set(st.name.text, st);
+        if (ts.isVariableStatement(st)) {
             for (const d of st.declarationList.declarations) {
-                if (!ts.isIdentifier(d.name) || !d.initializer) continue;
-                const init = d.initializer;
-                if (ts.isArrowFunction(init) || ts.isFunctionExpression(init))
-                    out.push({name: d.name.text, body: init.body, param: firstParam(init)});
+                const f = ts.isIdentifier(d.name) ? asFn(d.initializer) : null;
+                if (f && ts.isIdentifier(d.name)) local.set(d.name.text, f);
             }
         }
     }
+    const push = (name: string, fn: Fn | null | undefined): void => {
+        if (fn?.body) out.push({name, body: fn.body, param: firstParam(fn)});
+    };
+    for (const st of sf.statements) {
+        if (ts.isFunctionDeclaration(st) && st.name && isExported(st)) push(st.name.text, st);
+        if (ts.isVariableStatement(st) && isExported(st)) {
+            for (const d of st.declarationList.declarations)
+                if (ts.isIdentifier(d.name)) push(d.name.text, asFn(d.initializer));
+        }
+        if (
+            ts.isExportDeclaration(st) &&
+            !st.moduleSpecifier &&
+            st.exportClause &&
+            ts.isNamedExports(st.exportClause)
+        ) {
+            for (const el of st.exportClause.elements) push(el.name.text, local.get((el.propertyName ?? el.name).text));
+        }
+    }
     return out;
+}
+
+/** 모듈이 export 하는 HTTP 메서드 이름 중 [exportedHandlers] 가 못 읽은 것. `export *` 는 이름을 모르므로 `*` 로 센다. */
+function unreadableMethods(sf: TS.SourceFile): string[] {
+    const names: string[] = [];
+    for (const st of sf.statements) {
+        if (ts.isFunctionDeclaration(st) && st.name && isExported(st)) names.push(st.name.text);
+        if (ts.isVariableStatement(st) && isExported(st)) {
+            for (const d of st.declarationList.declarations) names.push(ts.isIdentifier(d.name) ? d.name.text : "*");
+        }
+        if (ts.isExportDeclaration(st)) {
+            if (st.exportClause && ts.isNamedExports(st.exportClause))
+                for (const el of st.exportClause.elements) names.push(el.name.text);
+            else names.push("*");
+        }
+    }
+    const read = new Set(exportedHandlers(sf).map((h) => h.name));
+    return names.filter((n) => (HTTP_METHODS.has(n) || n === "*") && !read.has(n));
 }
 
 /** 그 핸들러가 본문을 읽는가 — `readJsonBody(…)` 든 첫 인자의 `.json()` 이든(인자 이름은 무엇이든). */
@@ -179,6 +238,70 @@ function crossOriginExemptReason(text: string): string | null {
     return head.match(CROSS_ORIGIN_MARKER)?.[1].trim() ?? null;
 }
 
+/** 이름으로 부르는가 — 식별자 호출(`f()`)이든 멤버 호출(`zalkera.f()`)이든. */
+function callsName(root: TS.Node, name: string): boolean {
+    let found = false;
+    const visit = (node: TS.Node): void => {
+        if (ts.isCallExpression(node)) {
+            const e = node.expression;
+            if ((ts.isIdentifier(e) && e.text === name) || (ts.isPropertyAccessExpression(e) && e.name.text === name))
+                found = true;
+        }
+        ts.forEachChild(node, visit);
+    };
+    visit(root);
+    return found;
+}
+
+/** 요청 인자를 가드가 아닌 함수에 그대로 넘기는가 — 넘기면 본문을 그 안에서 읽을 수 있어 이 그물이 필수 여부를 모른다. */
+const NON_READERS = new Set([
+    "assertSameOrigin",
+    "assertJsonContentType",
+    "readJsonBody",
+    "requestOrigin",
+    "isSameOriginRequest",
+]);
+function passesRequestElsewhere(root: TS.Node, param: string | null): boolean {
+    if (param === null) return false;
+    let found = false;
+    const visit = (node: TS.Node): void => {
+        if (ts.isCallExpression(node)) {
+            const e = node.expression;
+            const callee = ts.isIdentifier(e) ? e.text : ts.isPropertyAccessExpression(e) ? e.name.text : "";
+            if (!NON_READERS.has(callee) && node.arguments.some((a) => ts.isIdentifier(a) && a.text === param))
+                found = true;
+        }
+        ts.forEachChild(node, visit);
+    };
+    visit(root);
+    return found;
+}
+
+/** `src/` 아래에서 `app/api` 의 `route.ts` 가 아닌 소스 — 시험 파일은 뺀다. */
+function nonRouteSources(srcDir: string): string[] {
+    const out: string[] = [];
+    const walk = (dir: string): void => {
+        for (const e of readdirSync(dir, {withFileTypes: true})) {
+            const p = join(dir, e.name);
+            if (e.isDirectory()) {
+                if (e.name !== "node_modules") walk(p);
+            } else if (
+                /\.(ts|tsx)$/.test(e.name) &&
+                !/\.test\.tsx?$/.test(e.name) &&
+                !(e.name === "route.ts" && p.includes(join("app", "api")))
+            )
+                out.push(p);
+        }
+    };
+    walk(srcDir);
+    return out;
+}
+
+function parseAny(path: string): TS.SourceFile {
+    const kind = path.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS;
+    return ts.createSourceFile(path, readFileSync(path, "utf8"), ts.ScriptTarget.Latest, true, kind);
+}
+
 interface Row {
     label: string;
     route: string;
@@ -190,6 +313,9 @@ interface Row {
     hasOriginGuard: boolean;
     /** 파일 상단에 사유 있는 ①층 면제 마커가 있다. */
     exempt: boolean;
+    readsBody: boolean;
+    /** 요청 인자를 가드가 아닌 함수에 넘긴다 — 그 안에서 본문을 읽는지 이 그물은 모른다. */
+    passesRequestElsewhere: boolean;
 }
 
 function survey(): Row[] {
@@ -209,6 +335,8 @@ function survey(): Row[] {
                     mutation: MUTATION_METHODS.has(h.name),
                     // 본문 필수 = 그 핸들러가 본문을 읽고 + 없으면 400 을 낸다
                     bodyRequired: readsBody(h.body, h.param) && rejectsMissingBody(h.body),
+                    readsBody: readsBody(h.body, h.param),
+                    passesRequestElsewhere: passesRequestElsewhere(h.body, h.param),
                     hasCtGuard: calls(h.body, "assertJsonContentType"),
                     hasOriginGuard: calls(h.body, "assertSameOrigin"),
                     exempt,
@@ -221,19 +349,33 @@ function survey(): Row[] {
 
 test("통제군 — 라우트를 실제로 읽는다(변이 문과 본문 필수 문이 둘 다 있다)", () => {
     const rows = survey();
-    const files = PACK_SRCS.reduce((n, [, dir]) => n + routeFiles(dir).length, 0);
-    assert.ok(files === 0 || rows.length > 0, `라우트 파일 ${files}개에서 핸들러를 하나도 못 읽었다 — 판정이 죽었다`);
-    // ⚠ **아래는 정본에서만 선다.** 고객 트리는 `AGENTS.md` 능력 삭제표대로 쇼핑몰·예약 등을 지울 수 있고, 그러면
-    //    라우트 수도 「본문 필수 문이 있다」도 참이 아닐 수 있다 — 그물이 죽은 것이 아니라 능력을 지운 것이다.
+    // 🔴 **못 읽은 핸들러는 잴 수 없는 핸들러다.** 개수로 세면 GET 몇 줄이 그 자리를 메워, 변이 핸들러를 이 그물이 못 읽는
+    //    꼴로 바꾸고 ①층을 빼도 초록이 된다. 그래서 파일마다 export 한 메서드 이름으로 맞춘다.
+    const unreadable: string[] = [];
+    for (const [label, dir] of PACK_SRCS) {
+        for (const path of routeFiles(dir)) {
+            for (const m of unreadableMethods(parse(path)))
+                unreadable.push(`${label}:${relative(join(dir, "app", "api"), path)}#${m}`);
+        }
+    }
+    assert.deepEqual(
+        unreadable,
+        [],
+        "이 그물이 못 읽는 꼴로 HTTP 메서드를 export 했다 — 가드를 잴 수 없다. `export async function POST(req: Request)` 로 쓰거나, 같은 파일의 핸들러 함수를 `export {POST}` 로 내보낸다",
+    );
+    // 본문을 읽는 변이 문이 있으면 그중 하나는 본문 필수로 읽혀야 한다 — 신호(`invalidBody()`·`INVALID_BODY`)가 통째로
+    // 사라지면 ③층 판정 전체가 눈을 감는다. 본문을 읽는 변이 문이 하나도 없는 트리(능력을 지운 트리)는 잴 것이 없다.
+    const readers = rows.filter((r) => r.mutation && r.readsBody);
+    assert.ok(
+        readers.length === 0 || readers.some((r) => r.bodyRequired),
+        `본문을 읽는 변이 문 ${readers.length}개 중 본문 필수로 읽히는 문이 없다 — 판정 신호가 사라졌다. 본문이 필수인 문은 없을 때 400 응답에 \`code: "INVALID_BODY"\` 를 싣는다(\`invalidBody()\`)`,
+    );
+    // ⚠ **아래는 정본에서만 선다** — 고객 트리는 `AGENTS.md` 능력 삭제표대로 능력을 지울 수 있다.
     if (CANONICAL) {
         assert.ok(rows.length >= 20, `라우트를 못 읽었다: ${rows.length}`);
         assert.ok(
             PACK_SRCS.length >= 2,
             `정본 레포인데 프리셋 사본을 못 찾았다: ${PACK_SRCS.map(([l]) => l).join(",")}`,
-        );
-        assert.ok(
-            rows.some((r) => r.bodyRequired),
-            "본문 필수 문이 하나도 안 잡혔다 — 판정이 죽었다",
         );
         assert.ok(
             rows.some((r) => r.mutation && !r.bodyRequired),
@@ -254,7 +396,10 @@ test("🔴 본문 필수 문에는 ③층이 있다", () => {
 });
 
 test("🔴 본문 없는 변이 문에는 ③층이 없다 — 있으면 정상 동선이 415 로 깨진다", () => {
-    const wrong = survey().filter((r) => r.mutation && !r.bodyRequired && r.hasCtGuard);
+    // 고객 트리에서 요청을 다른 함수로 넘기는 문은 필수 여부를 모른다 — 모르는 문에 「③층을 뗀다」를 말하지 않는다.
+    const wrong = survey().filter(
+        (r) => r.mutation && !r.bodyRequired && r.hasCtGuard && (CANONICAL || !r.passesRequestElsewhere),
+    );
     assert.deepEqual(
         wrong.map((r) => `${r.label}:${r.route}#${r.method}`),
         [],
@@ -306,17 +451,39 @@ test("🔴 ①층 면제 마커는 사유를 같은 줄에 갖는다 — 정본�
 });
 
 test("🔴 소셜 교환 문이 ②층(consumeOAuthState)을 부른다 — 콜백 경유 code 주입을 막는 그 한 줄", () => {
+    // 경로가 아니라 **부르는 것**으로 찾는다 — 폴더를 옮기거나 교환 라우트를 하나 더 만들어도 잡힌다.
+    // 교환·발행을 부르는 핸들러가 하나도 없는 고객 트리는 소셜 로그인을 지운 트리다 — 잴 문이 없다.
     const missing: string[] = [];
+    let exchanges = 0;
+    let starts = 0;
     for (const [label, dir] of PACK_SRCS) {
-        const exchange = join(dir, "app", "api", "auth", "social", "route.ts");
-        const start = join(dir, "app", "api", "auth", "social", "start", "route.ts");
-        // 둘 다 없으면 소셜 로그인 능력을 지운 고객 트리다(`AGENTS.md` 능력 삭제표) — 잴 문이 없다.
-        // 하나만 남았거나 정본이면 잰다.
-        if (!CANONICAL && !existsSync(exchange) && !existsSync(start)) continue;
-        if (!existsSync(exchange) || !calls(parse(exchange), "consumeOAuthState")) missing.push(`${label}:교환`);
-        if (!existsSync(start) || !calls(parse(start), "issueOAuthState")) missing.push(`${label}:발행`);
+        for (const path of routeFiles(dir)) {
+            const route = relative(join(dir, "app", "api"), path);
+            for (const h of exportedHandlers(parse(path))) {
+                if (callsName(h.body, "socialLogin")) {
+                    exchanges++;
+                    if (!calls(h.body, "consumeOAuthState")) missing.push(`${label}:${route}#${h.name} 교환`);
+                }
+                if (callsName(h.body, "buildAuthorizeUrl")) {
+                    starts++;
+                    if (!calls(h.body, "issueOAuthState")) missing.push(`${label}:${route}#${h.name} 발행`);
+                }
+            }
+        }
+        // 라우트 핸들러 밖에서 부르면 같은 핸들러에서 state 를 잴 수 없다.
+        for (const path of nonRouteSources(dir)) {
+            if (path.endsWith(join("lib", "oauth.ts"))) continue; // `buildAuthorizeUrl` 의 정의가 사는 곳
+            const sf = parseAny(path);
+            if (callsName(sf, "socialLogin") || callsName(sf, "buildAuthorizeUrl"))
+                missing.push(`${label}:${relative(dir, path)} — 라우트 핸들러 밖`);
+        }
     }
-    assert.deepEqual(missing, [], "state 대조·발행이 빠졌다 — 피해자 브라우저에 공격자 세션이 주입된다");
+    if (CANONICAL) assert.ok(exchanges > 0 && starts > 0, `소셜 교환 ${exchanges}·발행 ${starts} — 판정이 죽었다`);
+    assert.deepEqual(
+        missing,
+        [],
+        "state 대조·발행이 빠졌다 — 피해자 브라우저에 공격자 세션이 주입된다. 교환(`socialLogin`)·발행(`buildAuthorizeUrl`)은 라우트 핸들러 안에서 부르고, 같은 핸들러에서 `consumeOAuthState`·`issueOAuthState` 를 부른다",
+    );
 });
 
 test("🔴 CORS 를 여는 자리가 없다 — 라우트뿐 아니라 next.config·middleware 까지 본다", () => {
