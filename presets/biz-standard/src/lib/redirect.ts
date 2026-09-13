@@ -12,6 +12,8 @@
  *
  * ⚠ 이 파일의 판정은 **「호스트가 섞였는가」 하나**다. 어느 내부 경로로 보내도 되는가(오픈 리다이렉트)는
  * `oauth.ts` 의 `safeNextPath` 가 정한다 — 여기로 옮겨 적지 마라.
+ * ⚠ 받은 경로를 **그대로** 싣는다 — 정규화한 값(`pathname`)을 돌려주지 마라. `/..//evil` 은 상대 참조로는
+ *   같은 origin 이지만, 정규화하면 `//evil` 이 되어 그 값을 다시 참조로 쓰는 순간 남의 호스트가 된다.
  */
 
 /** 경로 조작에만 쓰는 자리표. 이 호스트가 결과에 남으면 판정이 틀린 것이다. */
@@ -30,18 +32,10 @@ function carriesHost(path: string): boolean {
 /**
  * 307 이동 응답의 초기값. 호스트를 싣는 값이면 **던진다** — 조용히 고쳐 보내면 호출한 쪽의 잘못이 가려진다.
  *
- * @param path 이 사이트 안의 경로(`/login`, `/mypage?r=1`).
+ * @param path 이 사이트 안의 경로(`/login`, `/orders/A-1?phone=010`).
  * @param headers 함께 실을 헤더(예: `Cache-Control`). `Location` 은 이 함수가 정한다.
  */
 export function pathOnlyRedirect(path: string, headers: Record<string, string> = {}): ResponseInit {
     if (carriesHost(path)) throw new Error(`이동 주소에 호스트가 섞였다 — 경로만 넘겨라: ${JSON.stringify(path)}`);
     return {status: 307, headers: {...headers, Location: path}};
-}
-
-/** 경로의 쿼리에 값 하나를 더한다. 결과도 경로다(호스트 없음). */
-export function withSearchParam(path: string, name: string, value: string): string {
-    if (carriesHost(path)) throw new Error(`경로가 아니다: ${JSON.stringify(path)}`);
-    const url = new URL(path, PLACEHOLDER);
-    url.searchParams.set(name, value);
-    return `${url.pathname}${url.search}${url.hash}`;
 }

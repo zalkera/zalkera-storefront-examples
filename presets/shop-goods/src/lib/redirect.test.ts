@@ -7,12 +7,16 @@ import {fileURLToPath} from "node:url";
 import type TS from "typescript";
 // ⚠ 확장자를 붙인다 — `node --test` 의 ESM 해석은 `next/server` 를 못 찾는다.
 import {NextResponse} from "next/server.js";
-import {pathOnlyRedirect, withSearchParam} from "./redirect.ts";
+import {pathOnlyRedirect} from "./redirect.ts";
 
 /**
  * **이동 주소에 호스트가 없다** — 서빙 컨테이너의 `req.url` 은 `http://0.0.0.0:3000` 이라, 그 origin 으로
  * 만든 이동은 방문자를 `0.0.0.0` 으로 보낸다(상용 재현: `/api/auth/refresh` → `http://0.0.0.0:3000/login`).
- * `next dev` 에서는 요청 주소와 방문자 주소가 같아 어떤 시험도 이것을 못 봤다 — 그래서 **주소를 만드는 자리**를 잰다.
+ * `next dev` 에서는 요청 주소와 방문자 주소가 같아 어떤 시험도 이것을 못 봤다.
+ *
+ * 그물은 **출력 쪽**을 잰다 — 라우트·도움 모듈에서 이동을 만드는 자리(`redirect(…)` 호출 · `Location` 리터럴)는
+ * 소유자(`redirect.ts`) 아니면 허용 목록이어야 한다. 입력(`req.url` 의 어느 속성을 읽었나)을 쫓는 판정은
+ * 헤더로 절대 주소를 만들거나 문자열을 자르거나 도움 함수로 빼는 형상을 전부 놓친다(보안 축 실측 24 중 19).
  */
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -21,7 +25,7 @@ const require = createRequire(import.meta.url);
 const ts: typeof TS = require("typescript");
 
 test("경로만 싣는다 — Location 이 준 경로 그대로다", () => {
-    for (const path of ["/login", "/mypage?r=1", "/orders/A-1?phone=010&r=1", "/"]) {
+    for (const path of ["/login", "/mypage", "/orders/A-1?phone=010", "/"]) {
         const init = pathOnlyRedirect(path, {"Cache-Control": "no-store"});
         const headers = new Headers(init.headers);
         assert.equal(init.status, 307);
@@ -43,140 +47,180 @@ test("호스트를 싣는 값은 던진다 — 해석기가 호스트로 읽는 
     }
 });
 
-test("쿼리에 값을 더해도 경로다 — 기존 쿼리와 조각을 지킨다", () => {
-    assert.equal(withSearchParam("/mypage", "r", "1"), "/mypage?r=1");
-    assert.equal(withSearchParam("/orders/A-1?phone=010", "r", "1"), "/orders/A-1?phone=010&r=1");
-    assert.equal(withSearchParam("/a#top", "r", "1"), "/a?r=1#top");
-    assert.throws(() => withSearchParam("//evil.example/a", "r", "1"));
+test("같은 origin 인 경로는 통과한다 — `//` 가 안에 있어도(문자열 검사로 바꾸면 여기서 red)", () => {
+    // 브라우저는 `/..//evil.example` 을 **경로**로 푼다(`https://우리/…//evil.example`). 이 판정은 그 해석기와
+    // 같아야 하고, 원문을 그대로 실어야 한다 — 정규화한 값(`//evil.example`)을 실으면 남의 호스트가 된다.
+    for (const path of ["/a//b", "/search?q=a//b", "/..//evil.example", "/x?next=//evil.example"]) {
+        const headers = new Headers(pathOnlyRedirect(path).headers);
+        assert.equal(headers.get("location"), path, `같은 origin 경로를 막았거나 바꿨다: ${JSON.stringify(path)}`);
+    }
 });
 
 test("NextResponse 가 경로를 절대 주소로 바꾸지 않는다 — 쿠키를 얹어도 307·경로 그대로", () => {
     // 이 라우트가 실제로 내는 형상 그대로다: 응답을 만들고 표시 쿠키를 얹는다.
-    const res = new NextResponse(null, pathOnlyRedirect("/mypage?r=1", {"Cache-Control": "no-store"}));
+    const res = new NextResponse(null, pathOnlyRedirect("/mypage", {"Cache-Control": "no-store"}));
     res.cookies.set("zalkera_authed", "1", {path: "/"});
     assert.equal(res.status, 307);
-    assert.equal(res.headers.get("location"), "/mypage?r=1");
+    assert.equal(res.headers.get("location"), "/mypage");
     assert.match(res.headers.get("set-cookie") ?? "", /zalkera_authed=1/);
 });
 
-// ── 주소를 만드는 자리의 그물 ────────────────────────────────────────────────────────────
-
-/** URL 의 **어느 호스트**를 말하는 읽기. `searchParams`·`pathname` 은 호스트와 무관해 통과다. */
-const HOST_READS = new Set(["origin", "host", "hostname", "href", "port", "protocol"]);
-const HOST_CALLS = new Set(["clone", "toString", "toJSON"]);
+// ── 이동을 만드는 자리의 그물 ────────────────────────────────────────────────────────────
 
 /**
- * 라우트 처리 함수가 **요청 주소에서 호스트를 꺼내는 자리**를 돌려준다.
- *
- * 요청 주소 = 처리 함수 첫 인자의 `.url`·`.nextUrl`, 그리고 `new URL(<그것>)` 과 그것을 받은 지역 이름(한 단계).
- * 잡는 것: 그 값의 `origin`·`host` 류 읽기 · `clone()` 류 호출 · `new URL(경로, <그것>)` 의 기준 · `{origin} =` 구조분해 ·
- * `NextResponse.redirect(<그것>)`. Origin **헤더**를 해석한 값은 방문자가 보낸 것이라 여기 안 든다.
+ * 이동을 만드는 자리 — 소유자 밖에서 이것이 보이면 위반이다.
+ *  · `….redirect(…)`·`redirect(…)` 호출(`NextResponse`·`Response`·`next/navigation` 어느 것이든)
+ *  · **헤더 자리**의 `Location` — 객체의 키(`{Location: …}`·`{"Location": …}`)·`headers.set/append("Location", …)`
+ *    의 첫 인자·`new Headers([["Location", …]])` 의 짝 이름. 다른 자리의 낱말 `location`(예약 세그먼트 `/location`
+ *    · `res.headers.get("location")` 읽기)은 이동이 아니라 통과다.
  */
-export function hostReadsFromRequestUrl(source: string, fileName = "route.ts"): string[] {
+export function redirectSites(source: string, fileName = "route.ts"): string[] {
     const sf = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
     const found: string[] = [];
     const at = (node: TS.Node, what: string) =>
         found.push(`${fileName}:${sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1} ${what}`);
+    const isLocation = (text: string) => /^location$/i.test(text);
 
-    const visitFunction = (fn: TS.FunctionLikeDeclaration) => {
-        const first = fn.parameters[0];
-        if (!first || !ts.isIdentifier(first.name) || !fn.body) return;
-        const req = first.name.text;
-        const tainted = new Set<string>();
-
-        const isRequestUrl = (e: TS.Expression): boolean => {
-            const x = ts.isParenthesizedExpression(e) ? e.expression : e;
-            if (ts.isPropertyAccessExpression(x) && ts.isIdentifier(x.expression) && x.expression.text === req) {
-                return x.name.text === "url" || x.name.text === "nextUrl";
-            }
-            if (ts.isIdentifier(x)) return tainted.has(x.text);
-            if (ts.isNewExpression(x) && x.expression.getText(sf) === "URL") {
-                const arg = x.arguments?.[0];
-                return !!arg && isRequestUrl(arg);
-            }
-            return false;
-        };
-
-        const walk = (node: TS.Node): void => {
-            if (ts.isVariableDeclaration(node) && node.initializer && isRequestUrl(node.initializer)) {
-                if (ts.isIdentifier(node.name)) tainted.add(node.name.text);
-                if (ts.isObjectBindingPattern(node.name)) {
-                    for (const el of node.name.elements) {
-                        const key = (el.propertyName ?? el.name).getText(sf);
-                        if (HOST_READS.has(key)) at(el, `구조분해 {${key}}`);
-                    }
-                }
-            }
-            if (ts.isPropertyAccessExpression(node) && isRequestUrl(node.expression)) {
-                const name = node.name.text;
-                const called = ts.isCallExpression(node.parent) && node.parent.expression === node;
-                if (HOST_READS.has(name) || (called && HOST_CALLS.has(name))) at(node, `.${name}`);
-            }
-            if (ts.isNewExpression(node) && node.expression.getText(sf) === "URL") {
-                const base = node.arguments?.[1];
-                if (base && isRequestUrl(base)) at(node, "new URL(경로, 요청 주소)");
-            }
-            if (ts.isCallExpression(node) && /(^|\.)redirect$/.test(node.expression.getText(sf))) {
-                const target = node.arguments[0];
-                if (target && isRequestUrl(target)) at(node, "redirect(요청 주소)");
-            }
-            ts.forEachChild(node, walk);
-        };
-        walk(fn.body);
+    /** 이 객체 리터럴이 헤더 묶음인가 — `headers: {…}` 의 값이거나 `new Headers({…})` 의 인자. */
+    const isHeadersObject = (obj: TS.ObjectLiteralExpression): boolean => {
+        const p = obj.parent;
+        if (ts.isPropertyAssignment(p) && p.name.getText(sf) === "headers") return true;
+        return ts.isNewExpression(p) && p.expression.getText(sf) === "Headers";
+    };
+    /**
+     * 객체 키가 헤더 이름인가. 대문자 `Location` 은 HTTP 관용이라 어디서든 센다. 소문자 `location` 은 경로 이름
+     * (`/location` 라벨 맵)으로도 쓰이므로 **헤더 묶음 안**에서만 센다.
+     */
+    const isHeaderKey = (prop: TS.PropertyAssignment): boolean => {
+        const key = ts.isIdentifier(prop.name) || ts.isStringLiteral(prop.name) ? prop.name.text : "";
+        if (!isLocation(key)) return false;
+        return key === "Location" || (ts.isObjectLiteralExpression(prop.parent) && isHeadersObject(prop.parent));
+    };
+    /** 이 리터럴이 헤더 **이름** 인자인가 — `set/append("Location", …)` 의 첫 인자 · `[["Location", …]]` 의 짝 이름. */
+    const isHeaderNameArg = (lit: TS.StringLiteral): boolean => {
+        const p = lit.parent;
+        if (ts.isCallExpression(p) && p.arguments[0] === lit && ts.isPropertyAccessExpression(p.expression)) {
+            return /^(set|append)$/.test(p.expression.name.text);
+        }
+        return ts.isArrayLiteralExpression(p) && p.elements.length === 2 && p.elements[0] === lit;
     };
 
-    const visit = (node: TS.Node): void => {
-        if (ts.isFunctionDeclaration(node) || ts.isArrowFunction(node) || ts.isFunctionExpression(node))
-            visitFunction(node);
-        ts.forEachChild(node, visit);
+    const walk = (node: TS.Node): void => {
+        if (ts.isCallExpression(node)) {
+            const callee = node.expression.getText(sf);
+            if (/(^|\.)redirect$/.test(callee)) at(node, `${callee}(…)`);
+        }
+        if (ts.isStringLiteral(node) && isLocation(node.text) && isHeaderNameArg(node)) {
+            at(node, `"${node.text}" 헤더 이름`);
+        }
+        if (ts.isPropertyAssignment(node) && isHeaderKey(node)) at(node, `${node.name.getText(sf)}: 헤더 키`);
+        ts.forEachChild(node, walk);
     };
-    visit(sf);
+    walk(sf);
     return found;
 }
 
-test("그물이 잡는 형상 — 요청 주소의 호스트를 이동에 쓰는 여섯 가지", () => {
+test("그물이 잡는 형상 — 헤더로 절대 주소 · 요청 주소 수술 · 도움 함수 · Location 직접", () => {
     const red = {
-        "origin 을 기준으로": `export async function GET(req: Request) { const url = new URL(req.url); return NextResponse.redirect(new URL("/login", url.origin)); }`,
-        "요청 주소를 기준으로": `export async function GET(request: Request) { return NextResponse.redirect(new URL("/login", request.url)); }`,
-        "한 줄 origin": `export async function GET(req: Request) { const o = new URL(req.url).origin; return o; }`,
-        nextUrl: `export async function GET(req: NextRequest) { const to = req.nextUrl.clone(); to.pathname = "/login"; return NextResponse.redirect(to); }`,
-        구조분해: `export const GET = async (req: Request) => { const {origin} = new URL(req.url); return origin; };`,
-        "요청 주소로 바로": `export async function GET(req: Request) { return Response.redirect(req.url); }`,
+        "헤더로 절대 주소": `export async function GET(req: Request) { const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host"); return NextResponse.redirect(new URL("/login", \`https://\${host}\`)); }`,
+        "요청 주소 수술": `export async function GET(req: Request) { return NextResponse.redirect(req.url.replace(/\\/api\\/auth\\/refresh.*$/, "/login")); }`,
+        "요청 주소 기준": `export async function GET(req: Request) { return Response.redirect(new URL("/login", req.url)); }`,
+        "navigation redirect": `import {redirect} from "next/navigation"; export async function GET() { redirect(String(target)); }`,
+        "도움 함수 안의 이동": `export function redirectFrom(req: Request, to: string) { return NextResponse.redirect(new URL(to, req.url)); }`,
+        "Location 속성": `export async function GET(req: Request) { return new NextResponse(null, {status: 307, headers: {Location: new URL(req.url).origin + "/login"}}); }`,
+        "Location set": `export async function GET(req: Request) { const h = new Headers(); h.set("Location", req.url); return new NextResponse(null, {status: 307, headers: h}); }`,
+        "Headers 배열": `export async function GET(req: Request) { return new Response(null, {status: 302, headers: new Headers([["location", req.url]])}); }`,
+        "소문자 키의 헤더 묶음": `export async function GET(req: Request) { return new NextResponse(null, {status: 307, headers: {location: req.url}}); }`,
+        "따옴표 키": `export async function GET(req: Request) { return new NextResponse(null, {status: 307, headers: {"Location": req.url}}); }`,
+        "Headers 생성자 객체": `export async function GET(req: Request) { return new Response(null, {status: 302, headers: new Headers({location: req.url})}); }`,
     };
     for (const [name, source] of Object.entries(red)) {
-        assert.ok(hostReadsFromRequestUrl(source).length > 0, `못 잡았다: ${name}`);
+        assert.ok(redirectSites(source).length > 0, `못 잡았다: ${name}`);
     }
 });
 
-test("정당한 형상은 통과 — 쿼리 읽기·Origin 헤더·백엔드가 준 외부 주소·경로만 이동", () => {
+test("정당한 형상은 통과 — 소유자를 거친 이동 · Location 읽기 · 이동 없는 라우트", () => {
     const green = {
-        쿼리: `export async function GET(req: Request) { const {searchParams} = new URL(req.url); return searchParams.get("id"); }`,
-        경로: `export async function GET(req: Request) { return new URL(req.url).pathname; }`,
-        "Origin 헤더": `export async function POST(req: Request) { const sent = new URL(req.headers.get("origin") ?? "").origin; return sent; }`,
-        "외부 주소": `export async function GET(_req: Request) { const location = res.headers.get("location"); return NextResponse.redirect(location); }`,
-        "경로만 이동": `export async function GET(req: Request) { return new NextResponse(null, pathOnlyRedirect("/login")); }`,
+        "소유자 경유": `export async function GET(req: Request) { return new NextResponse(null, pathOnlyRedirect("/login", NO_STORE)); }`,
+        "Location 읽기": `export async function GET() { const location = res.headers.get("location"); return NextResponse.json({location}); }`,
+        "쿼리 읽기": `export async function GET(req: Request) { const {searchParams} = new URL(req.url); return NextResponse.json({id: searchParams.get("id")}); }`,
+        "JSON 응답": `export async function POST(req: Request) { return NextResponse.json({authorizeUrl: buildAuthorizeUrl(origin)}); }`,
+        "경로 이름으로서의 낱말": `export const RESERVED_SEGMENTS = new Set(["login", "location", "mypage"]); const label = {location: "오시는 길"};`,
     };
     for (const [name, source] of Object.entries(green)) {
-        assert.deepEqual(hostReadsFromRequestUrl(source), [], `정당한 형상을 막았다: ${name}`);
+        assert.deepEqual(redirectSites(source), [], `정당한 형상을 막았다: ${name}`);
     }
 });
 
-/** `src/app` 아래의 라우트 처리 파일 전부. */
-function routeFiles(dir = join(ROOT, "src", "app")): string[] {
-    return readdirSync(dir, {withFileTypes: true}).flatMap((e) => {
-        const full = join(dir, e.name);
-        if (e.isDirectory()) return routeFiles(full);
-        return e.name === "route.ts" ? [full] : [];
-    });
+/**
+ * 루프 가드의 표식이 **주소가 아니라 짧은 쿠키**다 — `?r=1` 은 주소창에 남아 다음 만료(15분 뒤)까지
+ * 「이미 갱신했다」로 읽혀 로그인으로 떨어졌다(기능 축 실측). 표식 수명은 돌아가 한 번 그리는 데 충분하되
+ * 액세스 수명(15분)보다 훨씬 짧아야 한다. `session.ts` 는 `next/headers` 를 들여와 여기서 실행할 수 없어
+ * 원문으로 잰다 — 행위는 standalone 에서 눌러 확인한다(브리프 재현 명령).
+ */
+test("갱신 성공 갈래가 표식 쿠키를 얹고, 그 수명이 액세스 수명보다 훨씬 짧다 — 주소(`?r=1`)에는 안 싣는다", () => {
+    const route = readFileSync(join(ROOT, "src", "app", "api", "auth", "refresh", "route.ts"), "utf8");
+    const session = readFileSync(join(ROOT, "src", "lib", "session.ts"), "utf8");
+    const tokensAt = route.indexOf("setCustomerTokens(");
+    const markAt = route.indexOf("markJustRefreshed(");
+    assert.ok(tokensAt > 0 && markAt > tokensAt, "표식은 토큰을 심은 뒤 같은 갈래에서 얹는다");
+    assert.equal((route.match(/markJustRefreshed\(/g) ?? []).length, 1, "표식은 성공 갈래 한 곳뿐이다");
+    // 주석은 세지 않는다 — 옛 형상을 설명하는 문장이 있다. 코드 형상만 본다.
+    assert.doesNotMatch(route, /withSearchParam\(|"r",\s*"1"/, "표식을 주소에 싣던 옛 형상이 남아 있다");
+    const life = Number(session.match(/const REFRESH_MARK_SECONDS = (\d+);/)?.[1]);
+    assert.ok(Number.isFinite(life) && life > 0 && life <= 60, `표식 수명이 이상하다: ${life}`);
+    assert.match(
+        session,
+        /REFRESHED_COOKIE, "1", \{[^}]*httpOnly: true[^}]*maxAge: REFRESH_MARK_SECONDS/s,
+        "표식 쿠키는 httpOnly 이고 그 수명을 쓴다",
+    );
+});
+
+/** 이동의 **소유자**와, 이동을 만들어도 되는 자리. 늘릴 때는 사유를 같은 줄에 적는다. */
+const REDIRECT_OWNER = "src/lib/redirect.ts";
+const ALLOWED: ReadonlyArray<readonly [file: string, why: string]> = [
+    ["src/app/media/[id]/route.ts", "백엔드가 준 서명 주소를 302 로 그대로 넘긴다 — 우리가 만드는 주소가 아니다"],
+];
+
+/** 라우트 처리 파일 + 도움 모듈(시험 제외). 도움 함수로 빼낸 이동도 여기서 잡힌다. */
+function scannedFiles(): string[] {
+    const list = (dir: string, keep: (name: string) => boolean): string[] =>
+        readdirSync(dir, {withFileTypes: true}).flatMap((e) => {
+            const full = join(dir, e.name);
+            if (e.isDirectory()) return list(full, keep);
+            return keep(e.name) ? [full] : [];
+        });
+    return [
+        ...list(join(ROOT, "src", "app"), (n) => n === "route.ts"),
+        ...list(
+            join(ROOT, "src", "lib"),
+            (n) => /\.ts$/.test(n) && !/\.test\.ts$/.test(n) && !/\.fixture\.ts$/.test(n),
+        ),
+    ];
 }
 
-test("실제 라우트 전부가 요청 주소의 호스트를 이동에 안 쓴다", () => {
-    const files = routeFiles();
+test("라우트·도움 모듈의 이동은 전부 소유자를 거친다 — 허용 목록은 사유가 있는 한 줄뿐", () => {
+    const files = scannedFiles();
+    const rel = (f: string) => relative(ROOT, f).split("\\").join("/");
     // 통제군 — 파일을 못 읽는 그물은 무엇이든 초록이다.
+    const refresh = files.find((f) => rel(f) === "src/app/api/auth/refresh/route.ts");
+    assert.ok(refresh, "갱신 라우트를 못 찾았다 — 경로가 바뀌었으면 그물도 옮겨라");
     assert.ok(
-        files.some((f) => f.endsWith(join("api", "auth", "refresh", "route.ts"))),
-        "갱신 라우트를 못 찾았다 — 경로가 바뀌었으면 그물도 옮겨라",
+        (readFileSync(refresh, "utf8").match(/pathOnlyRedirect\(/g) ?? []).length >= 3,
+        "갱신 라우트의 세 갈래가 소유자를 안 거친다",
     );
-    const hits = files.flatMap((f) => hostReadsFromRequestUrl(readFileSync(f, "utf8"), relative(ROOT, f)));
+
+    const allowed = new Map(ALLOWED);
+    const hits = files.flatMap((f) => {
+        const name = rel(f);
+        if (name === REDIRECT_OWNER) return [];
+        const sites = redirectSites(readFileSync(f, "utf8"), name);
+        if (allowed.has(name)) {
+            // 허용 목록의 파일은 실제로 이동을 만들어야 한다 — 안 만들면 목록이 낡은 것이다.
+            assert.ok(sites.length > 0, `허용 목록이 낡았다: ${name} 은 이동을 안 만든다`);
+            return [];
+        }
+        return sites;
+    });
     assert.deepEqual(hits, []);
 });

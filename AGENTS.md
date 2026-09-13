@@ -116,7 +116,9 @@ export async function POST(req: Request) {
   https 다. 비교하면 전 사이트가 즉시 죽는다. 호스트만 본다.
 - **이동 주소를 요청 주소로 만들지 마라.** 서빙 컨테이너에서 `req.url`·`req.nextUrl` 은 방문자 주소가 아니라
   서버가 뜬 주소(`http://0.0.0.0:3000`)라, `new URL("/login", req.url)` 로 보내면 방문자가 `0.0.0.0` 으로 간다.
-  라우트의 이동은 `pathOnlyRedirect`(`src/lib/redirect.ts`)로 **경로만** 싣는다 — `src/lib/redirect.test.ts` 가 잰다.
+  라우트·도움 모듈의 이동은 `pathOnlyRedirect`(`src/lib/redirect.ts`)로 **경로만** 싣는다. 백엔드가 준 주소를 그대로
+  넘기는 자리(미디어 302)만 `src/lib/redirect.test.ts` 의 허용 목록에 사유와 함께 적는다 — 그 시험이 `redirect(…)`·
+  `Location` 헤더 자리를 전수로 센다.
 - **미리보기 모드는 쓰기를 막는다 — 그리고 그 판정은 `src/middleware.ts` 한 곳에 있다.**
   새 라우트는 **아무것도 안 해도 덮인다**(선언 형태·파일명과 무관하다). 단 matcher 가 빼는 접두
   (`_next/static`·`_next/image`·`images/`·`favicon.ico`) 밑은 예외이고,
