@@ -23,8 +23,9 @@
 | 능력별 삭제표를 뺐습니다 | 표대로 지워도 검사가 초록이 되지 않았습니다 — 안 쓰는 능력은 파일을 지우지 말고 **입구를 닫습니다** | `AGENTS.md` 「안 쓰는 능력」 절 |
 | `@zalkera/client` 0.37.0 | 새 메서드 둘(`listSessions`·`revokeSession`) — 팩은 부르지 않습니다 | `npm install @zalkera/client@^0.37.0` |
 
-옛 표대로 이미 파일을 지운 사이트는 지운 파일을 최신 zip 에서 되살린 뒤 입구를 닫으십시오 — 지운 채로는 하한 게이트가
-그 시험을 요구해 반려합니다.
+옛 표대로 이미 파일을 지운 사이트는 지운 파일을 최신 zip 에서 되살리고, 옛 표가 함께 고치게 한
+`src/lib/reservedSegments.ts`·`src/app/robots.ts` 도 원래대로 되돌린 뒤 입구를 닫으십시오 — 지운 채로는 `npm run typecheck` 부터
+red 입니다.
 
 `AGENTS.md` 의 ③층 규칙도 바뀌었습니다 — 본문이 **필수인** 문에만 겁니다(필수 여부는 없을 때 400 응답에
 `code: "INVALID_BODY"` 를 싣는가로 정합니다).
