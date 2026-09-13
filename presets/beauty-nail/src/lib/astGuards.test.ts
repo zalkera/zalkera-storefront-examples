@@ -33,6 +33,8 @@ import type TS from "typescript";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "..", "..");
+/** 정본 레포인가 — CI 정본 전용 스텝·`guardWiring.test.ts` 와 같은 판별자. */
+const CANONICAL = existsSync(join(ROOT, "presets")) && existsSync(join(ROOT, "scripts", "pack-preset.mjs"));
 const require = createRequire(import.meta.url);
 const ts: typeof TS = require("typescript");
 
@@ -165,7 +167,8 @@ test("양성 통제군 — 금액의 `toLocaleString` 은 안 걸린다(시간�
         };
         walk(sf);
     }
-    assert.ok(numberFormats >= 5, `금액 포맷을 ${numberFormats}건만 봤다 — 판정이 Date 쪽으로 쏠렸다`);
+    // ⚠ 정본에서만 센다 — 고객 트리는 `AGENTS.md` 능력 삭제표대로 쇼핑몰을 지우면 금액 포맷 자체가 줄어든다.
+    if (CANONICAL) assert.ok(numberFormats >= 5, `금액 포맷을 ${numberFormats}건만 봤다 — 판정이 Date 쪽으로 쏠렸다`);
 });
 
 /**
@@ -179,6 +182,8 @@ test("양성 통제군 — 금액의 `toLocaleString` 은 안 걸린다(시간�
  */
 test("CheckoutForm 은 «계좌가 있다»만 받는다 — 계좌 문자열을 클라이언트로 넘기지 않는다", () => {
     const sf = ourSourceFiles().find((f) => relPath(f) === "app/checkout/CheckoutForm.tsx");
+    // 결제 화면을 지운 고객 트리(`AGENTS.md` 능력 삭제표)에는 잴 폼이 없다. 정본은 지울 수 없다.
+    if (!sf && !CANONICAL && !existsSync(join(ROOT, "src", "app", "checkout"))) return;
     assert.ok(sf, "CheckoutForm.tsx 를 프로그램에서 못 찾았다");
 
     let props: TS.Type | undefined;

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {isJsonContentType, isSameOriginRequest} from "./crossOrigin.ts";
+import {isJsonContentType, isSameOriginRequest, requestOrigin} from "./crossOrigin.ts";
 
 /**
  * 교차사이트 위조 판정의 **회귀 픽스처**.
@@ -134,4 +134,13 @@ test("Content-Type 부재는 막힌다", () => {
 /** `application/json-patch+json` 같은 유사 타입을 prefix 매칭으로 통과시키면 안 된다. */
 test("유사 타입은 막힌다", () => {
     assert.equal(isJsonContentType(req({"content-type": "application/jsonx"})), false);
+});
+
+test("requestOrigin — 파서가 정규화한 오리진을 쓴다(userinfo 가 redirect_uri 에 실리지 않는다)", () => {
+    assert.equal(requestOrigin(req({origin: `https://evil.example@${SELF}`, host: SELF})), `https://${SELF}`);
+});
+
+test("requestOrigin — 기본 포트는 떨어지고 다른 포트는 남는다", () => {
+    assert.equal(requestOrigin(req({origin: `https://${SELF}:443`, host: SELF})), `https://${SELF}`);
+    assert.equal(requestOrigin(req({origin: `https://${SELF}:8443`, host: SELF})), `https://${SELF}:8443`);
 });

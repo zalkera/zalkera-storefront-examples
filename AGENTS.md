@@ -90,6 +90,8 @@ export async function POST(req: Request) {
   만 하는 호출)에 걸면 브라우저가 `Content-Type` 을 안 보내 **415** 로 튕긴다. 「필수」는 **없을 때 400 응답에
   `code: "INVALID_BODY"` 를 싣는가**로 정한다 — `invalidBody()` 가 그 모양이고 문구는 바꿔도 된다.
   `src/lib/guardWiring.test.ts` 가 그 신호로 두 방향(필수인데 ③층 없음 · 필수가 아닌데 ③층 있음)을 잰다.
+  그 신호는 **핸들러 안에서 직접** 보여야 읽힌다 — 본문 읽기(`readJsonBody(req)`·`req.json()`)와 거절을 자기 헬퍼 안에
+  두면 그물이 못 읽는다. 거꾸로 본문이 없어도 되는 문에서는 `invalidBody()`·`INVALID_BODY` 를 쓰지 않는다.
 - **가드를 감싸지 마라.** 헬퍼로 한 겹 두르거나(`const guard = (r) => assertSameOrigin(r)`) 중첩 함수 안에
   넣으면 검사기가 못 따라가 경고를 낸다 — **막아 주지는 않는다.** 부르는 자리에서 직접 불러라.
   `try { … }` 로 감싼 본문은 괜찮다 — 가드가 여전히 먼저 돈다.
@@ -199,7 +201,7 @@ const access = {accessToken, phone, context: {clientIp: visitorIp(await headers(
 | 능력 | 지우면 되는 것 | 함께 손대야 하는 것 | 남는 client 호출 |
 |---|---|---|---|
 | **기업 홈페이지** (항상 필요) | — | — | `getSiteConfig` · `content/` 로더 |
-| **쇼핑몰** | `src/app/{cart,checkout,payment,orders,mypage,login,auth}/` · `src/app/api/{cart,checkout,orders,payment,auth,reviews,consents}/` · `src/app/products/` · `src/app/c/` · `src/components/{Review*,LogoutButton,MarketingConsent}.tsx` · `src/lib/{oauth,oauthState}.ts` · 헤더의 장바구니·로그인 (⚠ `src/lib/session.ts` 가 `oauthState` 를 씁니다 — 그 파일도 같이 지우거나 그 import 를 걷으십시오) | `src/app/page.tsx` 가 상품 진열을 부르면 그 줄도 (얼굴 파일이라 프리셋마다 다릅니다) · **`src/lib/reservedSegments.ts` 와 `robots.ts` 의 `disallow` 에서 지운 이름 빼기** | `listProducts` · `getProduct` · `listProductCategories` · 장바구니·주문 계열 |
+| **쇼핑몰** | `src/app/{cart,checkout,payment,orders,mypage,login,auth}/` · `src/app/api/{cart,checkout,orders,payment,auth,reviews,consents}/` · `src/app/products/` · `src/app/c/` · `src/components/{Review*,LogoutButton,MarketingConsent}.tsx` · `src/lib/{oauth,oauthState}.ts` · `src/lib/{oauthPath,oauthState}.test.ts`(지운 모듈의 시험 — 하한 게이트는 대상이 없으면 요구를 걷는다) · 헤더의 장바구니·로그인 (⚠ `src/lib/session.ts` 가 `oauthState` 를 씁니다 — 그 파일도 같이 지우거나 그 import 를 걷으십시오) | `src/app/page.tsx` 가 상품 진열을 부르면 그 줄도 (얼굴 파일이라 프리셋마다 다릅니다) · **`src/lib/reservedSegments.ts` 와 `robots.ts` 의 `disallow` 에서 지운 이름 빼기** | `listProducts` · `getProduct` · `listProductCategories` · 장바구니·주문 계열 |
 | **예약** | `src/app/api/booking/` · `src/components/ProductRail.tsx`(시술 진열) | `ProductRail` 을 부르는 `src/app/page.tsx` 의 줄 · `src/app/products/[slug]/BookingPanel.tsx` (쇼핑몰 행의 `products/` 안에 삽니다) | 예약 슬롯 계열 |
 | **게시판·블로그** | `src/app/blog/`(목록 · `page/[n]` 쪽 나눔 · `[slug]` 상세) · `src/app/api/posts/` · `src/components/{BlogList,Markdown,TableOfContents,RelatedPosts}.tsx` · `src/lib/{markdown,blogPaging,blogGraph}.ts` | **`src/lib/reservedSegments.ts` 에서 `blog` 빼기** · **이 문서의 §본문 렌더 절도 함께 지우기**(안 지우면 `validate` 가 `[D1]`) | `listPosts` · `getPost` |
 | **문의·리드** | `src/app/contact/` · `src/app/api/{inquiry,lead}/` | ⚠ `src/components/LeadForm.tsx` 는 **계약 어휘 섹션**(`LeadCtaSection`)이 씁니다. 지우려면 그 섹션과 그것을 쓰는 `content/` 페이지도 같이 지우십시오 · **`src/lib/reservedSegments.ts` 에서 `contact` 빼기** | 리드 제출 |

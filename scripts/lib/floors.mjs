@@ -23,7 +23,7 @@
  *   둘 다 [REPO_ONLY_FLOORS] 로 간다.
  */
 export const REQUIRED_FLOORS = {
-    "src/lib/crossOrigin.test.ts": 18,
+    "src/lib/crossOrigin.test.ts": 20,
     // 세 층의 «배선»(자리·면제·CORS 좌표) — 팩 트리에서도 자기 트리를 감사한다.
     // ⚠ 이 스위트는 **어느 트리에서도 8 을 통과해야 한다** — 사본이 하나뿐인 팩 트리에서 스킵하면
     //    통과 수가 갈려 정본 레포와 팩 중 한쪽 게이트가 반드시 빨개진다.
@@ -202,7 +202,8 @@ export function judgeFloors(floors, exists) {
             //   구분할 정보가 없으므로 둘을 같이 말하고 고치는 길을 준다.
             bad.push(
                 `${f} 하한 ${min} < 요구 ${required[f]} — 낮췄거나 표가 러너보다 낡았습니다. ` +
-                    `낡은 것이면 최신 시작 팩의 ${f}·scripts/lib/test-floors.json·scripts/lib/floors.mjs 를 가져오십시오.`,
+                    `낡은 것이면 최신 시작 팩의 ${f}·scripts/lib/test-floors.json·scripts/lib/floors.mjs 를 가져오십시오 — ` +
+                    `가져온 시험이 그래도 red 면 그 시험이 import 하는 소스도 최신 팩의 것이어야 합니다 — 같은 팩에서 함께 가져오십시오.`,
             );
             continue;
         }

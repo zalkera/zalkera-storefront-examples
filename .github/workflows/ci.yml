@@ -95,17 +95,8 @@ jobs:
         run: npm run typecheck
 
       - name: 잘커라 레포 전용 — 배송 포맷 규약
-        # 팩 검수의 「배송 포맷 규약」은 **푼 zip 안**에서 `npm run format:check` 를 돌린다 —
-        # 배송 경로의 파일이 어긋나면 zip 은 써지되 반려돼 적재 안내가 안 찍힌다
-        # (재현: `node scripts/verify-zip.mjs dist-presets/<팩>-<판>.zip --pack; echo rc=$?` → ❌ 배송 포맷 규약 · rc=1).
-        # 그 검사가 굽는 자리에만 있으면 어긋난 파일이 **CI 초록인 채 main 에 올라가** 판을
-        # 굽는 날 처음 막힌다. 규칙의 정본은 `package.json` 의 `format:check` 하나다 — 여기서
-        # prettier 를 따로 철자하면 굽는 자리와 조용히 갈린다.
-        #
-        # ⚠ **정본 전용이다.** 이 워크플로는 고객 zip 에 실린다(`SOURCE_EXCLUDES` 밖). 무조건
-        # 부르면 고객이 자기 취향대로 쓴 소스에서 **CI 가 영구 적색**이 되고, 배포 게이트가 이
-        # 워크플로를 읽으므로 그 사이트는 "말로 고치기"가 막힌다. 그래서 아래 스텝들과 같은
-        # 판별자(존재 두 개의 교집합)를 쓴다.
+        # 팩 검수가 푼 zip 안에서 `npm run format:check` 로 재는 규약을 CI 로 당긴다(굽는 날 처음 드러나지 않게).
+        # 정본 전용 — 이 워크플로는 고객 zip 에도 실리므로 아래 스텝들과 같은 판별자 밖에서는 건너뛴다.
         run: |
           if [ -d presets ] && [ -f scripts/pack-preset.mjs ]; then
             if ! npm run format:check; then

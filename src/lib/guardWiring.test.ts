@@ -27,8 +27,8 @@ import type TS from "typescript";
  *
  * 「없으면 400」의 신호는 `invalidBody()` 호출 **또는** 그 자리의 문자열 `"INVALID_BODY"` 다. 자기 문구로 400 을
  * 내는 문은 응답에 `code: "INVALID_BODY"` 를 실으면 필수로 읽힌다(`AGENTS.md` BFF 절이 같은 말을 한다).
- * ⚠ 그 코드 이름을 **전부** 바꾸면 통제군이 「본문 필수 문이 하나도 안 잡혔다」로 잡는다. 한 라우트만 다르면
- * 통제군은 초록이고, 그 라우트는 아래 시험이 **두 출구를 적은 문면**으로 세운다.
+ * ⚠ 본문 읽기와 거절은 **핸들러 안에서 직접** 보여야 읽힌다 — 자기 헬퍼 안에서 읽거나 거절하면 이 판정이 못 읽는다.
+ * 그런 문은 아래 시험이 **두 출구를 적은 문면**으로 세운다(정본에서는 통제군이 판정이 죽었는지를 따로 잰다).
  *
  * 두 방향을 다 단언한다 — 「없음」만 세면 ③층을 전부 지워도 초록이고, 「있음」만 세면 이 결함이 다시 난다.
  *
@@ -151,7 +151,8 @@ function rejectsMissingBody(root: TS.Node): boolean {
     if (calls(root, "invalidBody")) return true;
     let found = false;
     const visit = (node: TS.Node): void => {
-        if (ts.isStringLiteral(node) && node.text === "INVALID_BODY") found = true;
+        if ((ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) && node.text === "INVALID_BODY")
+            found = true;
         ts.forEachChild(node, visit);
     };
     visit(root);
@@ -220,23 +221,25 @@ function survey(): Row[] {
 
 test("통제군 — 라우트를 실제로 읽는다(변이 문과 본문 필수 문이 둘 다 있다)", () => {
     const rows = survey();
-    assert.ok(rows.length >= 20, `라우트를 못 읽었다: ${rows.length}`);
-    // ⚠ **사본 수를 단언하지 않는다.** 고객 zip 에는 `presets/` 가 없어(`SOURCE_EXCLUDES`) 거기서는 이 그물이
-    //    **자기 트리 하나**를 감사한다. 사본 대조는 정본 레포에서만 뜻이 있다(그 자리는 아래 5벌 시험).
-    if (existsSync(PRESETS)) {
+    const files = PACK_SRCS.reduce((n, [, dir]) => n + routeFiles(dir).length, 0);
+    assert.ok(files === 0 || rows.length > 0, `라우트 파일 ${files}개에서 핸들러를 하나도 못 읽었다 — 판정이 죽었다`);
+    // ⚠ **아래는 정본에서만 선다.** 고객 트리는 `AGENTS.md` 능력 삭제표대로 쇼핑몰·예약 등을 지울 수 있고, 그러면
+    //    라우트 수도 「본문 필수 문이 있다」도 참이 아닐 수 있다 — 그물이 죽은 것이 아니라 능력을 지운 것이다.
+    if (CANONICAL) {
+        assert.ok(rows.length >= 20, `라우트를 못 읽었다: ${rows.length}`);
         assert.ok(
             PACK_SRCS.length >= 2,
             `정본 레포인데 프리셋 사본을 못 찾았다: ${PACK_SRCS.map(([l]) => l).join(",")}`,
         );
+        assert.ok(
+            rows.some((r) => r.bodyRequired),
+            "본문 필수 문이 하나도 안 잡혔다 — 판정이 죽었다",
+        );
+        assert.ok(
+            rows.some((r) => r.mutation && !r.bodyRequired),
+            "본문 없는 변이 문이 하나도 안 잡혔다 — 판정이 죽었다",
+        );
     }
-    assert.ok(
-        rows.some((r) => r.bodyRequired),
-        "본문 필수 문이 하나도 안 잡혔다 — 판정이 죽었다",
-    );
-    assert.ok(
-        rows.some((r) => r.mutation && !r.bodyRequired),
-        "본문 없는 변이 문이 하나도 안 잡혔다 — 판정이 죽었다",
-    );
 });
 
 test("🔴 본문 필수 문에는 ③층이 있다", () => {
@@ -244,7 +247,9 @@ test("🔴 본문 필수 문에는 ③층이 있다", () => {
     assert.deepEqual(
         missing.map((r) => `${r.label}:${r.route}#${r.method}`),
         [],
-        "본문 필수인데 Content-Type 관문이 없다 — 폼 운반체가 ①층 하나에만 기댄다. ①층 바로 뒤에 `assertJsonContentType(req)` 를 둔다",
+        "본문 필수로 읽히는데 Content-Type 관문이 없다 — 폼 운반체가 ①층 하나에만 기댄다.\n" +
+            "  · 본문이 필수인 문이면: ①층 바로 뒤에 `assertJsonContentType(req)` 를 둔다.\n" +
+            "  · 본문이 없어도 되는 문이면(취소·구매확정처럼 본문 없이 POST 하는 호출이 있다): `invalidBody()`·`INVALID_BODY` 를 쓰지 않는다 — 이 그물은 그 코드를 「필수」 신호로 읽고, ③층을 달면 본문 없는 호출이 415 로 튕긴다.",
     );
 });
 
@@ -254,7 +259,7 @@ test("🔴 본문 없는 변이 문에는 ③층이 없다 — 있으면 정상 
         wrong.map((r) => `${r.label}:${r.route}#${r.method}`),
         [],
         "본문 필수로 읽히지 않는 문에 Content-Type 관문이 걸렸다 — 본문 없이 POST 하는 브라우저 호출이 415 로 튕긴다.\n" +
-            '  · 본문이 필수인 문이면: 없을 때 400 응답에 `code: "INVALID_BODY"` 를 싣는다(`invalidBody()` 가 그 모양 · 문구는 자유) — 이 그물은 그 코드로 필수를 알아본다.\n' +
+            '  · 본문이 필수인 문이면: 핸들러 안에서 직접 읽고(`readJsonBody(req)`·`req.json()` — 자기 헬퍼 안에서 읽으면 이 그물이 못 읽는다) 없을 때 400 응답에 `code: "INVALID_BODY"` 를 싣는다(`invalidBody()` 가 그 모양 · 문구는 자유).\n' +
             "  · 본문이 없어도 되는 문이면(마이페이지 취소·구매확정처럼): ③층을 뗀다.",
     );
 });
@@ -305,8 +310,11 @@ test("🔴 소셜 교환 문이 ②층(consumeOAuthState)을 부른다 — 콜�
     for (const [label, dir] of PACK_SRCS) {
         const exchange = join(dir, "app", "api", "auth", "social", "route.ts");
         const start = join(dir, "app", "api", "auth", "social", "start", "route.ts");
-        if (!calls(parse(exchange), "consumeOAuthState")) missing.push(`${label}:교환`);
-        if (!calls(parse(start), "issueOAuthState")) missing.push(`${label}:발행`);
+        // 둘 다 없으면 소셜 로그인 능력을 지운 고객 트리다(`AGENTS.md` 능력 삭제표) — 잴 문이 없다.
+        // 하나만 남았거나 정본이면 잰다.
+        if (!CANONICAL && !existsSync(exchange) && !existsSync(start)) continue;
+        if (!existsSync(exchange) || !calls(parse(exchange), "consumeOAuthState")) missing.push(`${label}:교환`);
+        if (!existsSync(start) || !calls(parse(start), "issueOAuthState")) missing.push(`${label}:발행`);
     }
     assert.deepEqual(missing, [], "state 대조·발행이 빠졌다 — 피해자 브라우저에 공격자 세션이 주입된다");
 });

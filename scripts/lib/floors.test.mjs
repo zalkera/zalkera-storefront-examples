@@ -60,7 +60,7 @@ test("표의 값이 요구보다 작으면 그 스위트를 지목해 반려한�
     const {bad} = judgeFloors(f, allExist);
     const line = bad.find((b) => b.startsWith("src/lib/crossOrigin.test.ts"));
     assert.ok(line, JSON.stringify(bad));
-    assert.match(line, /1 < 요구 18/);
+    assert.match(line, new RegExp(`1 < 요구 ${REQUIRED_FLOORS["src/lib/crossOrigin.test.ts"]}`));
     // ⚠ **원인을 단정하지 않는지 잰다.** `judgeFloors` 는 「낮췄다」와 「표가 낡았다」를 구분할
     //   정보가 없다. 옛 시작 팩에서 갈라진 납품물은 늘 뒤쪽인데, 앞쪽으로 단정하면 낮춘 적 없는
     //   외주사가 **틀린 사유**를 받는다. 고치는 길(어느 파일을 가져오는가)까지 말해야 한다.
