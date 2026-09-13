@@ -17,15 +17,14 @@ const SRC = resolve(HERE, "..");
  * `blogPaging.test.ts` 는 술어(`hasNextPage`·`isOutOfRange`·`blogPagePath`)를 잰다. 그것만으로는
  * **호출부**가 안 잠긴다 — `BlogList.tsx` 에서 `const hasNext = hasNextPage(posts)` 를
  * `const hasNext = false` 로 고정하면 술어 시험은 전부 초록인 채 「다음 →」이 통째로 사라지고,
- * **21번째 글부터 목록에서 도달 불가**가 된다. 그것이 정확히 이 트랜치가 고친 결함이다.
- * 심의가 그 변이를 실제로 넣어 전 게이트가 초록임을 확인했다. 그래서 렌더한다.
+ * **21번째 글부터 목록에서 도달 불가**가 된다. 그래서 렌더한다.
  *
  * `BlogList` 가 `posts` 를 인자로 받으므로 네트워크 없이 그려진다 — 그 인자는 쪽 라우트가
  * 범위 밖 판정을 하려고 목록을 먼저 보기 때문에 생긴 것이고, 여기서 그대로 쓴다.
  *
- * **쪽 라우트의 배선도 여기서 잰다.** `isOutOfRange(...) → notFound()` 한 줄을 지워도 전 게이트가
- * 초록이었다(`npm run verify`·`typecheck`·`floor-gate`·`doc-claims` 전부 rc=0). 그래서 라우트를
- * **호출해서** 404 가 실제로 던져지는지 본다 — 백엔드는 스텁으로 갈아 끼운다.
+ * **쪽 라우트의 배선도 여기서 잰다.** `isOutOfRange(...) → notFound()` 한 줄을 지워도 나머지
+ * 게이트는 초록이다(재현: 그 줄을 지우고 `npm run verify`·`node scripts/lib/doc-claims.mjs` → rc=0).
+ * 그래서 라우트를 **호출해서** 404 가 실제로 던져지는지 본다 — 백엔드는 스텁으로 갈아 끼운다.
  *
  * 재현: `node --experimental-strip-types --test src/lib/blogListRender.test.ts; echo rc=$?` → rc=0
  */
@@ -190,7 +189,7 @@ test("🔴 2쪽의 이전은 /blog 다 — /blog/page/1 이 아니다", async ()
  */
 test("🔴 백엔드가 죽으면 셸만 그리고 «없다»고 말하지 않는다", async () => {
     // 🔴 **`undefined` 도 넣는다** — `@zalkera/client` 는 2xx **빈 본문**에 `undefined` 를 준다.
-    //    한 판 술어 하나만 그것을 받게 넓혔더니 이 컴포넌트가 던져 공개 쪽이 **500** 이 됐다.
+    //    술어 하나만 그것을 받게 넓히면 이 컴포넌트가 던져 공개 쪽이 **500** 이 된다.
     for (const 모름 of [null, undefined]) {
         const html = await render(1, 모름);
         assert.match(html, /블로그/, `${String(모름)} 에 셸이 안 섰다: ${html}`);
@@ -205,7 +204,7 @@ test("🔴 백엔드가 죽으면 셸만 그리고 «없다»고 말하지 않�
 /**
  * 🔴 **거절된 쪽도 «없다»고 말하지 않는다.** 라우트가 그 앞에서 404 를 내므로 지금은 도달 불가지만,
  * 「그물 없음」은 「도달 불가」가 아니다 — 목록을 그리는 라우트가 하나 더 생기면 그때 조용히 열린다.
- * `?? []` 로 접는 변이(거절을 0건으로 읽음)가 여기서 red 다(기능 축 심의 🟡).
+ * 거절을 `?? []` 로 접으면 여기서 red 다.
  */
 test("🔴 백엔드가 거절한 쪽도 «게시글이 없습니다» 를 그리지 않는다", async () => {
     const html = await render(1, PAGE_NOT_ADDRESSABLE);

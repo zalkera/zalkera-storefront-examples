@@ -534,7 +534,7 @@ npx -y -p @zalkera/client -p parse5 zalkera-port-text \
 통과가 아닙니다. 재는 것은 하나입니다 — 개시된 HTML 의 글자가 원본에서 떠 온 글자와 같은가
 (공백 무시 · 순서 불변). 글자수만 세면 **같은 수의 다른 글자**를 못 잡습니다.
 
-소요: 라우트 수에 비례하며, 라우트당 네트워크 왕복 한 번입니다. 도구는 이관 트리 **밖에서** 부릅니다 —
+소요: 라우트 수에 비례하며, 라우트당 네트워크 왕복 **두 번**입니다(발견 크롤 한 번 · 채취 한 번). 도구는 이관 트리 **밖에서** 부릅니다 —
 소스에 우리 의존이 생기지 않습니다.
 
 **차이가 나오면 셋 중 하나입니다.**
@@ -611,7 +611,7 @@ python3 -c "import json;d=json.load(open('.next/server/middleware-manifest.json'
 
 시안 레인은 시작 소스 팩 zip 이 `scripts/verify-zip.mjs` 를 **싣고 오지만**, 이 레인은 그 팩에서
 출발하지 않으므로 러너가 손에 없습니다. `@zalkera/client` 의 bin 에도 없습니다
-(거기 있는 것은 `zalkera-validate`·`zalkera-aeo-check` 둘뿐입니다).
+(거기 있는 것은 `zalkera-validate`·`zalkera-aeo-check`·`zalkera-port-text` 셋이고 러너는 없습니다).
 
 **공개 레포를 검수 대상 트리 **밖에** 받아 거기서 돌리십시오.**
 

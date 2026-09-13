@@ -24,10 +24,10 @@ export async function listBlogPage(page: number) {
         //    전부 200 소프트 404 로 서고 그 주소 집합은 무한하다.
         //    형제 `blog/[slug]`·`products/[slug]` 가 404 를 `notFound()` 로 옮기는 것과 같은 자리다.
         //
-        // ⛔ **상태(400)로 가르지 마라.** 한 판 `error.status === 400` 이었는데, 400 은 이 호출에서
+        // ⛔ **상태(400)로 가르지 마라.** 400 은 이 호출에서
         //    하나가 아니다 — 테넌트 헤더 누락(`TENANT_HEADER_MISSING`) · 중간 장비의 비JSON 400 ·
         //    그리고 이 파일을 고치는 사람이 `listPosts` 에 인자를 하나 붙이는 순간 열리는 검증 400.
-        //    그때 설정 오류 하나가 블로그 **전 쪽**을 404 로 만들고 `revalidate` 동안 굳는다(보안 축 심의 🟠).
+        //    그때 설정 오류 하나가 블로그 **전 쪽**을 404 로 만들고 `revalidate` 동안 굳는다.
         error instanceof ZalkeraError && error.code === OFFSET_EXCEEDED_CODE ? PAGE_NOT_ADDRESSABLE : null,
     );
 }

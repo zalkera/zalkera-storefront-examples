@@ -7,14 +7,13 @@ import {PAGE_NOT_ADDRESSABLE, blogPagePath, hasNextPage, isOutOfRange, parseBlog
  *
  * ## 왜 이 파일이 있나
  *
- * 한 판 이 셋이 컴포넌트·라우트 안에 있었고 **행위 그물이 0건**이었다. 심의가 넣은 변이 셋이
- * 전 게이트를 통과했다:
+ * 이 셋이 컴포넌트·라우트 안에 있으면 행위를 재는 자리가 없다. 그러면 아래 셋이 전 게이트를
+ * 통과한다 — 여기가 그것을 red 로 만드는 자리다:
  *
- *  - `hasNext = false` — 「다음 →」이 통째로 사라진다. **21번째 글이 다시 도달 불가**가 되는데,
- *    그것이 정확히 이 트랜치가 고친 결함이다
+ *  - `hasNext = false` — 「다음 →」이 통째로 사라져 **21번째 글이 목록에서 도달 불가**가 된다
  *  - `posts === null || posts.last === false` — 백엔드가 죽었을 때 **없는 쪽으로 크롤러를 보낸다**
  *  - `if (page < 1)` — `/blog/page/1` 이 열려 같은 내용이 두 주소에 서고 **각자 자기를 canonical
- *    이라 주장**한다(실물 확인)
+ *    이라 주장**한다
  *
  * 재현: `node --experimental-strip-types --test src/lib/blogPaging.test.ts; echo rc=$?` → rc=0
  */
@@ -158,7 +157,7 @@ test("🔴 백엔드가 거절한 쪽은 곧바로 404 다 — 접으면 200 소
     //    거절은 다르다: 백엔드가 「그 쪽은 주소로 받지 않는다」고 **답한** 것이므로 쪽 번호와
     //    무관하게 없음이다. 이 단언이 없으면 위 셋은 전부 **우연히** 초록이다 — 문자열에
     //    `.content` 를 물으면 `undefined` 라 「0건」과 구별이 안 되어, 이름으로 적은 판정을
-    //    통째로 지워도 `page > 1` 갈래가 같은 답을 낸다(변이 P3 실측 — 재현:
+    //    통째로 지워도 `page > 1` 갈래가 같은 답을 낸다(재현:
     //    `blogPaging.ts` 의 `if (posts === PAGE_NOT_ADDRESSABLE) return true;` 한 줄을 지우고
     //    `node --experimental-strip-types --test src/lib/blogPaging.test.ts; echo rc=$?` ·
     //    이 단언이 없으면 rc=0, 있으면 rc=1).
