@@ -78,7 +78,7 @@
 export async function POST(req: Request) {
     const blocked = assertSameOrigin(req);      // ① 첫 구문. 앞에 아무것도 두지 마라
     if (blocked) return blocked;
-    const badType = assertJsonContentType(req); // ③ 본문을 읽는 라우트만
+    const badType = assertJsonContentType(req); // ③ 본문이 필수인 라우트만(아래)
     if (badType) return badType;
     ...
 }
@@ -86,6 +86,10 @@ export async function POST(req: Request) {
 
 - **왜 "첫 구문"인가**: `cookies()` 변이는 뒤에 만드는 `NextResponse` 에 그대로 합류한다. 가드보다 앞에
   쿠키를 쓰면 **403 차단 응답에 `Set-Cookie` 가 실려** 방어가 무의미해진다(실측 재현됨).
+- **③층은 본문이 필수인 문에만.** 본문 없이도 되는 문(마이페이지 주문 취소·구매확정처럼 `fetch(url, {method: "POST"})`
+  만 하는 호출)에 걸면 브라우저가 `Content-Type` 을 안 보내 **415** 로 튕긴다. 「필수」는 **없을 때 400 응답에
+  `code: "INVALID_BODY"` 를 싣는가**로 정한다 — `invalidBody()` 가 그 모양이고 문구는 바꿔도 된다.
+  `src/lib/guardWiring.test.ts` 가 그 신호로 두 방향(필수인데 ③층 없음 · 필수가 아닌데 ③층 있음)을 잰다.
 - **가드를 감싸지 마라.** 헬퍼로 한 겹 두르거나(`const guard = (r) => assertSameOrigin(r)`) 중첩 함수 안에
   넣으면 검사기가 못 따라가 경고를 낸다 — **막아 주지는 않는다.** 부르는 자리에서 직접 불러라.
   `try { … }` 로 감싼 본문은 괜찮다 — 가드가 여전히 먼저 돈다.
@@ -103,6 +107,7 @@ export async function POST(req: Request) {
   같은 근거를 물려받지 못한다. 상태를 바꿔야 하면 `POST` 로 만들고 가드를 달아라.
 - **정당한 예외**는 파일 **상단**에 `// zalkera-allow-cross-origin: <이유 한 줄>`. **마커와 사유는 같은 줄**이어야 한다 — 사유가 없거나 다음 줄에 있으면 면제되지 않는다. 검사기가 면제 목록을
   항상 출력한다(조용히 늘지 않게). 이유가 두 줄이면 목록에 잘려 찍히니 한 줄로 쓰고 부연은 마커 밖에.
+  가드 그물(`src/lib/guardWiring.test.ts`)도 같은 규칙으로 면제를 읽는다 — 사유 없는 마커는 그 시험이 세운다.
 - **`Sec-Fetch-Site` 를 `!== "cross-site"` 로 쓰지 마라.** 플랫폼 존이 `{tenant}.{zone}` 이라 **테넌트끼리
   서로 `same-site`** 다 — 그 관용구는 테넌트-대-테넌트 위조를 열어 둔 채 "고쳤다"고 기록된다.
 - **스킴을 비교하지 마라.** 서빙 오케스트레이터가 `x-forwarded-proto: "http"` 를 넣는데 공개 스킴은
@@ -426,7 +431,7 @@ ISR 이 한 번만 그리므로 그 씨앗은 동시성을 재지 않는다. 재
 
 **왜 적어 두는가.** 네 기본 포맷이 위 값과 다르다. 그대로 저장하면 **고친 줄이 아니라 파일 전체가 바뀐 것으로 보이고**, 사람이 diff 에서 무엇이 실제로 바뀌었는지 못 읽는다. 그러면 검수는 눈으로 넘어가고, 그 위에 얹힌 규약 검사(위 X·N·C 축)는 사람이 못 본 것을 대신 봐 주지 않는다.
 
-⚠ **이 규약은 CI 가 재지 않는다 — 네가 돌려야 한다.** 재게 하지 않는 것이 의도다: 이 저장소의 CI 는 백엔드 배포 게이트가 결과를 읽으므로, 포맷 하나가 어긋났다고 사이트 배포를 막으면 대가가 이득보다 크다. 그래서 집행을 기계가 아니라 **너**에게 맡긴다. 확인만 하려면 `npm run format:check`, 고치려면 `npm run format`.
+⚠ **네 트리의 CI 는 이 규약을 재지 않는다 — 네가 돌려야 한다.** 재게 하지 않는 것이 의도다: 이 저장소의 CI 는 백엔드 배포 게이트가 결과를 읽으므로, 포맷 하나가 어긋났다고 사이트 배포를 막으면 대가가 이득보다 크다(`ci.yml` 의 포맷 스텝은 팩을 굽는 정본 레포에서만 돈다). 그래서 집행을 기계가 아니라 **너**에게 맡긴다. 확인만 하려면 `npm run format:check`, 고치려면 `npm run format`.
 
 두 스크립트 다 `--cache` 를 쓴다. **범위**(무엇을 재는가)는 설정(`.prettierignore`·`.gitignore`)이 정하고, **건너뛰기**(지난번과 안 바뀐 파일)는 그 `--cache` 플래그가 정한다. 스크립트가 정확히 무엇인지는 **`package.json` 을 읽어라**(여기 옮겨 적으면 낡는다).
 
