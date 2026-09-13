@@ -25,9 +25,9 @@
 export const REQUIRED_FLOORS = {
     "src/lib/crossOrigin.test.ts": 18,
     // 세 층의 «배선»(자리·면제·CORS 좌표) — 팩 트리에서도 자기 트리를 감사한다.
-    // ⚠ 하한이 8 이 아니라 7 인 이유: 5벌 대조 시험은 사본이 하나뿐인 팩 트리에서 **스킵**하고,
-    //    스킵은 통과로 안 센다(`floor-reporter.mjs`). 정본 레포에서는 8 이 통과한다.
-    "src/lib/guardWiring.test.ts": 7,
+    // ⚠ 이 스위트는 **어느 트리에서도 8 을 통과해야 한다** — 사본이 하나뿐인 팩 트리에서 스킵하면
+    //    통과 수가 갈려 정본 레포와 팩 중 한쪽 게이트가 반드시 빨개진다(CI 실측).
+    "src/lib/guardWiring.test.ts": 8,
 
     "src/lib/oauthState.test.ts": 11,
     "src/lib/routeParam.test.ts": 5,
