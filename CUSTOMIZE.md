@@ -158,7 +158,7 @@ ls public/images 2>/dev/null || echo "이 템플릿에는 동봉된 장식 이�
 
 ### 헤더·푸터는 **당신 것입니다**
 
-`src/components/SiteHeader.tsx`·`SiteFooter.tsx` 는 마음대로 고쳐도 됩니다. 드로어·스티키·메가메뉴
+`src/components/SiteHeader.tsx`·`SiteFooter.tsx` 는 고쳐 써도 됩니다. 드로어·스티키·메가메뉴
 무엇이든 여기서 만드십시오 — 반응형까지 가면 UI/UX 가 매우 가변적이라 **하드코딩이 정답인 자리**이고,
 어떤 설정값도 이 화면을 강제하지 않습니다.
 

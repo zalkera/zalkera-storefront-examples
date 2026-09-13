@@ -197,7 +197,6 @@ const access = {accessToken, phone, context: {clientIp: visitorIp(await headers(
 `src/middleware.ts` + `src/lib/previewGuard.ts`(미리보기 쓰기 차단) ·
 **`src/lib/{session,authHint,useAuthHint}.ts`** — 세션 배선은 쇼핑몰 전용이 아닙니다. 예약·리뷰·동의
 라우트와 `SiteHeader` 가 씁니다(재현: `grep -rl '@/lib/session\|@/lib/authHint\|@/lib/useAuthHint' src`).
-쇼핑몰·예약·회원 기능을 **전부** 지울 때만 함께 지웁니다.
 이 절 아래 "BFF 라우트 — 교차사이트 위조 가드"가 그 상세입니다.
 
 **표현은 지우는 게 아니라 다시 씁니다.** 헤더·푸터는 사이트가 소유하는 외양이라, 반응형 드로어든

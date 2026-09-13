@@ -1,4 +1,4 @@
-// 블로그를 안 쓰는 사이트는 헤더·홈의 링크만 빼십시오 — 이 라우트는 남겨 둡니다(AGENTS.md 「안 쓰는 능력」).
+// 블로그를 안 쓰는 사이트도 이 라우트는 남겨 둡니다 — 입구를 닫는 법은 AGENTS.md 「안 쓰는 능력」.
 import type {Metadata} from "next";
 import {zalkera} from "@/lib/zalkera";
 import {pageMetadata, withSiteName} from "@/lib/metadata";

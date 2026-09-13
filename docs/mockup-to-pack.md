@@ -46,8 +46,7 @@ Tailwind 가 랜딩에 닿으면 시안이 어긋납니다. 그래서 둘을 **�
 > (`HeroSection`·`FeatureGridSection`·`TestimonialsSection` 등)를 가져오면, 시안의 `page.tsx` 가
 > 그것을 한 번도 안 써도 `src/app/[slug]/page.tsx` 가 `SectionRenderer` 를 불러 **타입 검사는
 > 통과합니다.** 즉 쓰지 않는 프리셋 얼굴이 조용히 실려 나갑니다 — 눈으로 확인하십시오.
-> 랜딩 한 장짜리 시안이면 `[slug]` 로 갈 페이지도 없습니다. 지울 때는 §1-2 대로
-> 라우트·`RESERVED_SEGMENTS`·`robots.ts` 셋을 같이 움직이십시오.
+> 랜딩 한 장짜리 시안이면 `[slug]` 로 갈 페이지도 없습니다.
 
 무엇이 필수인지는 §1-2(가드·`src/lib`)와 §3(검수)이 말합니다.
 
@@ -131,9 +130,6 @@ Tailwind 가 랜딩에 닿으면 시안이 어긋납니다. 그래서 둘을 **�
 ⚠ **그 시험이 전부를 보지는 않습니다.** `sitemap.ts`·`media/[id]`·`not-found.tsx` 를 지워도
 `npm test`·`verify-zip` 은 말이 없고, `validate` 도 §1-3 대로 `name` 을 바꾼 뒤에는 조용합니다
 (`[D2]` 는 본보기 레포에서만 돕니다) — 그래서 남기는 것을 여기서 규칙으로 못 박습니다.
-
-부득이 지우려면 **셋을 같이** 움직이십시오:
-라우트 디렉터리 · `src/lib/reservedSegments.ts` 의 `RESERVED_SEGMENTS` · `src/app/robots.ts` 의 `disallow`.
 
 **`src/lib/` 와 `scripts/` 는 통째로 남기십시오.** 파일 단위로 고르지 마십시오 —
 하한표(`scripts/lib/floors.mjs` 의 `REQUIRED_FLOORS`)가 스위트별 시험 수를 요구하고,
