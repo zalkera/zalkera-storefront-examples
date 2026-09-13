@@ -1,7 +1,7 @@
 import {visitorIp} from "@zalkera/client";
 import {NextResponse} from "next/server";
 import {zalkera} from "@/lib/zalkera";
-import {assertJsonContentType, assertSameOrigin, errorResponse, readJsonBody} from "@/lib/http";
+import {assertSameOrigin, errorResponse, readJsonBody} from "@/lib/http";
 import {getAccessToken} from "@/lib/session";
 import {isPreview} from "@/lib/preview";
 import {setAuthHint} from "@/lib/authHint";
@@ -15,12 +15,14 @@ import {setAuthHint} from "@/lib/authHint";
  * **쿼리스트링**으로 백엔드에 보낸다(`accessInit` 의 `query: {phone}`). 즉 백엔드 접근 로그에는
  * 남는다. 여기 규율은 «공개 면(브라우저)에 안 싣는다» 까지이고, 내부 홉은 그 라이브러리가 정한다. 마이페이지(OrderList)는 바디 없이 POST 하므로
  * readJsonBody 가 null 이어도 400 을 내지 않는다(phone 없으면 undefined → 토큰 경로).
+ *
+ * 🔴 그래서 이 문에는 **③층(`assertJsonContentType`)을 걸지 않는다** — 본문 없는 POST 는 `Content-Type` 자체가
+ * 없어 415 로 튕긴다(마이페이지 구매확정 버튼이 그렇게 깨져 있었다 · 심의 실측). 교차사이트 폼 운반체는 ①층이
+ * 막고, ③층은 **본문이 필수인** 문에만 선다(memo118 §5). 그 대응을 `guardWiring.test.ts` 가 잠근다.
  */
 export async function POST(req: Request, {params}: {params: Promise<{orderNo: string}>}) {
     const blocked = assertSameOrigin(req);
     if (blocked) return blocked;
-    const badType = assertJsonContentType(req);
-    if (badType) return badType;
     if (isPreview()) {
         return NextResponse.json({message: "미리보기 모드에서는 구매 확정이 비활성화됩니다."}, {status: 403});
     }
