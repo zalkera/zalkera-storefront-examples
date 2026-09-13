@@ -167,7 +167,7 @@ test("양성 통제군 — 금액의 `toLocaleString` 은 안 걸린다(시간�
         };
         walk(sf);
     }
-    // ⚠ 정본에서만 센다 — 고객 트리는 `AGENTS.md` 능력 삭제표대로 쇼핑몰을 지우면 금액 포맷 자체가 줄어든다.
+    // ⚠ 정본에서만 센다 — 고객 트리는 쇼핑몰을 지우면 금액 포맷 자체가 줄어든다.
     if (CANONICAL) assert.ok(numberFormats >= 5, `금액 포맷을 ${numberFormats}건만 봤다 — 판정이 Date 쪽으로 쏠렸다`);
 });
 

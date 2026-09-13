@@ -176,35 +176,19 @@ const access = {accessToken, phone, context: {clientIp: visitorIp(await headers(
 > 쪽보다 비싸다). 그러니 이 절이 곧 규칙이다: **IP 민감 호출 9종에는 `visitorIp()` 로 뽑은 `clientIp` 를
 > 넘긴다.** 값을 헬퍼로 빼도 되고 조건부로 채워도 된다 — **출처가 `visitorIp()` 이면 된다.**
 
-## 능력 ↔ 구현 좌표 — **안 쓰는 것을 지우는 법**
+## 안 쓰는 능력 — **파일을 지우지 말고 입구를 닫는다**
 
-이 골격은 **최대 조합**으로 배선돼 있습니다(기업 홈페이지 + 쇼핑몰 + 예약). 사이트의 성격은 선언이 아니라
-**`@zalkera/client` 를 어떻게 부르는가**로 구성되므로, 자기 조합을 만드는 방법은 **안 쓰는 능력의 파일을
-지우는 것**입니다. 지워도 플랫폼 계약은 안 깨집니다 — 아래 "중립 배선"만 건드리지 마십시오.
+이 골격은 **최대 조합**으로 배선돼 있습니다(기업 홈페이지 + 쇼핑몰 + 예약 + 게시판 + 문의). 사이트의 성격은 선언이
+아니라 **`@zalkera/client` 를 어떻게 부르는가**로 구성됩니다. 안 쓰는 능력은 **입구만 닫으십시오** — 헤더
+(`src/components/SiteHeader.tsx`)와 홈(`src/app/page.tsx`)에서 그 화면으로 가는 링크와 진열을 뺍니다. 두 파일은
+사이트마다 다른 얼굴이라 마음대로 고쳐도 됩니다. **라우트와 API 는 남겨 둡니다.**
 
-⚠ **행은 독립이 아닙니다.** 아래 "함께 손대야 하는 것" 칸을 빼먹으면 타입체크·빌드가 깨집니다.
-그리고 **이 문서가 지운 파일을 백틱으로 가리키고 있으면 `validate` 가 `[D1]` 에러를 냅니다** — 지운
-행의 좌표는 이 문서(§레시피↔구현 좌표표 포함)에서도 같이 지우십시오.
+- 데이터가 없는 능력은 사이트맵에도 안 나갑니다 — 상품·글 주소는 백엔드에 실제로 있는 것만 싣습니다(`src/app/sitemap.ts`).
+- 장바구니·결제·주문·마이페이지·로그인 화면은 `src/app/robots.ts` 가 원래 색인에서 막습니다.
 
-⚠ **라우트 폴더를 지우면 `src/lib/reservedSegments.ts` 도 같이 고치십시오.** 그 목록은 sitemap 에서
-뺄 이름이고, 지운 이름을 남겨 두면 **그 slug 로 만든 페이지가 sitemap 에서 조용히 빠집니다**.
-`src/app/robots.ts` 의 `disallow` 도 같이 정리하십시오 — 목록은 그 둘에서 도출됩니다.
-
-한 행을 지웠으면 **`npm run typecheck && npm run build && npm run validate && npm test` 를 돌려
-확인**하십시오.
-
-⚠ **`npm test` 는 목록 어긋남의 일부만 봅니다.** `reservedSegments.test.ts` 는
-«실제 라우트» ∪ «`robots.ts` 의 disallow» 를 근거로 인정하므로, **`disallow` 에 남아 있는
-이름은 폴더를 지워도 green** 입니다(`cart`·`checkout`·`orders`·`mypage`·`login`). 검수기도
-같은 시험을 하한으로 쓰므로 마찬가지입니다. 「함께 손대야 하는 것」 칸은 **손으로** 확인하십시오.
-
-| 능력 | 지우면 되는 것 | 함께 손대야 하는 것 | 남는 client 호출 |
-|---|---|---|---|
-| **기업 홈페이지** (항상 필요) | — | — | `getSiteConfig` · `content/` 로더 |
-| **쇼핑몰** | `src/app/{cart,checkout,payment,orders,mypage,login,auth}/` · `src/app/api/{cart,checkout,orders,payment,auth,reviews,consents}/` · `src/app/products/` · `src/app/c/` · `src/components/{Review*,LogoutButton,MarketingConsent}.tsx` · `src/lib/{oauth,oauthState}.ts` · `src/lib/{oauthPath,oauthState}.test.ts`(지운 모듈의 시험 — 하한 게이트는 대상이 없으면 요구를 걷는다) · 헤더의 장바구니·로그인 (⚠ `src/lib/session.ts` 가 `oauthState` 를 씁니다 — 그 파일도 같이 지우거나 그 import 를 걷으십시오) | `src/app/page.tsx` 가 상품 진열을 부르면 그 줄도 (얼굴 파일이라 프리셋마다 다릅니다) · **`src/lib/reservedSegments.ts` 와 `robots.ts` 의 `disallow` 에서 지운 이름 빼기** | `listProducts` · `getProduct` · `listProductCategories` · 장바구니·주문 계열 |
-| **예약** | `src/app/api/booking/` · `src/components/ProductRail.tsx`(시술 진열) | `ProductRail` 을 부르는 `src/app/page.tsx` 의 줄 · `src/app/products/[slug]/BookingPanel.tsx` (쇼핑몰 행의 `products/` 안에 삽니다) | 예약 슬롯 계열 |
-| **게시판·블로그** | `src/app/blog/`(목록 · `page/[n]` 쪽 나눔 · `[slug]` 상세) · `src/app/api/posts/` · `src/components/{BlogList,Markdown,TableOfContents,RelatedPosts}.tsx` · `src/lib/{markdown,blogPaging,blogGraph}.ts` | **`src/lib/reservedSegments.ts` 에서 `blog` 빼기** · **이 문서의 §본문 렌더 절도 함께 지우기**(안 지우면 `validate` 가 `[D1]`) | `listPosts` · `getPost` |
-| **문의·리드** | `src/app/contact/` · `src/app/api/{inquiry,lead}/` | ⚠ `src/components/LeadForm.tsx` 는 **계약 어휘 섹션**(`LeadCtaSection`)이 씁니다. 지우려면 그 섹션과 그것을 쓰는 `content/` 페이지도 같이 지우십시오 · **`src/lib/reservedSegments.ts` 에서 `contact` 빼기** | 리드 제출 |
+⚠ **능력 단위로 파일을 지우는 절차는 싣지 않습니다.** 파일끼리 import 하고 시험·하한 게이트·예약 경로 목록
+(`src/lib/reservedSegments.ts`)·`robots.ts`·홈 섹션이 한 몸으로 엮여 있어서, 손으로 적은 목록은 따라 해도 검사가
+초록이 되지 않았습니다. 입구를 닫으면 검사도 화면도 그대로 섭니다.
 
 **중립 배선 — 지우지 마십시오** (능력이 아니라 플랫폼 계약입니다):
 `src/app/media/[id]/` 프록시 · `src/app/api/revalidate/` ·

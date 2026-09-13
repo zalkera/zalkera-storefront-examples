@@ -4,9 +4,9 @@
 옮길 때 **함께 옮겨야 하는 파일**입니다. 받은 판은 `.zalkera/pack.json` 의 `version` 입니다(재업로드 전에 그 파일을 지웠다면 받을 때 적어 둔 판).
 
 ⚠ **표의 파일은 한 벌로 옮기십시오.** 시험 파일만 옮기면 그 시험이 import 하는 소스가 옛 판이라 red 가 납니다.
-옮긴 뒤 `npm run typecheck && npm test` 를 돌리십시오.
+옮긴 뒤 `npm run typecheck && npm test && node scripts/lib/floor-gate.mjs` 를 돌리십시오.
 
-## 3.7.8 — 3.7.2 이후 누적
+## 3.7.9 — 3.7.2 이후 누적
 
 | 바뀐 것 | 왜 | 함께 옮길 파일 |
 |---|---|---|
@@ -14,8 +14,8 @@
 | 블로그 목록의 범위 밖 쪽이 **200 빈 쪽**이던 것 | 백엔드가 거절한 쪽을 404 로 냅니다 — 끝없는 빈 쪽 주소가 색인되지 않게 | `src/lib/blogPaging.ts` · `src/components/BlogList.tsx` · `src/lib/blogPaging.test.ts` · `src/lib/blogListRender.test.ts` |
 | 소셜 로그인 `redirect_uri` 를 헤더 원문이 아니라 **파서가 정규화한 오리진**으로 | 헤더에 섞인 userinfo 가 주소에 실리지 않게 | `src/lib/crossOrigin.ts` · `src/app/api/auth/social/route.ts` · `src/app/api/auth/social/start/route.ts` · `src/lib/crossOrigin.test.ts` |
 | 재검증 시크릿을 **상수시간**으로 대조 | 비교에 걸리는 시간으로 시크릿이 새지 않게 | `src/app/api/revalidate/route.ts` |
-| 가드 배선 시험 신설 | 교차사이트 가드 세 층이 라우트에 실제로 달렸는지 잽니다(검사기 X1 은 경고만 냅니다) — **윗줄의 415 수정을 먼저** 옮기십시오 | `src/lib/guardWiring.test.ts` · `scripts/lib/floors.mjs` · `scripts/lib/test-floors.json` |
+| 가드 배선 시험 신설 | 교차사이트 가드 세 층이 라우트에 실제로 달렸는지 잽니다(검사기 X1 은 경고만 냅니다) — **윗줄을 전부 먼저** 옮기십시오. 하한표에 블로그·소셜 행이 올린 하한이 함께 들어 있습니다 | `src/lib/guardWiring.test.ts` · `scripts/lib/floors.mjs` · `scripts/lib/test-floors.json` · `scripts/lib/floors.test.mjs` |
 | `@zalkera/client` 0.37.0 | 새 메서드 둘(`listSessions`·`revokeSession`) — 팩은 부르지 않습니다 | `npm install @zalkera/client@^0.37.0` |
 
-`AGENTS.md` 의 BFF 가드 절도 바뀌었습니다 — ③층은 본문이 **필수인** 문에만 걸고, 필수 여부는 없을 때 400 응답에
-`code: "INVALID_BODY"` 를 싣는가로 정합니다.
+`AGENTS.md` 도 바뀌었습니다 — ③층은 본문이 **필수인** 문에만 걸고(필수 여부는 없을 때 400 응답에 `code: "INVALID_BODY"` 를
+싣는가로 정합니다), 안 쓰는 능력은 파일을 지우는 대신 **입구를 닫습니다**(능력별 삭제표를 뺐습니다).

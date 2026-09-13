@@ -124,7 +124,7 @@ export const FLOOR_KEY_REGEX =
  * **능력별 시험 — 그 가드가 지킬 대상이 트리에 있을 때만 요구한다.**
  *
  * 요구 목록은 「가드가 옳은가」를 잠그는 자리다. 그런데 그중 하나는 **능력에 딸린** 가드다 —
- * `AGENTS.md` 의 능력 삭제표가 쇼핑몰을 지울 때 `src/lib/{oauth,oauthState}.ts` 를 지우라고 하는데,
+ * 고객 트리가 쇼핑몰을 지우며 `src/lib/{oauth,oauthState}.ts` 를 지울 수 있는데,
  * 그러면 그 시험도 같이 지워야 하고 여기서 반려됐다. 로그인 화면이 없는 사이트가 **쓰지도 않는
  * 파일 둘을 남겨야** 통과하는 자리였다.
  *   재현: 트리에서 `src/lib/oauthState.{ts,test.ts}` 를 지우고 `node scripts/lib/floor-gate.mjs; echo rc=$?`

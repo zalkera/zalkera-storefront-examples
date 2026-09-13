@@ -385,7 +385,7 @@ test("통제군 — 라우트를 실제로 읽는다(변이 문과 본문 필수
         readers.length === 0 || readers.some((r) => r.bodyRequired),
         `본문을 읽는 변이 문 ${readers.length}개 중 본문 필수로 읽히는 문이 없다 — 판정 신호가 사라졌다. 본문이 필수인 문은 없을 때 400 응답에 \`code: "INVALID_BODY"\` 를 싣는다(\`invalidBody()\`)`,
     );
-    // ⚠ **아래는 정본에서만 선다** — 고객 트리는 `AGENTS.md` 능력 삭제표대로 능력을 지울 수 있다.
+    // ⚠ **아래는 정본에서만 선다** — 고객 트리는 능력을 지울 수 있다.
     if (CANONICAL) {
         assert.ok(rows.length >= 20, `라우트를 못 읽었다: ${rows.length}`);
         assert.ok(
