@@ -22,12 +22,23 @@ import {revalidatePath, revalidateTag} from "next/cache";
  *
  * body: { paths?: string[], tags?: string[] }  →  { revalidated: true, paths, tags }
  */
+/**
+ * 시크릿 대조 — **상수시간**. 이 문은 ①층(교차사이트 가드) 면제의 **유일한 근거**를 지고 있어(자기 자격증명을
+ * 들고 온다) 그 비교가 글자마다 일찍 끝나면 안 된다. 길이가 다르면 바로 거짓 — 길이는 비밀이 아니다.
+ */
+function secretMatches(given: string | null, expected: string): boolean {
+    if (!given || given.length !== expected.length) return false;
+    let diff = 0;
+    for (let i = 0; i < expected.length; i += 1) diff |= given.charCodeAt(i) ^ expected.charCodeAt(i);
+    return diff === 0;
+}
+
 export async function POST(req: Request) {
     const secret = process.env.ZALKERA_REVALIDATE_SECRET;
     if (!secret) {
         return NextResponse.json({message: "ZALKERA_REVALIDATE_SECRET 미설정 — revalidate 비활성."}, {status: 503});
     }
-    if (req.headers.get("x-oneque-revalidate-secret") !== secret) {
+    if (!secretMatches(req.headers.get("x-oneque-revalidate-secret"), secret)) {
         return NextResponse.json({message: "invalid secret"}, {status: 401});
     }
 

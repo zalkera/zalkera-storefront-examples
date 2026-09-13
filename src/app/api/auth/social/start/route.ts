@@ -1,6 +1,7 @@
 // zalkera-allow-preview-write: 로그인 흐름 — 막으면 미리보기에서 로그인한 화면을 못 본다.
 import {NextResponse} from "next/server";
 import {assertJsonContentType, assertSameOrigin} from "@/lib/http";
+import {requestOrigin} from "@/lib/crossOrigin";
 import {PROVIDER_CONFIG, buildAuthorizeUrl, callbackPath, parseProviderParam} from "@/lib/oauth";
 import {issueOAuthState} from "@/lib/session";
 
@@ -36,7 +37,7 @@ export async function POST(req: Request) {
         );
     }
 
-    const origin = req.headers.get("origin")!; // assertSameOrigin 이 존재·일치를 이미 보장한다.
+    const origin = requestOrigin(req); // assertSameOrigin 이 보장한 뒤라 파싱이 안전하다.
     const state = await issueOAuthState(provider);
     return NextResponse.json({
         authorizeUrl: buildAuthorizeUrl(provider, `${origin}${callbackPath(provider)}`, state),
