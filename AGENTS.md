@@ -182,11 +182,10 @@ const access = {accessToken, phone, context: {clientIp: visitorIp(await headers(
 아니라 **`@zalkera/client` 를 어떻게 부르는가**로 구성됩니다. 안 쓰는 능력은 **입구만 닫으십시오** — 그 화면으로
 가는 링크·버튼·진열을 뺍니다. 입구는 **코드와 콘텐츠 두 곳**에 있고 팩마다 어느 쪽에 두었는지 다르니 둘 다 보십시오:
 헤더·홈 컴포넌트(`src/components/SiteHeader.tsx`·`src/app/page.tsx`)와, 메뉴(`content/nav.json`)·`content/pages/` 아래 홈 페이지의 섹션
-버튼 링크. 사이트마다 다른 얼굴이라 마음대로 고쳐도 됩니다. **라우트와 API 는 남겨 둡니다.**
-남은 입구 찾기: `grep -rn '"/products\|"/cart\|"/blog\|"/consult\|"/contact' src/components src/app/page.tsx content`
+버튼 링크. **라우트와 API 는 남겨 둡니다.**
 
 - 데이터가 없는 능력은 사이트맵에도 안 나갑니다 — 상품·글 주소는 백엔드에 실제로 있는 것만 싣습니다(`src/app/sitemap.ts`).
-- 장바구니·결제·주문·마이페이지·로그인 화면은 `src/app/robots.ts` 가 원래 색인에서 막습니다.
+- 장바구니·주문서·주문조회·마이페이지·로그인 화면은 `src/app/robots.ts` 가 원래 색인에서 막습니다.
 
 ⚠ **능력 단위로 파일을 지우는 절차는 싣지 않습니다.** 파일끼리 import 하고 시험·하한 게이트·예약 경로 목록
 (`src/lib/reservedSegments.ts`)·`robots.ts`·홈 섹션이 한 몸으로 엮여 있어서, 손으로 적은 목록은 따라 해도 검사가

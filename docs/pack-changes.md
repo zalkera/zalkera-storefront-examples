@@ -9,7 +9,9 @@
 ⚠ **표의 파일은 한 벌로 옮기십시오.** 시험 파일만 옮기면 그 시험이 import 하는 소스가 옛 판이라 red 가 납니다.
 옮긴 뒤 `npm run typecheck && npm test && node scripts/lib/floor-gate.mjs` 를 돌리십시오.
 
-## 3.7.9 — 3.7.2 이후 누적
+## 3.7.10 — 3.7.2 이후 누적
+
+표는 3.7.2 에서 파일을 지우지 않은 트리를 기준으로 합니다.
 
 | 바뀐 것 | 왜 | 함께 옮길 파일 |
 |---|---|---|
@@ -18,7 +20,11 @@
 | 소셜 로그인 `redirect_uri` 를 헤더 원문이 아니라 **파서가 정규화한 오리진**으로 | 헤더에 섞인 userinfo 가 주소에 실리지 않게 | `src/lib/crossOrigin.ts` · `src/app/api/auth/social/route.ts` · `src/app/api/auth/social/start/route.ts` · `src/lib/crossOrigin.test.ts` |
 | 재검증 시크릿을 **상수시간**으로 대조 | 비교에 걸리는 시간으로 시크릿이 새지 않게 | `src/app/api/revalidate/route.ts` |
 | 가드 배선 시험 신설 | 교차사이트 가드 세 층이 라우트에 실제로 달렸는지 잽니다(검사기 X1 은 경고만 냅니다) — **윗줄을 전부 먼저** 옮기십시오. 하한표에 블로그·소셜 행이 올린 하한이 함께 들어 있습니다 | `src/lib/guardWiring.test.ts` · `scripts/lib/floors.mjs` · `scripts/lib/test-floors.json` · `scripts/lib/floors.test.mjs` |
+| 능력별 삭제표를 뺐습니다 | 표대로 지워도 검사가 초록이 되지 않았습니다 — 안 쓰는 능력은 파일을 지우지 말고 **입구를 닫습니다** | `AGENTS.md` 「안 쓰는 능력」 절 |
 | `@zalkera/client` 0.37.0 | 새 메서드 둘(`listSessions`·`revokeSession`) — 팩은 부르지 않습니다 | `npm install @zalkera/client@^0.37.0` |
 
-`AGENTS.md` 도 바뀌었습니다 — ③층은 본문이 **필수인** 문에만 걸고(필수 여부는 없을 때 400 응답에 `code: "INVALID_BODY"` 를
-싣는가로 정합니다), 안 쓰는 능력은 파일을 지우는 대신 **입구를 닫습니다**(능력별 삭제표를 뺐습니다).
+옛 표대로 이미 파일을 지운 사이트는 지운 파일을 최신 zip 에서 되살린 뒤 입구를 닫으십시오 — 지운 채로는 하한 게이트가
+그 시험을 요구해 반려합니다.
+
+`AGENTS.md` 의 ③층 규칙도 바뀌었습니다 — 본문이 **필수인** 문에만 겁니다(필수 여부는 없을 때 400 응답에
+`code: "INVALID_BODY"` 를 싣는가로 정합니다).

@@ -252,35 +252,44 @@ test("CheckoutForm 은 «계좌가 있다»만 받는다 — 계좌 문자열을
     );
 
     // ⑵ **폼의 형상 — 이름으로 찾는다.** 정본은 반드시 있고, 고객 트리에서 결제 폼을 지웠으면 잴 폼이 없다.
-    const sf = ourSourceFiles().find((f) =>
-        f.statements.some((st) => ts.isFunctionDeclaration(st) && st.name?.text === "CheckoutForm"),
-    );
-    if (!sf && !CANONICAL) return;
-    assert.ok(sf, "CheckoutForm 을 프로그램에서 못 찾았다");
-
-    let props: TS.Type | undefined;
-    const walk = (node: TS.Node): void => {
-        if (ts.isFunctionDeclaration(node) && node.name?.text === "CheckoutForm") {
-            const param = node.parameters[0];
-            assert.ok(param, "CheckoutForm 이 props 를 안 받는다 — 형상이 통째로 바뀌었다");
-            props = checker.getTypeAtLocation(param);
+    //    선언형(`function CheckoutForm`)과 화살표형(`const CheckoutForm = (…) =>`) 둘 다 — 한쪽만 읽으면 다른 꼴로
+    //    옮기는 순간 이 단언이 건너뛴다.
+    const forms: [TS.SourceFile, TS.SignatureDeclaration][] = [];
+    for (const f of ourSourceFiles()) {
+        for (const st of f.statements) {
+            if (ts.isFunctionDeclaration(st) && st.name?.text === "CheckoutForm") forms.push([f, st]);
+            if (ts.isVariableStatement(st)) {
+                for (const d of st.declarationList.declarations) {
+                    const init = d.initializer;
+                    if (
+                        ts.isIdentifier(d.name) &&
+                        d.name.text === "CheckoutForm" &&
+                        init &&
+                        (ts.isArrowFunction(init) || ts.isFunctionExpression(init))
+                    )
+                        forms.push([f, init]);
+                }
+            }
         }
-        ts.forEachChild(node, walk);
-    };
-    walk(sf);
-    assert.ok(props, "CheckoutForm 선언을 못 찾았다");
+    }
+    if (forms.length === 0 && !CANONICAL) return;
+    assert.ok(forms.length > 0, "CheckoutForm 을 프로그램에서 못 찾았다");
 
-    const shape = checker
-        .getPropertiesOfType(props)
-        .map((p) => `${p.name}: ${checker.typeToString(checker.getTypeOfSymbol(p))}`)
-        .sort();
+    for (const [f, fn] of forms) {
+        const param = fn.parameters[0];
+        assert.ok(param, `${relPath(f)}#CheckoutForm 이 props 를 안 받는다 — 형상이 통째로 바뀌었다`);
+        const shape = checker
+            .getPropertiesOfType(checker.getTypeAtLocation(param))
+            .map((p) => `${p.name}: ${checker.typeToString(checker.getTypeOfSymbol(p))}`)
+            .sort();
 
-    // 값을 그대로 단언한다 — 「문자열 필드가 없다」는 필드가 0개여도 참이라 공허하다.
-    assert.deepEqual(
-        shape,
-        ["bankTransferAvailable: boolean"],
-        "폼의 props 형상이 바뀌었다. 계좌 문자열을 넘기면 정적 프리렌더에 구워져 모든 방문자에게 나간다",
-    );
+        // 값을 그대로 단언한다 — 「문자열 필드가 없다」는 필드가 0개여도 참이라 공허하다.
+        assert.deepEqual(
+            shape,
+            ["bankTransferAvailable: boolean"],
+            `${relPath(f)}#CheckoutForm 의 props 형상이 바뀌었다. 계좌 문자열을 넘기면 정적 프리렌더에 구워져 모든 방문자에게 나간다`,
+        );
+    }
 });
 
 /**

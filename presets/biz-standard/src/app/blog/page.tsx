@@ -1,4 +1,4 @@
-// 블로그 미사용 테넌트는 app/blog/·api/posts/ 통째로 삭제 가능 — 결합은 sitemap.ts 한 곳.
+// 블로그를 안 쓰는 사이트는 헤더·홈의 링크만 빼십시오 — 이 라우트는 남겨 둡니다(AGENTS.md 「안 쓰는 능력」).
 import type {Metadata} from "next";
 import {zalkera} from "@/lib/zalkera";
 import {pageMetadata, withSiteName} from "@/lib/metadata";

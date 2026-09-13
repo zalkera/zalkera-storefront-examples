@@ -59,13 +59,16 @@ const PACK_SRCS: [label: string, dir: string][] = [
 
 const MUTATION_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
+/** Next 가 라우트로 읽는 확장자(`pageExtensions` 기본값) — `route.ts` 만 보면 `route.js` 로 옮긴 문이 그물 밖이다. */
+const ROUTE_FILE = /^route\.(ts|tsx|js|jsx)$/;
+
 function routeFiles(srcDir: string): string[] {
     const out: string[] = [];
     const walk = (dir: string): void => {
         for (const e of readdirSync(dir, {withFileTypes: true})) {
             const p = join(dir, e.name);
             if (e.isDirectory()) walk(p);
-            else if (e.name === "route.ts") out.push(p);
+            else if (ROUTE_FILE.test(e.name)) out.push(p);
         }
     };
     const api = join(srcDir, "app", "api");
@@ -74,7 +77,14 @@ function routeFiles(srcDir: string): string[] {
 }
 
 function parse(path: string): TS.SourceFile {
-    return ts.createSourceFile(path, readFileSync(path, "utf8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    const kind = path.endsWith(".tsx")
+        ? ts.ScriptKind.TSX
+        : path.endsWith(".jsx")
+          ? ts.ScriptKind.JSX
+          : /\.[cm]?js$/.test(path)
+            ? ts.ScriptKind.JS
+            : ts.ScriptKind.TS;
+    return ts.createSourceFile(path, readFileSync(path, "utf8"), ts.ScriptTarget.Latest, true, kind);
 }
 
 /** 이 노드 **안에서** 그 이름을 부르는가(import 만 해 두고 안 쓰는 것과 가른다). */
@@ -292,7 +302,7 @@ function passesRequestElsewhere(root: TS.Node, param: string | null): boolean {
     return found;
 }
 
-/** `src/` 아래에서 `app/api` 의 `route.ts` 가 아닌 소스 — 시험 파일은 뺀다. */
+/** `src/` 아래에서 `app/api` 의 라우트 파일이 아닌 소스 — 시험 파일은 뺀다. */
 function nonRouteSources(srcDir: string): string[] {
     const out: string[] = [];
     const walk = (dir: string): void => {
@@ -301,9 +311,9 @@ function nonRouteSources(srcDir: string): string[] {
             if (e.isDirectory()) {
                 if (e.name !== "node_modules") walk(p);
             } else if (
-                /\.(ts|tsx)$/.test(e.name) &&
-                !/\.test\.tsx?$/.test(e.name) &&
-                !(e.name === "route.ts" && p.includes(join("app", "api")))
+                /\.[cm]?[jt]sx?$/.test(e.name) &&
+                !/\.test\.[cm]?[jt]sx?$/.test(e.name) &&
+                !(ROUTE_FILE.test(e.name) && p.includes(join("app", "api")))
             )
                 out.push(p);
         }
@@ -312,9 +322,26 @@ function nonRouteSources(srcDir: string): string[] {
     return out;
 }
 
-function parseAny(path: string): TS.SourceFile {
-    const kind = path.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS;
-    return ts.createSourceFile(path, readFileSync(path, "utf8"), ts.ScriptTarget.Latest, true, kind);
+/**
+ * 그 이름을 **값으로 참조하는** 자리의 수 — 호출이 아니라 참조다. 호출만 세면 `const f = zalkera.socialLogin; f()` ·
+ * `zalkera["socialLogin"](…)` · 다른 모듈의 `client.socialLogin` 래퍼가 전부 「부르지 않음」으로 읽힌다.
+ * 타입 자리(`typeof zalkera.socialLogin` · 인터페이스 멤버)는 교환을 할 수 없으므로 세지 않는다.
+ */
+function countValueRefs(root: TS.Node, name: string): number {
+    let n = 0;
+    const visit = (node: TS.Node): void => {
+        // `ExpressionWithTypeArguments` 는 값 자리의 `zalkera.socialLogin<T>` 도 된다 — 타입으로 치지 않는다.
+        const typeOnly = ts.isTypeNode(node) && !ts.isExpressionWithTypeArguments(node);
+        if (typeOnly || ts.isInterfaceDeclaration(node) || ts.isTypeAliasDeclaration(node)) return;
+        if (
+            (ts.isIdentifier(node) || ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) &&
+            node.text === name
+        )
+            n++;
+        ts.forEachChild(node, visit);
+    };
+    visit(root);
+    return n;
 }
 
 interface Row {
@@ -466,8 +493,9 @@ test("🔴 ①층 면제 마커는 사유를 같은 줄에 갖는다 — 정본�
 });
 
 test("🔴 소셜 교환 문이 ②층(consumeOAuthState)을 부른다 — 콜백 경유 code 주입을 막는 그 한 줄", () => {
-    // 경로가 아니라 **부르는 것**으로 찾는다 — 폴더를 옮기거나 교환 라우트를 하나 더 만들어도 잡힌다.
-    // 교환·발행을 부르는 핸들러가 하나도 없는 고객 트리는 소셜 로그인을 지운 트리다 — 잴 문이 없다.
+    // 경로가 아니라 **이름**으로 찾는다 — 폴더를 옮기거나 교환 라우트를 하나 더 만들어도 잡힌다.
+    // 교환(`socialLogin`)은 호출이 아니라 값 참조를 센다([countValueRefs]) — 별칭·대괄호·다른 모듈 래퍼로 옮겨도 잡힌다.
+    // 참조가 트리 어디에도 없으면 소셜 로그인을 지운 트리다 — 잴 문이 없다. 경로로 면제하는 파일은 없다.
     const missing: string[] = [];
     let exchanges = 0;
     let starts = 0;
@@ -476,14 +504,15 @@ test("🔴 소셜 교환 문이 ②층(consumeOAuthState)을 부른다 — 콜�
             const route = relative(join(dir, "app", "api"), path);
             const sf = parse(path);
             const handlers = exportedHandlers(sf);
-            // 같은 파일의 헬퍼 안에서 부르면 핸들러에서 state 를 잴 수 없다 — 부르는 자리 수를 핸들러 본문 안의 수와 맞춘다.
-            for (const name of ["socialLogin", "buildAuthorizeUrl"]) {
-                const inHandlers = handlers.reduce((n, h) => n + countCalls(h.body, name), 0);
-                if (countCalls(sf, name) > inHandlers)
-                    missing.push(`${label}:${route} — ${name} 을 핸들러 밖에서 부른다`);
-            }
+            // 같은 파일의 헬퍼 안에 두면 핸들러에서 state 를 잴 수 없다 — 파일 전체의 수를 핸들러 본문 안의 수와 맞춘다.
+            const exchangeRefs = handlers.reduce((n, h) => n + countValueRefs(h.body, "socialLogin"), 0);
+            if (countValueRefs(sf, "socialLogin") > exchangeRefs)
+                missing.push(`${label}:${route} — socialLogin 을 핸들러 밖에서 참조한다`);
+            const startCalls = handlers.reduce((n, h) => n + countCalls(h.body, "buildAuthorizeUrl"), 0);
+            if (countCalls(sf, "buildAuthorizeUrl") > startCalls)
+                missing.push(`${label}:${route} — buildAuthorizeUrl 을 핸들러 밖에서 부른다`);
             for (const h of handlers) {
-                if (callsName(h.body, "socialLogin")) {
+                if (countValueRefs(h.body, "socialLogin") > 0) {
                     exchanges++;
                     if (!calls(h.body, "consumeOAuthState")) missing.push(`${label}:${route}#${h.name} 교환`);
                 }
@@ -493,11 +522,10 @@ test("🔴 소셜 교환 문이 ②층(consumeOAuthState)을 부른다 — 콜�
                 }
             }
         }
-        // 라우트 핸들러 밖에서 부르면 같은 핸들러에서 state 를 잴 수 없다.
+        // 라우트 핸들러 밖에 두면 같은 핸들러에서 state 를 잴 수 없다. `buildAuthorizeUrl` 은 정의가 아니라 호출을 센다.
         for (const path of nonRouteSources(dir)) {
-            if (path.endsWith(join("lib", "oauth.ts"))) continue; // `buildAuthorizeUrl` 의 정의가 사는 곳
-            const sf = parseAny(path);
-            if (callsName(sf, "socialLogin") || callsName(sf, "buildAuthorizeUrl"))
+            const sf = parse(path);
+            if (countValueRefs(sf, "socialLogin") > 0 || callsName(sf, "buildAuthorizeUrl"))
                 missing.push(`${label}:${relative(dir, path)} — 라우트 핸들러 밖`);
         }
     }
