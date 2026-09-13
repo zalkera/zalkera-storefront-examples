@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
     OAUTH_STATE_COOKIE,
+    OAUTH_STATE_COOKIE_OPTIONS,
     bindSocialExchange,
     consumeOAuthState,
     matchesOAuthState,
@@ -156,4 +157,8 @@ test("🔴 교환 — 개발용 TEST 는 운영에서 부르지 않는다 · 개
         {accessToken: "t"},
     );
     assert.equal(dev.calls.length, 1);
+});
+
+test("🔴 발행 쿠키는 sameSite lax · httpOnly — strict 면 authorize 복귀에서 안 실려 로그인이 깨진다", () => {
+    assert.deepEqual(OAUTH_STATE_COOKIE_OPTIONS, {httpOnly: true, sameSite: "lax", path: "/", maxAge: 600});
 });

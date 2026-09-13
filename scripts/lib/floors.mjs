@@ -30,7 +30,7 @@ export const REQUIRED_FLOORS = {
     //    재현: `node scripts/lib/floor-gate.mjs` 를 이 레포와 `presets/skeleton` 양쪽에서.
     "src/lib/guardWiring.test.ts": 8,
 
-    "src/lib/oauthState.test.ts": 15,
+    "src/lib/oauthState.test.ts": 16,
     "src/lib/routeParam.test.ts": 5,
     "src/lib/blogPaging.test.ts": 8,
     "src/lib/blogListRender.test.ts": 13,

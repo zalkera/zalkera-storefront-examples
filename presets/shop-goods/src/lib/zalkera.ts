@@ -9,7 +9,7 @@ import {bindSocialExchange} from "@/lib/oauthState";
  *      ZALKERA_STOREFRONT_KEY(서버 시크릿 키 — 있으면 X-Storefront-Key 로 전 요청 인증).
  *
  * **`socialLogin` 은 싱글턴에서 뗀다** — 소셜 교환은 `exchangeSocialLogin` 한 입구로만 한다. 그 입구가 state 쿠키
- * 대조·소각을 교환보다 먼저 하므로, 교환을 새로 짜는 코드가 대조를 빠뜨릴 수 없다(`@/lib/oauthState`).
+ * 대조·소각을 교환보다 먼저 하므로, SDK 로 교환하는 한 새로 짜는 코드도 대조를 빠뜨릴 수 없다(`@/lib/oauthState`).
  * 클라이언트를 이 파일 밖에서 또 만들면 그 보장이 사라진다 — `guardWiring.test.ts` 가 막는다.
  */
 const {socialLogin, ...client} = createZalkeraClient({

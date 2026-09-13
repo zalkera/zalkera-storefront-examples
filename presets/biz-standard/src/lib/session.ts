@@ -1,6 +1,6 @@
 import {randomUUID} from "node:crypto";
 import {cookies} from "next/headers";
-import {OAUTH_STATE_COOKIE, newOAuthState} from "@/lib/oauthState";
+import {OAUTH_STATE_COOKIE, OAUTH_STATE_COOKIE_OPTIONS, newOAuthState} from "@/lib/oauthState";
 import type {NextResponse} from "next/server";
 import type {ShopSession} from "@zalkera/client";
 
@@ -83,19 +83,11 @@ export async function clearCustomerTokens(): Promise<void> {
 //
 // 대조·소각·교환 입구는 `@/lib/oauthState` 에 있다(`consumeOAuthState`·`bindSocialExchange`). 여기는 발행 쿠키의
 // 정책만 맡는다.
-const TEN_MINUTES = 600;
 
 /** 발행 — authorize 로 보내기 직전에 서버가 심는다. 이전 값은 덮어쓴다(마지막 시도만 유효). */
 export async function issueOAuthState(provider: string): Promise<string> {
     const state = newOAuthState();
     const jar = await cookies();
-    jar.set(OAUTH_STATE_COOKIE, JSON.stringify({state, provider}), {
-        httpOnly: true,
-        // ⚠ `strict` 면 안 된다 — authorize 리다이렉트로 **돌아올 때** 쿠키가 안 실려 정상 로그인이 깨진다.
-        sameSite: "lax",
-        secure,
-        path: "/",
-        maxAge: TEN_MINUTES,
-    });
+    jar.set(OAUTH_STATE_COOKIE, JSON.stringify({state, provider}), {...OAUTH_STATE_COOKIE_OPTIONS, secure});
     return state;
 }

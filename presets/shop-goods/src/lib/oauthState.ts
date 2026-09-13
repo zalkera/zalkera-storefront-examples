@@ -61,6 +61,18 @@ export function matchesOAuthState(raw: string | undefined, state: unknown, provi
 /** state 쿠키 이름 — 발행(`@/lib/session`)과 소각(아래)이 같은 이름을 쓴다. */
 export const OAUTH_STATE_COOKIE = "zalkera_oauth_state";
 
+/**
+ * 발행 쿠키 속성 — `@/lib/session` 이 여기에 `secure` 만 더해 심는다. 값을 이 파일에 두는 것은 시험과 검사기 X3 가
+ * 같은 자리를 재게 하려는 것이다.
+ */
+export const OAUTH_STATE_COOKIE_OPTIONS = {
+    httpOnly: true,
+    // ⚠ `strict` 면 안 된다 — authorize 리다이렉트로 **돌아올 때** 쿠키가 안 실려 정상 로그인이 깨진다.
+    sameSite: "lax",
+    path: "/",
+    maxAge: 600,
+} as const;
+
 /** 쿠키 항아리 — `next/headers` 의 `cookies()` 가 돌려주는 것 중 여기서 쓰는 두 동작. */
 export interface OAuthStateJar {
     get(name: string): {value: string} | undefined;

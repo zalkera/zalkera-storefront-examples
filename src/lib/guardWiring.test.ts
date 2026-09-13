@@ -427,8 +427,8 @@ function packSources(srcDir: string): string[] {
         for (const e of readdirSync(dir, {withFileTypes: true})) {
             const p = join(dir, e.name);
             if (e.isDirectory()) {
-                if (e.name !== "node_modules") walk(p);
-            } else if (/\.[cm]?[jt]sx?$/.test(e.name) && !/\.test\.[cm]?[jt]sx?$/.test(e.name)) out.push(p);
+                if (e.name !== "node_modules" && e.name !== "__tests__") walk(p);
+            } else if (/\.[cm]?[jt]sx?$/.test(e.name) && !/\.(test|spec)\.[cm]?[jt]sx?$/.test(e.name)) out.push(p);
         }
     };
     walk(srcDir);
@@ -485,7 +485,14 @@ test("🔴 소셜 교환은 한 입구로만 — 클라이언트는 `lib/zalkera
             const sf = parse(path);
             const hits: TS.Node[] = [];
             const visit = (n: TS.Node): void => {
-                if ((ts.isIdentifier(n) || ts.isStringLiteralLike(n)) && n.text === "createZalkeraClient") hits.push(n);
+                // 타입 자리(`typeof createZalkeraClient`)와 type-only import 는 클라이언트를 만들지 않는다.
+                if ((ts.isIdentifier(n) || ts.isStringLiteralLike(n)) && n.text === "createZalkeraClient") {
+                    const p = n.parent;
+                    const typeOnly =
+                        ts.isTypeQueryNode(p) ||
+                        (ts.isImportSpecifier(p) && (p.isTypeOnly || p.parent.parent.isTypeOnly));
+                    if (!typeOnly) hits.push(n);
+                }
                 ts.forEachChild(n, visit);
             };
             visit(sf);
