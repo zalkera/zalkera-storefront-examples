@@ -31,7 +31,14 @@ test("경로만 싣는다 — Location 이 준 경로 그대로다", () => {
 });
 
 test("호스트를 싣는 값은 던진다 — 해석기가 호스트로 읽는 변형까지", () => {
-    for (const bad of ["https://evil.example/x", "//evil.example", "/\\evil.example", "/\t/evil.example", "login", ""]) {
+    for (const bad of [
+        "https://evil.example/x",
+        "//evil.example",
+        "/\\evil.example",
+        "/\t/evil.example",
+        "login",
+        "",
+    ]) {
         assert.throws(() => pathOnlyRedirect(bad), /호스트/, `통과시켰다: ${JSON.stringify(bad)}`);
     }
 });
@@ -119,7 +126,8 @@ export function hostReadsFromRequestUrl(source: string, fileName = "route.ts"): 
     };
 
     const visit = (node: TS.Node): void => {
-        if (ts.isFunctionDeclaration(node) || ts.isArrowFunction(node) || ts.isFunctionExpression(node)) visitFunction(node);
+        if (ts.isFunctionDeclaration(node) || ts.isArrowFunction(node) || ts.isFunctionExpression(node))
+            visitFunction(node);
         ts.forEachChild(node, visit);
     };
     visit(sf);
@@ -165,7 +173,10 @@ function routeFiles(dir = join(ROOT, "src", "app")): string[] {
 test("실제 라우트 전부가 요청 주소의 호스트를 이동에 안 쓴다", () => {
     const files = routeFiles();
     // 통제군 — 파일을 못 읽는 그물은 무엇이든 초록이다.
-    assert.ok(files.some((f) => f.endsWith(join("api", "auth", "refresh", "route.ts"))), "갱신 라우트를 못 찾았다 — 경로가 바뀌었으면 그물도 옮겨라");
+    assert.ok(
+        files.some((f) => f.endsWith(join("api", "auth", "refresh", "route.ts"))),
+        "갱신 라우트를 못 찾았다 — 경로가 바뀌었으면 그물도 옮겨라",
+    );
     const hits = files.flatMap((f) => hostReadsFromRequestUrl(readFileSync(f, "utf8"), relative(ROOT, f)));
     assert.deepEqual(hits, []);
 });
