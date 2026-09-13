@@ -79,6 +79,31 @@ export async function clearCustomerTokens(): Promise<void> {
     jar.delete(REFRESH_COOKIE);
 }
 
+// ── 갱신 직후 표식 ────────────────────────────────────────────────
+//
+// 인증필수 화면이 401 을 받으면 갱신 경유지로 보내는데, 갱신하고 돌아와서도 401 이면 그것은 갱신으로
+// 풀 문제가 아니라 로그인이다. 그 「방금 갱신했다」를 주소창에 실으면 주소에 남아 **다음** 만료 때도
+// 「이미 갱신했다」로 읽힌다 — refresh 쿠키가 살아 있는 사람이 로그인 화면을 본다. 그래서 표식은 수명이
+// 짧은 쿠키다: 돌아가 한 번 그리는 데는 충분하고, 다음 만료(15분)보다는 훨씬 짧다.
+const REFRESHED_COOKIE = "zalkera_refreshed";
+const REFRESH_MARK_SECONDS = 15;
+
+/** 갱신 경유지가 돌아가는 응답에 표식을 얹는다. */
+export function markJustRefreshed(response: NextResponse): void {
+    response.cookies.set(REFRESHED_COOKIE, "1", {
+        httpOnly: true,
+        sameSite: "lax",
+        secure,
+        path: "/",
+        maxAge: REFRESH_MARK_SECONDS,
+    });
+}
+
+/** 인증필수 화면이 401 을 「갱신하라」로 읽을지 「로그인하라」로 읽을지 정하는 근거. */
+export async function wasJustRefreshed(): Promise<boolean> {
+    return (await cookies()).get(REFRESHED_COOKIE)?.value === "1";
+}
+
 // ── OAuth state 쿠키 ──────────────────────────────────────────────
 //
 // 대조·소각·교환 입구는 `@/lib/oauthState` 에 있다(`consumeOAuthState`·`bindSocialExchange`). 여기는 발행 쿠키의

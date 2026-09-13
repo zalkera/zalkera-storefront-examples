@@ -1,8 +1,9 @@
 import {NextResponse} from "next/server";
 import {zalkera} from "@/lib/zalkera";
-import {getRefreshToken, setCustomerTokens, clearCustomerTokens} from "@/lib/session";
+import {getRefreshToken, setCustomerTokens, clearCustomerTokens, markJustRefreshed} from "@/lib/session";
 import {setAuthHint} from "@/lib/authHint";
 import {safeNextPath} from "@/lib/oauth";
+import {pathOnlyRedirect} from "@/lib/redirect";
 
 /**
  * **세션 갱신 경유지**.
@@ -14,8 +15,9 @@ import {safeNextPath} from "@/lib/oauth";
  * **왜 라우트인가**: RSC 는 쿠키를 못 쓴다(읽기 전용). 토큰 회전은 Set-Cookie 가 필요하므로 갱신이
  * 필요한 화면은 이리로 리다이렉트하고, 여기서 회전시킨 뒤 원래 자리로 돌려보낸다.
  *
- * **무한 루프 가드**: 돌아갈 주소에 `r=1` 을 붙인다 — 갱신하고 돌아갔는데 또 401 이면 그 화면은
- * 재갱신 대신 로그인으로 보낸다(새 토큰으로도 401 이면 갱신으로 풀 문제가 아니다).
+ * **무한 루프 가드**: 돌아가는 응답에 짧은 표식 쿠키를 얹는다(`markJustRefreshed`) — 갱신하고 돌아갔는데
+ * 또 401 이면 그 화면은 재갱신 대신 로그인으로 보낸다(새 토큰으로도 401 이면 갱신으로 풀 문제가 아니다).
+ * 주소(`?r=1`)에 싣지 않는 이유는 그것이 주소창에 남아 **다음** 만료까지 「이미 갱신했다」로 읽히기 때문이다.
  *
  * **오픈 리다이렉트 방어**: `next` 는 **우리 사이트 내부 경로만** 허용한다(`/` 로 시작하고 `//` 아님).
  * 안 그러면 `?next=https://evil.example` 로 로그인 직후의 사용자를 남의 사이트로 보낼 수 있다.
@@ -33,25 +35,28 @@ export async function GET(req: Request) {
     // (다른 GET 라우트의 정상 경로도 명시하지만, 401·400 같은 오류 반환까지 전부는 아니다 —
     //  그것들은 휴리스틱 캐시 대상이 아니라 실피해가 없다. 캐시 대상인 404 는 따로 붙였다.)
     const NO_STORE = {"Cache-Control": "no-store"} as const;
-    const url = new URL(req.url);
-    const next = safeNext(url.searchParams.get("next"));
+    // 요청 주소는 `next` 를 읽는 데만 쓴다 — 그 origin 은 방문자 도메인이 아니라 서버가 뜬 주소다(`redirect.ts`).
+    const next = safeNext(new URL(req.url).searchParams.get("next"));
     const refreshToken = await getRefreshToken();
 
-    if (!refreshToken) return NextResponse.redirect(new URL("/login", url.origin), {headers: NO_STORE});
+    if (!refreshToken) return new NextResponse(null, pathOnlyRedirect("/login", NO_STORE));
+
+    // 돌아갈 응답의 초기값은 **회전 전에** 만든다 — 조립이 던지는 것은 「갱신 실패」가 아닌데, `try` 안이면
+    // 그 갈래로 떨어져 방금 심은 세션을 지운다.
+    const back = pathOnlyRedirect(next, NO_STORE);
 
     try {
         const tokens = await zalkera.refreshSession(refreshToken);
         await setCustomerTokens(tokens.accessToken, tokens.refreshToken);
-        // 갱신 완료 — 원래 가려던 곳으로. r=1 은 "이미 갱신했다"는 표시(위 루프 가드).
-        const to = new URL(next, url.origin);
-        to.searchParams.set("r", "1");
-        const response = NextResponse.redirect(to, {headers: NO_STORE});
+        // 갱신 완료 — 원래 가려던 곳으로. 표식 쿠키가 "이미 갱신했다"를 말한다(위 루프 가드).
+        const response = new NextResponse(null, back);
         setAuthHint(response, true);
+        markJustRefreshed(response);
         return response;
     } catch {
         // refresh 도 죽었다(30일 경과·세션 폐기·로그아웃) — 이제야 진짜 로그인이 필요하다.
         await clearCustomerTokens();
-        const response = NextResponse.redirect(new URL("/login", url.origin), {headers: NO_STORE});
+        const response = new NextResponse(null, pathOnlyRedirect("/login", NO_STORE));
         setAuthHint(response, false);
         return response;
     }

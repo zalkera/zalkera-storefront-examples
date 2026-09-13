@@ -53,6 +53,7 @@ export const WIRING_FILES = [
     "src/lib/http.ts", // 그 판정을 실제 403 으로 만드는 **전송층** + 시크릿 헤더
     "src/lib/session.ts", // 쿠키 httpOnly·secure, state 소각
     "src/lib/oauth.ts", // safeNextPath — 오픈 리다이렉트 판정
+    "src/lib/redirect.ts", // 이동 주소에 호스트를 안 싣는다 — 서빙 컨테이너의 요청 주소(0.0.0.0)로 방문자를 보내지 않게
     "src/lib/safeUrl.ts", // 링크 소독(저장형 XSS)
     "src/lib/mediaRef.ts", // 본문 미디어 참조 해석 + 그 소독(팩마다 갈리면 그 팩만 이미지가 죽는다)
     // 그 판정의 **뜻**. 본체만 잠그면 시험은 하한표 여유로 지울 수 있다 — `safeUrl` 형제와 같은 처방.
@@ -85,6 +86,7 @@ export const WIRING_FILES = [
     "src/lib/oauthState.test.ts",
     "src/lib/safeUrl.test.ts", // 오픈 리다이렉트 — 잠금이 0건이던 자리라 세 번째 결함이 배송됐다
     "src/lib/oauthPath.test.ts", // safeNextPath — 로그인 능력에 딸린 소독기(갈라 낸 자리)
+    "src/lib/redirect.test.ts", // 그 판정의 뜻 + 이동을 만드는 자리(redirect 호출·Location 헤더)가 소유자를 거치는지의 그물
     "src/lib/urlEscapes.fixture.ts", // 위 둘이 나눠 쓰는 입력 목록 — 베끼면 한쪽만 늘어난다
     "src/lib/safeUrlDrift.test.ts", // 팩 로컬 소독기와 @zalkera/client 사본의 안전성 판정이 갈리는지
     "src/lib/jsonLdScript.test.ts", // 그 이스케이프의 **뜻**을 잠근다(좁게 거는 구현을 red 로 만든다)

@@ -1,7 +1,7 @@
 import {redirect} from "next/navigation";
 import {ZalkeraError, type CustomerSummary} from "@zalkera/client";
 import {zalkera} from "@/lib/zalkera";
-import {getAccessToken} from "@/lib/session";
+import {getAccessToken, wasJustRefreshed} from "@/lib/session";
 import {LogoutButton} from "@/components/LogoutButton";
 import {MarketingConsent} from "@/components/MarketingConsent";
 import {AccountSettings} from "./AccountSettings";
@@ -17,11 +17,12 @@ const REFRESH_PATH = "/api/auth/refresh?next=%2Fmypage";
  *
  * **401 은 "갱신하라"이지 "로그아웃하라"가 아니다**. access 는 15분, refresh 는
  * 30일이다 — 401 을 곧바로 로그인으로 보내면 그 30일이 무의미해지고 **고객이 15분마다 재로그인**한다.
- * 그래서 갱신 경유지로 보내고, 갱신하고 돌아왔는데도(`r=1`) 또 401 이면 그때 로그인으로 보낸다.
+ * 그래서 갱신 경유지로 보내고, 갱신하고 돌아왔는데도(표식 쿠키 · `wasJustRefreshed`) 또 401 이면 그때
+ * 로그인으로 보낸다. 표식은 몇 초 뒤 사라지므로 다음 만료는 다시 갱신으로 간다.
  */
-export default async function MyPage({searchParams}: {searchParams: Promise<{r?: string}>}) {
+export default async function MyPage() {
     const accessToken = await getAccessToken();
-    const alreadyRefreshed = (await searchParams).r === "1";
+    const alreadyRefreshed = await wasJustRefreshed();
     // 토큰이 아예 없으면 갱신 경유지가 판단한다(refresh 쿠키가 살아 있을 수 있다 — 있으면 되살아난다).
     if (!accessToken) redirect(alreadyRefreshed ? "/login" : REFRESH_PATH);
 
