@@ -72,67 +72,83 @@ function parse(path: string): TS.SourceFile {
     return ts.createSourceFile(path, readFileSync(path, "utf8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
 }
 
-/** 이 파일이 그 이름을 **부르는가**(import 만 해 두고 안 쓰는 것과 가른다). */
-function calls(sf: TS.SourceFile, name: string): boolean {
+/** 이 노드 **안에서** 그 이름을 부르는가(import 만 해 두고 안 쓰는 것과 가른다). */
+function calls(root: TS.Node, name: string): boolean {
     let found = false;
     const visit = (node: TS.Node): void => {
         if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === name) found = true;
         ts.forEachChild(node, visit);
     };
-    visit(sf);
+    visit(root);
     return found;
 }
 
-/** export 된 HTTP 메서드 이름들 — 변이 문인지 가른다. */
-function exportedMethods(sf: TS.SourceFile): string[] {
-    const names: string[] = [];
-    const visit = (node: TS.Node): void => {
-        if (ts.isFunctionDeclaration(node) && node.name && node.modifiers?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword)) {
-            names.push(node.name.text);
+/**
+ * export 된 HTTP 메서드와 **그 본문** — 선언형(`export async function POST`)과 화살표형
+ * (`export const POST = async (req) => {}`) 둘 다. 화살표형을 빼면 그 형태로 갈아타는 순간 그물이 눈을 감는다
+ * (memo118 §4 가 1회전에 잡은 네 우회의 첫째가 그 형태였고, 이 그물의 2회전 변이가 같은 구멍을 다시 열었다).
+ *
+ * 본문을 함께 돌려주는 이유: 한 파일이 메서드를 둘 이상 export 하면 판정이 갈린다 —
+ * `cart/items/[variantId]` 는 PATCH 만 본문이 필수이고 DELETE 는 본문이 없다. 파일 단위로 재면
+ * DELETE 에 ③층을 걸어도 안 잡힌다(심의 실측 — 그 상태로 실서버를 누르면 415).
+ */
+function exportedHandlers(sf: TS.SourceFile): {name: string; body: TS.Node}[] {
+    const out: {name: string; body: TS.Node}[] = [];
+    const exported = (node: TS.Node): boolean =>
+        ts.canHaveModifiers(node) && !!ts.getModifiers(node)?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword);
+    for (const st of sf.statements) {
+        if (ts.isFunctionDeclaration(st) && st.name && st.body && exported(st)) out.push({name: st.name.text, body: st.body});
+        if (ts.isVariableStatement(st) && exported(st)) {
+            for (const d of st.declarationList.declarations) {
+                if (!ts.isIdentifier(d.name) || !d.initializer) continue;
+                const init = d.initializer;
+                if (ts.isArrowFunction(init) || ts.isFunctionExpression(init)) out.push({name: d.name.text, body: init.body});
+            }
         }
-        ts.forEachChild(node, visit);
-    };
-    visit(sf);
-    return names;
+    }
+    return out;
 }
 
-/** 본문을 읽는가 — `readJsonBody(req)` 든 `req.json()` 이든. */
-function readsBody(sf: TS.SourceFile): boolean {
-    if (calls(sf, "readJsonBody")) return true;
+/** 그 핸들러가 본문을 읽는가 — `readJsonBody(req)` 든 `req.json()` 이든. */
+function readsBody(root: TS.Node): boolean {
+    if (calls(root, "readJsonBody")) return true;
     let found = false;
     const visit = (node: TS.Node): void => {
         if (
             ts.isCallExpression(node) &&
             ts.isPropertyAccessExpression(node.expression) &&
             node.expression.name.text === "json" &&
-            /^(req|request)$/.test(node.expression.expression.getText(sf))
+            /^(req|request)$/.test(node.expression.expression.getText())
         ) {
             found = true;
         }
         ts.forEachChild(node, visit);
     };
-    visit(sf);
+    visit(root);
     return found;
 }
 
 /** 본문이 없을 때 400 을 내는가 — 표준 헬퍼든, 그 자리에서 직접 내든. */
-function rejectsMissingBody(sf: TS.SourceFile): boolean {
-    if (calls(sf, "invalidBody")) return true;
+function rejectsMissingBody(root: TS.Node): boolean {
+    if (calls(root, "invalidBody")) return true;
     let found = false;
     const visit = (node: TS.Node): void => {
         if (ts.isStringLiteral(node) && node.text === "INVALID_BODY") found = true;
         ts.forEachChild(node, visit);
     };
-    visit(sf);
+    visit(root);
     return found;
 }
 
 interface Row {
     label: string;
     route: string;
+    /** 메서드 이름 — 한 파일이 여럿을 export 하면 행도 여럿이다. */
+    method: string;
     mutation: boolean;
     bodyRequired: boolean;
     hasCtGuard: boolean;
+    hasOriginGuard: boolean;
 }
 
 function survey(): Row[] {
@@ -140,26 +156,32 @@ function survey(): Row[] {
     for (const [label, dir] of PACK_SRCS) {
         for (const path of routeFiles(dir)) {
             const sf = parse(path);
-            rows.push({
-                label,
-                route: relative(join(dir, "app", "api"), path).split("\\").join("/"),
-                mutation: exportedMethods(sf).some((m) => MUTATION_METHODS.has(m)),
-                // 본문 필수 = 본문을 읽고 + 없으면 400 을 낸다
-                bodyRequired: readsBody(sf) && rejectsMissingBody(sf),
-                hasCtGuard: calls(sf, "assertJsonContentType"),
-            });
+            const route = relative(join(dir, "app", "api"), path).split("\\").join("/");
+            for (const h of exportedHandlers(sf)) {
+                rows.push({
+                    label,
+                    route,
+                    method: h.name,
+                    mutation: MUTATION_METHODS.has(h.name),
+                    // 본문 필수 = 그 핸들러가 본문을 읽고 + 없으면 400 을 낸다
+                    bodyRequired: readsBody(h.body) && rejectsMissingBody(h.body),
+                    hasCtGuard: calls(h.body, "assertJsonContentType"),
+                    hasOriginGuard: calls(h.body, "assertSameOrigin"),
+                });
+            }
         }
     }
     return rows;
 }
 
-test("통제군 — 라우트를 실제로 읽는다(5벌 · 변이 문과 본문 필수 문이 둘 다 있다)", () => {
+test("통제군 — 라우트를 실제로 읽는다(변이 문과 본문 필수 문이 둘 다 있다)", () => {
     const rows = survey();
     assert.ok(rows.length >= 20, `라우트를 못 읽었다: ${rows.length}`);
-    assert.ok(
-        PACK_SRCS.length >= 2,
-        `프리셋 사본을 못 찾았다 — 이 그물이 정본만 보고 있다: ${PACK_SRCS.map(([l]) => l).join(",")}`,
-    );
+    // ⚠ **사본 수를 단언하지 않는다.** 고객 zip 에는 `presets/` 가 없어(`SOURCE_EXCLUDES`) 거기서는 이 그물이
+    //    **자기 트리 하나**를 감사한다. 사본 대조는 정본 레포에서만 뜻이 있다(그 자리는 아래 5벌 시험).
+    if (existsSync(PRESETS)) {
+        assert.ok(PACK_SRCS.length >= 2, `정본 레포인데 프리셋 사본을 못 찾았다: ${PACK_SRCS.map(([l]) => l).join(",")}`);
+    }
     assert.ok(rows.some((r) => r.bodyRequired), "본문 필수 문이 하나도 안 잡혔다 — 판정이 죽었다");
     assert.ok(rows.some((r) => r.mutation && !r.bodyRequired), "본문 없는 변이 문이 하나도 안 잡혔다 — 판정이 죽었다");
 });
@@ -167,7 +189,7 @@ test("통제군 — 라우트를 실제로 읽는다(5벌 · 변이 문과 본�
 test("🔴 본문 필수 문에는 ③층이 있다", () => {
     const missing = survey().filter((r) => r.bodyRequired && !r.hasCtGuard);
     assert.deepEqual(
-        missing.map((r) => `${r.label}:${r.route}`),
+        missing.map((r) => `${r.label}:${r.route}#${r.method}`),
         [],
         "본문 필수인데 Content-Type 관문이 없다 — 폼 운반체가 ①층 하나에만 기댄다",
     );
@@ -176,7 +198,7 @@ test("🔴 본문 필수 문에는 ③층이 있다", () => {
 test("🔴 본문 없는 변이 문에는 ③층이 없다 — 있으면 정상 동선이 415 로 깨진다", () => {
     const wrong = survey().filter((r) => r.mutation && !r.bodyRequired && r.hasCtGuard);
     assert.deepEqual(
-        wrong.map((r) => `${r.label}:${r.route}`),
+        wrong.map((r) => `${r.label}:${r.route}#${r.method}`),
         [],
         "본문 없이 POST 하는 문에 Content-Type 관문이 걸렸다 — 브라우저는 그 헤더를 안 보낸다(415)",
     );
@@ -186,17 +208,10 @@ test("🔴 본문 없는 변이 문에는 ③층이 없다 — 있으면 정상 
 const CROSS_ORIGIN_EXEMPT = ["revalidate/route.ts"];
 
 test("🔴 변이 문은 모두 ①층(assertSameOrigin)을 부른다 — 5벌 일관 제거를 잡는다", () => {
-    const rows: string[] = [];
-    for (const [label, dir] of PACK_SRCS) {
-        for (const path of routeFiles(dir)) {
-            const sf = parse(path);
-            const route = relative(join(dir, "app", "api"), path).split("\\").join("/");
-            if (!exportedMethods(sf).some((m) => MUTATION_METHODS.has(m))) continue;
-            if (CROSS_ORIGIN_EXEMPT.includes(route)) continue;
-            if (!calls(sf, "assertSameOrigin")) rows.push(`${label}:${route}`);
-        }
-    }
-    assert.deepEqual(rows, [], "변이 문이 ①층 없이 열려 있다 — 교차사이트 폼 자동제출이 그대로 통과한다");
+    const open = survey()
+        .filter((r) => r.mutation && !CROSS_ORIGIN_EXEMPT.includes(r.route) && !r.hasOriginGuard)
+        .map((r) => `${r.label}:${r.route}#${r.method}`);
+    assert.deepEqual(open, [], "변이 문이 ①층 없이 열려 있다 — 교차사이트 폼 자동제출이 그대로 통과한다");
 });
 
 test("🔴 ①층 면제는 목록과 정확히 같다 — 마커 복붙으로 조용히 늘지 않는다", () => {
@@ -238,12 +253,14 @@ test("🔴 CORS 를 여는 자리가 없다 — 라우트뿐 아니라 next.conf
     assert.deepEqual(hits, [], "교차 오리진 JS 가 응답을 읽게 열렸다 — 읽기 GET 을 가드에서 뺀 근거가 무너진다");
 });
 
-test("프리셋 5벌의 판정이 정본과 같다 — 한 벌만 고치는 사고를 잡는다", () => {
+test("프리셋 5벌의 판정이 정본과 같다 — 한 벌만 고치는 사고를 잡는다", (t) => {
+    // 고객 트리에는 사본이 하나뿐이라 대조할 것이 없다 — 건너뛴다(스킵은 통과로 세지 않는다).
+    if (PACK_SRCS.length < 2) return t.skip("사본이 하나뿐인 트리 — 정본 레포에서만 뜻이 있다");
     const rows = survey();
     const byRoute = new Map<string, Map<string, string>>();
     for (const r of rows) {
-        if (!byRoute.has(r.route)) byRoute.set(r.route, new Map());
-        byRoute.get(r.route)!.set(r.label, `${r.mutation}/${r.bodyRequired}/${r.hasCtGuard}`);
+        if (!byRoute.has(`${r.route}#${r.method}`)) byRoute.set(`${r.route}#${r.method}`, new Map());
+        byRoute.get(`${r.route}#${r.method}`)!.set(r.label, `${r.mutation}/${r.bodyRequired}/${r.hasCtGuard}/${r.hasOriginGuard}`);
     }
     const drift: string[] = [];
     for (const [route, byLabel] of byRoute) {
