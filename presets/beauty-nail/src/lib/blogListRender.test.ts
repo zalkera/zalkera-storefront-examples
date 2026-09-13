@@ -263,8 +263,9 @@ async function call(n: string, posts: unknown): Promise<{threw: unknown} | {valu
  * 🔴 **범위 밖은 404 다.** 200 빈 목록은 소프트 404 이고, 「이전」이 무조건 그려져 `/blog` 까지
  * 이어지는 빈 쪽 사슬의 입구가 된다.
  *
- * 재현: 라우트에서 `if (isOutOfRange(page, posts)) notFound();` 를 지우면 이 시험만 red 다
- * (`npm run verify`·`typecheck`·`floor-gate`·`doc-claims` 는 그대로 rc=0).
+ * 재현: 라우트에서 `if (isOutOfRange(page, posts)) notFound();` 를 지우고
+ * `node --experimental-strip-types --test src/lib/blogListRender.test.ts; echo rc=$?` → rc=1
+ * (이 시험과 아래 400→404 시험, 둘이 red 다).
  */
 test("🔴 라우트 — 글 0건인 4쪽은 404 를 던진다", async () => {
     const result = await call("4", {content: [], last: true});
