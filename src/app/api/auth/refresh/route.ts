@@ -3,6 +3,7 @@ import {zalkera} from "@/lib/zalkera";
 import {getRefreshToken, setCustomerTokens, clearCustomerTokens} from "@/lib/session";
 import {setAuthHint} from "@/lib/authHint";
 import {safeNextPath} from "@/lib/oauth";
+import {pathOnlyRedirect, withSearchParam} from "@/lib/redirect";
 
 /**
  * **세션 갱신 경유지**.
@@ -33,25 +34,23 @@ export async function GET(req: Request) {
     // (다른 GET 라우트의 정상 경로도 명시하지만, 401·400 같은 오류 반환까지 전부는 아니다 —
     //  그것들은 휴리스틱 캐시 대상이 아니라 실피해가 없다. 캐시 대상인 404 는 따로 붙였다.)
     const NO_STORE = {"Cache-Control": "no-store"} as const;
-    const url = new URL(req.url);
-    const next = safeNext(url.searchParams.get("next"));
+    // 요청 주소는 `next` 를 읽는 데만 쓴다 — 그 origin 은 방문자 도메인이 아니라 서버가 뜬 주소다(`redirect.ts`).
+    const next = safeNext(new URL(req.url).searchParams.get("next"));
     const refreshToken = await getRefreshToken();
 
-    if (!refreshToken) return NextResponse.redirect(new URL("/login", url.origin), {headers: NO_STORE});
+    if (!refreshToken) return new NextResponse(null, pathOnlyRedirect("/login", NO_STORE));
 
     try {
         const tokens = await zalkera.refreshSession(refreshToken);
         await setCustomerTokens(tokens.accessToken, tokens.refreshToken);
         // 갱신 완료 — 원래 가려던 곳으로. r=1 은 "이미 갱신했다"는 표시(위 루프 가드).
-        const to = new URL(next, url.origin);
-        to.searchParams.set("r", "1");
-        const response = NextResponse.redirect(to, {headers: NO_STORE});
+        const response = new NextResponse(null, pathOnlyRedirect(withSearchParam(next, "r", "1"), NO_STORE));
         setAuthHint(response, true);
         return response;
     } catch {
         // refresh 도 죽었다(30일 경과·세션 폐기·로그아웃) — 이제야 진짜 로그인이 필요하다.
         await clearCustomerTokens();
-        const response = NextResponse.redirect(new URL("/login", url.origin), {headers: NO_STORE});
+        const response = new NextResponse(null, pathOnlyRedirect("/login", NO_STORE));
         setAuthHint(response, false);
         return response;
     }

@@ -114,6 +114,9 @@ export async function POST(req: Request) {
   서로 `same-site`** 다 — 그 관용구는 테넌트-대-테넌트 위조를 열어 둔 채 "고쳤다"고 기록된다.
 - **스킴을 비교하지 마라.** 서빙 오케스트레이터가 `x-forwarded-proto: "http"` 를 넣는데 공개 스킴은
   https 다. 비교하면 전 사이트가 즉시 죽는다. 호스트만 본다.
+- **이동 주소를 요청 주소로 만들지 마라.** 서빙 컨테이너에서 `req.url`·`req.nextUrl` 은 방문자 주소가 아니라
+  서버가 뜬 주소(`http://0.0.0.0:3000`)라, `new URL("/login", req.url)` 로 보내면 방문자가 `0.0.0.0` 으로 간다.
+  라우트의 이동은 `pathOnlyRedirect`(`src/lib/redirect.ts`)로 **경로만** 싣는다 — `src/lib/redirect.test.ts` 가 잰다.
 - **미리보기 모드는 쓰기를 막는다 — 그리고 그 판정은 `src/middleware.ts` 한 곳에 있다.**
   새 라우트는 **아무것도 안 해도 덮인다**(선언 형태·파일명과 무관하다). 단 matcher 가 빼는 접두
   (`_next/static`·`_next/image`·`images/`·`favicon.ico`) 밑은 예외이고,
