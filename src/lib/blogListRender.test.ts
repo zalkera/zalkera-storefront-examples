@@ -22,8 +22,9 @@ const SRC = resolve(HERE, "..");
  * `BlogList` 가 `posts` 를 인자로 받으므로 네트워크 없이 그려진다 — 그 인자는 쪽 라우트가
  * 범위 밖 판정을 하려고 목록을 먼저 보기 때문에 생긴 것이고, 여기서 그대로 쓴다.
  *
- * **쪽 라우트의 배선도 여기서 잰다.** `isOutOfRange(...) → notFound()` 한 줄을 지워도 나머지
- * 게이트는 초록이다(재현: 그 줄을 지우고 `npm run verify`·`node scripts/lib/doc-claims.mjs` → rc=0).
+ * **쪽 라우트의 배선도 여기서 잰다.** `isOutOfRange(...) → notFound()` 한 줄을 지워도 술어 시험은
+ * 초록이다 — 술어가 아니라 호출부가 빠진 것이라서(재현: 그 줄을 지우고
+ * `node --experimental-strip-types --test src/lib/blogPaging.test.ts; echo rc=$?` → rc=0).
  * 그래서 라우트를 **호출해서** 404 가 실제로 던져지는지 본다 — 백엔드는 스텁으로 갈아 끼운다.
  *
  * 재현: `node --experimental-strip-types --test src/lib/blogListRender.test.ts; echo rc=$?` → rc=0
