@@ -248,36 +248,6 @@ function crossOriginExemptReason(text: string): string | null {
     return head.match(CROSS_ORIGIN_MARKER)?.[1].trim() ?? null;
 }
 
-/** 그 이름을 부르는 자리의 수 — 식별자 호출이든 멤버 호출이든. */
-function countCalls(root: TS.Node, name: string): number {
-    let n = 0;
-    const visit = (node: TS.Node): void => {
-        if (ts.isCallExpression(node)) {
-            const e = node.expression;
-            if ((ts.isIdentifier(e) && e.text === name) || (ts.isPropertyAccessExpression(e) && e.name.text === name))
-                n++;
-        }
-        ts.forEachChild(node, visit);
-    };
-    visit(root);
-    return n;
-}
-
-/** 이름으로 부르는가 — 식별자 호출(`f()`)이든 멤버 호출(`zalkera.f()`)이든. */
-function callsName(root: TS.Node, name: string): boolean {
-    let found = false;
-    const visit = (node: TS.Node): void => {
-        if (ts.isCallExpression(node)) {
-            const e = node.expression;
-            if ((ts.isIdentifier(e) && e.text === name) || (ts.isPropertyAccessExpression(e) && e.name.text === name))
-                found = true;
-        }
-        ts.forEachChild(node, visit);
-    };
-    visit(root);
-    return found;
-}
-
 /** 요청 인자를 가드가 아닌 함수에 그대로 넘기는가 — 넘기면 본문을 그 안에서 읽을 수 있어 이 그물이 필수 여부를 모른다. */
 const NON_READERS = new Set([
     "assertSameOrigin",
@@ -300,48 +270,6 @@ function passesRequestElsewhere(root: TS.Node, param: string | null): boolean {
     };
     visit(root);
     return found;
-}
-
-/** `src/` 아래에서 `app/api` 의 라우트 파일이 아닌 소스 — 시험 파일은 뺀다. */
-function nonRouteSources(srcDir: string): string[] {
-    const out: string[] = [];
-    const walk = (dir: string): void => {
-        for (const e of readdirSync(dir, {withFileTypes: true})) {
-            const p = join(dir, e.name);
-            if (e.isDirectory()) {
-                if (e.name !== "node_modules") walk(p);
-            } else if (
-                /\.[cm]?[jt]sx?$/.test(e.name) &&
-                !/\.test\.[cm]?[jt]sx?$/.test(e.name) &&
-                !(ROUTE_FILE.test(e.name) && p.includes(join("app", "api")))
-            )
-                out.push(p);
-        }
-    };
-    walk(srcDir);
-    return out;
-}
-
-/**
- * 그 이름을 **값으로 참조하는** 자리의 수 — 호출이 아니라 참조다. 호출만 세면 `const f = zalkera.socialLogin; f()` ·
- * `zalkera["socialLogin"](…)` · 다른 모듈의 `client.socialLogin` 래퍼가 전부 「부르지 않음」으로 읽힌다.
- * 타입 자리(`typeof zalkera.socialLogin` · 인터페이스 멤버)는 교환을 할 수 없으므로 세지 않는다.
- */
-function countValueRefs(root: TS.Node, name: string): number {
-    let n = 0;
-    const visit = (node: TS.Node): void => {
-        // `ExpressionWithTypeArguments` 는 값 자리의 `zalkera.socialLogin<T>` 도 된다 — 타입으로 치지 않는다.
-        const typeOnly = ts.isTypeNode(node) && !ts.isExpressionWithTypeArguments(node);
-        if (typeOnly || ts.isInterfaceDeclaration(node) || ts.isTypeAliasDeclaration(node)) return;
-        if (
-            (ts.isIdentifier(node) || ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) &&
-            node.text === name
-        )
-            n++;
-        ts.forEachChild(node, visit);
-    };
-    visit(root);
-    return n;
 }
 
 interface Row {
@@ -492,48 +420,92 @@ test("🔴 ①층 면제 마커는 사유를 같은 줄에 갖는다 — 정본�
     }
 });
 
-test("🔴 소셜 교환 문이 ②층(consumeOAuthState)을 부른다 — 콜백 경유 code 주입을 막는 그 한 줄", () => {
-    // 경로가 아니라 **이름**으로 찾는다 — 폴더를 옮기거나 교환 라우트를 하나 더 만들어도 잡힌다.
-    // 교환(`socialLogin`)은 호출이 아니라 값 참조를 센다([countValueRefs]) — 별칭·대괄호·다른 모듈 래퍼로 옮겨도 잡힌다.
-    // 참조가 트리 어디에도 없으면 소셜 로그인을 지운 트리다 — 잴 문이 없다. 경로로 면제하는 파일은 없다.
-    const missing: string[] = [];
-    let exchanges = 0;
-    let starts = 0;
-    for (const [label, dir] of PACK_SRCS) {
-        for (const path of routeFiles(dir)) {
-            const route = relative(join(dir, "app", "api"), path);
-            const sf = parse(path);
-            const handlers = exportedHandlers(sf);
-            // 같은 파일의 헬퍼 안에 두면 핸들러에서 state 를 잴 수 없다 — 파일 전체의 수를 핸들러 본문 안의 수와 맞춘다.
-            const exchangeRefs = handlers.reduce((n, h) => n + countValueRefs(h.body, "socialLogin"), 0);
-            if (countValueRefs(sf, "socialLogin") > exchangeRefs)
-                missing.push(`${label}:${route} — socialLogin 을 핸들러 밖에서 참조한다`);
-            const startCalls = handlers.reduce((n, h) => n + countCalls(h.body, "buildAuthorizeUrl"), 0);
-            if (countCalls(sf, "buildAuthorizeUrl") > startCalls)
-                missing.push(`${label}:${route} — buildAuthorizeUrl 을 핸들러 밖에서 부른다`);
-            for (const h of handlers) {
-                if (countValueRefs(h.body, "socialLogin") > 0) {
-                    exchanges++;
-                    if (!calls(h.body, "consumeOAuthState")) missing.push(`${label}:${route}#${h.name} 교환`);
-                }
-                if (callsName(h.body, "buildAuthorizeUrl")) {
-                    starts++;
-                    if (!calls(h.body, "issueOAuthState")) missing.push(`${label}:${route}#${h.name} 발행`);
-                }
-            }
+/** 팩 소스 전부 — 시험 파일은 뺀다. */
+function packSources(srcDir: string): string[] {
+    const out: string[] = [];
+    const walk = (dir: string): void => {
+        for (const e of readdirSync(dir, {withFileTypes: true})) {
+            const p = join(dir, e.name);
+            if (e.isDirectory()) {
+                if (e.name !== "node_modules") walk(p);
+            } else if (/\.[cm]?[jt]sx?$/.test(e.name) && !/\.test\.[cm]?[jt]sx?$/.test(e.name)) out.push(p);
         }
-        // 라우트 핸들러 밖에 두면 같은 핸들러에서 state 를 잴 수 없다. `buildAuthorizeUrl` 은 정의가 아니라 호출을 센다.
-        for (const path of nonRouteSources(dir)) {
+    };
+    walk(srcDir);
+    return out;
+}
+
+/**
+ * `src/lib/zalkera.ts` 의 입구 형상이 어긋난 까닭 — 맞으면 `null`.
+ * `createZalkeraClient` 를 한 번 불러 곧바로 구조분해하고, 뗀 `socialLogin` 은 `bindSocialExchange(…)` 의 첫 인자로만 쓴다.
+ */
+function socialEntranceProblem(sf: TS.SourceFile, hits: TS.Node[]): string | null {
+    const creates = hits.filter((h) => ts.isCallExpression(h.parent) && h.parent.expression === h);
+    if (creates.length !== 1 || hits.some((h) => !creates.includes(h) && !ts.isImportSpecifier(h.parent)))
+        return "createZalkeraClient 를 한 번만 불러 그 결과를 곧바로 구조분해해야 한다";
+    const decl = creates[0].parent.parent;
+    if (!ts.isVariableDeclaration(decl) || !ts.isObjectBindingPattern(decl.name))
+        return "createZalkeraClient 의 결과를 구조분해하지 않는다 — socialLogin 이 싱글턴에 남는다";
+    const login = decl.name.elements.find((e) => {
+        const key = e.propertyName ?? e.name;
+        return !e.dotDotDotToken && (ts.isIdentifier(key) || ts.isStringLiteralLike(key)) && key.text === "socialLogin";
+    });
+    if (!login || !ts.isIdentifier(login.name)) return "구조분해에서 socialLogin 을 떼지 않는다";
+    const local = login.name;
+    const uses: TS.Identifier[] = [];
+    const visit = (n: TS.Node): void => {
+        if (ts.isIdentifier(n) && n !== local && n.text === local.text) uses.push(n);
+        ts.forEachChild(n, visit);
+    };
+    visit(sf);
+    const onlyUse = uses.length === 1 ? uses[0].parent : undefined;
+    const bound =
+        onlyUse !== undefined &&
+        ts.isCallExpression(onlyUse) &&
+        onlyUse.arguments[0] === uses[0] &&
+        ts.isIdentifier(onlyUse.expression) &&
+        onlyUse.expression.text === "bindSocialExchange";
+    return bound ? null : "뗀 socialLogin 을 bindSocialExchange(…) 의 첫 인자 말고 다른 데서 쓴다";
+}
+
+/**
+ * **소셜 교환은 한 입구로만** — 싱글턴 `zalkera` 에는 `socialLogin` 이 없고, 교환은 `exchangeSocialLogin`(state 대조·소각 →
+ * 교환)으로만 한다. 이 시험은 그 입구가 **하나인지**만 잰다: 클라이언트를 `src/lib/zalkera.ts` 밖에서 또 만들거나
+ * (`createZalkeraClient` 는 고유한 이름이라 같은 철자의 다른 뜻이 없다), 뗀 `socialLogin` 을 다른 데로 넘기면 red.
+ * 대조·소각·교환의 **행위**는 `oauthState.test.ts` 가 잠근다.
+ * ⚠ 교환 **호출을 찾는** 그물로 되돌리지 마라 — 찾는 범위를 넓히면 같은 철자의 설정 칸·props 가 거짓 red, 좁히면
+ *   별칭·래퍼가 샌다.
+ */
+test("🔴 소셜 교환은 한 입구로만 — 클라이언트는 `lib/zalkera.ts` 에서만 만들고 `socialLogin` 을 뗀다", () => {
+    const bad: string[] = [];
+    let shaped = 0;
+    for (const [label, dir] of PACK_SRCS) {
+        const owner = join(dir, "lib", "zalkera.ts");
+        for (const path of packSources(dir)) {
             const sf = parse(path);
-            if (countValueRefs(sf, "socialLogin") > 0 || callsName(sf, "buildAuthorizeUrl"))
-                missing.push(`${label}:${relative(dir, path)} — 라우트 핸들러 밖`);
+            const hits: TS.Node[] = [];
+            const visit = (n: TS.Node): void => {
+                if ((ts.isIdentifier(n) || ts.isStringLiteralLike(n)) && n.text === "createZalkeraClient") hits.push(n);
+                ts.forEachChild(n, visit);
+            };
+            visit(sf);
+            if (hits.length === 0) continue;
+            const rel = relative(dir, path).split("\\").join("/");
+            if (path !== owner) {
+                bad.push(`${label}:${rel} — 클라이언트를 lib/zalkera.ts 밖에서 만든다`);
+                continue;
+            }
+            const problem = socialEntranceProblem(sf, hits);
+            if (problem) bad.push(`${label}:${rel} — ${problem}`);
+            else shaped++;
         }
     }
-    if (CANONICAL) assert.ok(exchanges > 0 && starts > 0, `소셜 교환 ${exchanges}·발행 ${starts} — 판정이 죽었다`);
+    if (CANONICAL)
+        assert.equal(shaped, PACK_SRCS.length, `입구 형상을 확인한 사본 ${shaped}/${PACK_SRCS.length} — 판정이 죽었다`);
     assert.deepEqual(
-        missing,
+        bad,
         [],
-        "state 대조·발행이 빠졌다 — 피해자 브라우저에 공격자 세션이 주입된다. 교환(`socialLogin`)·발행(`buildAuthorizeUrl`)은 라우트 핸들러 안에서 부르고, 같은 핸들러에서 `consumeOAuthState`·`issueOAuthState` 를 부른다",
+        "소셜 교환의 입구가 하나가 아니다 — state 대조 없이 교환할 길이 열린다. 클라이언트는 `src/lib/zalkera.ts` 에서 `const {socialLogin, ...client} = createZalkeraClient(…)` 로 만들고, `socialLogin` 은 `bindSocialExchange(socialLogin, …)` 에만 넘긴다",
     );
 });
 

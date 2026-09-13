@@ -1,7 +1,7 @@
 /**
- * OAuth `state` **판정** — 순수 함수. 쿠키 입출력은 `@/lib/session` 의 `issueOAuthState` /
- * `consumeOAuthState` 가 맡는다(가드와 같은 분리 — `next/*` 를 import 하는 모듈은 Node 기본
- * 테스트 러너가 못 읽는다).
+ * OAuth `state` 의 **판정·소각·교환 입구** — 쿠키 항아리를 주입받는 순수 함수라 Node 기본 테스트 러너로 행위를
+ * 잠근다(`next/*` 를 import 하는 모듈은 그 러너가 못 읽는다). 발행 쿠키를 심는 것은 `@/lib/session` 의
+ * `issueOAuthState`, 항아리(`cookies()`)를 넘기는 것은 교환 라우트다.
  *
  * ## ①층(Origin↔Host)이 못 막는 경로가 하나 있다
  * 공격자가 피해자를 `https://피해자사이트/auth/callback/kakao?code=공격자코드` 로 **톱레벨 이동**시키면,
@@ -56,4 +56,41 @@ export function matchesOAuthState(raw: string | undefined, state: unknown, provi
     // provider 까지 대조한다 — KAKAO 로 발행한 state 를 GOOGLE 교환에 재사용하면 다른 앱의 code 를
     // 교환하게 된다. 쌍으로 봐야 그 재사용이 막힌다.
     return saved.state === state && saved.provider === provider;
+}
+
+/** state 쿠키 이름 — 발행(`@/lib/session`)과 소각(아래)이 같은 이름을 쓴다. */
+export const OAUTH_STATE_COOKIE = "zalkera_oauth_state";
+
+/** 쿠키 항아리 — `next/headers` 의 `cookies()` 가 돌려주는 것 중 여기서 쓰는 두 동작. */
+export interface OAuthStateJar {
+    get(name: string): {value: string} | undefined;
+    delete(name: string): unknown;
+}
+
+/**
+ * 대조 + **1회용 소각**. 통과 여부와 무관하게 쿠키를 지운다 — 남기면 리플레이가 가능하다.
+ *
+ * `false` 면 호출부는 **세션을 만들기 전에** 끝내야 한다. 차단 응답에 `Set-Cookie` 로 세션이 실리면
+ * 방어가 무의미해진다.
+ */
+export function consumeOAuthState(jar: OAuthStateJar, state: unknown, provider: unknown): boolean {
+    const raw = jar.get(OAUTH_STATE_COOKIE)?.value;
+    jar.delete(OAUTH_STATE_COOKIE);
+    return matchesOAuthState(raw, state, provider);
+}
+
+/**
+ * 소셜 교환의 **한 입구** — 대조·소각이 교환보다 먼저이고, 대조가 실패하면 교환을 **부르지 않고** `null` 을 돌려준다.
+ * `@/lib/zalkera` 가 싱글턴에서 뗀 `socialLogin` 을 여기에만 넘긴다.
+ *
+ * 개발 전용 `TEST` 는 대조 대상이 아니다 — authorize 왕복이 없어 바인딩할 state 가 없다. 운영이면 부르지 않는다.
+ */
+export function bindSocialExchange<I extends {provider: string}, O>(
+    login: (input: I) => Promise<O>,
+    isProduction: () => boolean,
+): (jar: OAuthStateJar, state: unknown, input: I) => Promise<O | null> {
+    return async (jar, state, input) => {
+        const allowed = input.provider === "TEST" ? !isProduction() : consumeOAuthState(jar, state, input.provider);
+        return allowed ? login(input) : null;
+    };
 }

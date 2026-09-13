@@ -1,6 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {matchesOAuthState, newOAuthState} from "./oauthState.ts";
+import {
+    OAUTH_STATE_COOKIE,
+    bindSocialExchange,
+    consumeOAuthState,
+    matchesOAuthState,
+    newOAuthState,
+} from "./oauthState.ts";
 
 /**
  * OAuth state 대조의 **회귀 픽스처**.
@@ -73,4 +79,81 @@ test("파싱은 됐지만 객체가 아닌 값은 **거부**한다 — 죽지 �
 test("통제군 — 정상 쿠키는 그대로 통과한다(과잉차단이 아니다)", () => {
     assert.equal(matchesOAuthState(JSON.stringify({state: "s", provider: "KAKAO"}), "s", "KAKAO"), true);
     assert.equal(matchesOAuthState(JSON.stringify({state: "s", provider: "GOOGLE"}), "s", "KAKAO"), false);
+});
+
+/**
+ * **소셜 교환의 한 입구** — 대조·소각이 교환보다 먼저이고, 안 맞으면 교환을 부르지 않는다.
+ * 가짜 항아리·가짜 교환으로 잰다(`next/headers` 없이).
+ */
+const jarWith = (raw?: string) => {
+    const deleted: string[] = [];
+    return {
+        deleted,
+        get: (name: string) => (name === OAUTH_STATE_COOKIE && raw !== undefined ? {value: raw} : undefined),
+        delete: (name: string) => {
+            deleted.push(name);
+        },
+    };
+};
+const spyLogin = () => {
+    const calls: {provider: string; code: string}[] = [];
+    const login = async (input: {provider: string; code: string}) => {
+        calls.push(input);
+        return {accessToken: "t"};
+    };
+    return {calls, login};
+};
+
+test("consumeOAuthState — 통과 여부와 무관하게 쿠키를 소각한다", () => {
+    const cases: [string | undefined, string, boolean][] = [
+        [COOKIE("s1", "KAKAO"), "s1", true],
+        [COOKIE("s1", "KAKAO"), "s2", false],
+        [undefined, "s1", false],
+    ];
+    for (const [raw, state, expected] of cases) {
+        const jar = jarWith(raw);
+        assert.equal(consumeOAuthState(jar, state, "KAKAO"), expected);
+        assert.deepEqual(jar.deleted, [OAUTH_STATE_COOKIE], `${String(raw)}·${state} 에서 소각이 없다`);
+    }
+});
+
+test("🔴 교환 — state 가 안 맞으면 교환을 부르지 않는다", async () => {
+    const cases: [string | undefined, unknown, string][] = [
+        [COOKIE("s1", "KAKAO"), "s2", "KAKAO"], // 다른 state
+        [undefined, "s1", "KAKAO"], // 쿠키 없음 — 콜백 페이지로 톱레벨 이동당한 피해자
+        [COOKIE("s1", "KAKAO"), undefined, "KAKAO"], // state 를 안 보냄
+        [COOKIE("s1", "KAKAO"), "s1", "GOOGLE"], // 다른 provider
+    ];
+    for (const [raw, state, provider] of cases) {
+        const {calls, login} = spyLogin();
+        const jar = jarWith(raw);
+        assert.equal(await bindSocialExchange(login, () => false)(jar, state, {provider, code: "c"}), null);
+        assert.equal(calls.length, 0, `${String(raw)}·${String(state)}·${provider} 에서 교환이 불렸다`);
+        assert.deepEqual(jar.deleted, [OAUTH_STATE_COOKIE]);
+    }
+});
+
+test("교환 — state 가 맞으면 한 번 부르고 그 결과를 돌려준다", async () => {
+    const {calls, login} = spyLogin();
+    const jar = jarWith(COOKIE("s1", "KAKAO"));
+    assert.deepEqual(await bindSocialExchange(login, () => false)(jar, "s1", {provider: "KAKAO", code: "c"}), {
+        accessToken: "t",
+    });
+    assert.deepEqual(calls, [{provider: "KAKAO", code: "c"}]);
+    assert.deepEqual(jar.deleted, [OAUTH_STATE_COOKIE]);
+});
+
+test("🔴 교환 — 개발용 TEST 는 운영에서 부르지 않는다 · 개발에서는 state 없이 부른다", async () => {
+    const prod = spyLogin();
+    assert.equal(
+        await bindSocialExchange(prod.login, () => true)(jarWith(), undefined, {provider: "TEST", code: "c"}),
+        null,
+    );
+    assert.equal(prod.calls.length, 0);
+    const dev = spyLogin();
+    assert.deepEqual(
+        await bindSocialExchange(dev.login, () => false)(jarWith(), undefined, {provider: "TEST", code: "c"}),
+        {accessToken: "t"},
+    );
+    assert.equal(dev.calls.length, 1);
 });

@@ -30,7 +30,7 @@ export const REQUIRED_FLOORS = {
     //    재현: `node scripts/lib/floor-gate.mjs` 를 이 레포와 `presets/skeleton` 양쪽에서.
     "src/lib/guardWiring.test.ts": 8,
 
-    "src/lib/oauthState.test.ts": 11,
+    "src/lib/oauthState.test.ts": 15,
     "src/lib/routeParam.test.ts": 5,
     "src/lib/blogPaging.test.ts": 8,
     "src/lib/blogListRender.test.ts": 13,
@@ -138,8 +138,7 @@ export const FLOOR_KEY_REGEX =
  *   (경로가 바뀌면 시험 키도 안 맞는다).
  *
  *   ⚠ **그 자리를 받아 주는 그물이 없다.** 검사기 `X3` 는 `consumeOAuthState` 만 재는데 그 심볼은
- *     `src/lib/session.ts` 에 살고, 여기 두 대상(`oauthState.ts`·`oauth.ts`)의 수출물
- *     (`matchesOAuthState`·`safeNextPath`)은 아예 안 본다. 즉 **개명 이탈은 무방비다.**
+ *     `src/lib/oauthState.ts` 에 살고, `oauth.ts` 의 수출물(`safeNextPath`)은 아예 안 본다. 즉 **개명 이탈은 무방비다.**
  *     막으려면 심볼 탐침을 따로 세워야 한다 — 지금은 그 사실을 적어 두는 것이 우리가 하는 전부다.
  */
 const FLOOR_SUBJECT = Object.freeze({

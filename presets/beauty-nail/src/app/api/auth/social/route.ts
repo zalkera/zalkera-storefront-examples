@@ -1,10 +1,11 @@
 // zalkera-allow-preview-write: 로그인 흐름 — 막으면 로그인한 화면을 못 본다. 최초 소셜 로그인은 운영에 계정을 만든다.
+import {cookies} from "next/headers";
 import {NextResponse} from "next/server";
 import type {SocialProvider} from "@zalkera/client";
-import {zalkera} from "@/lib/zalkera";
+import {exchangeSocialLogin} from "@/lib/zalkera";
 import {assertJsonContentType, assertSameOrigin, errorResponse} from "@/lib/http";
 import {requestOrigin} from "@/lib/crossOrigin";
-import {consumeOAuthState, setCustomerTokens} from "@/lib/session";
+import {setCustomerTokens} from "@/lib/session";
 import {setAuthHint} from "@/lib/authHint";
 import {callbackPath, parseProviderParam} from "@/lib/oauth";
 
@@ -15,7 +16,7 @@ import {callbackPath, parseProviderParam} from "@/lib/oauth";
  * 방어가 두 겹이고 **각각 다른 경로**를 막는다.
  *
  *  ① `assertSameOrigin` — 교차사이트 폼 제출. 우리 코드가 한 줄도 안 도는 경로다.
- *  ② `consumeOAuthState` — **콜백 페이지 경유 code 주입.** 공격자가 피해자를
+ *  ② state 쿠키 대조(`exchangeSocialLogin` 이 교환 **전에** 한다) — **콜백 페이지 경유 code 주입.** 공격자가 피해자를
  *     `/auth/callback/kakao?code=공격자코드` 로 톱레벨 이동시키면 그 페이지는 **진짜 우리 사이트**라
  *     이어지는 POST 가 same-origin 이다 — ①을 통과한다. 그러면 피해자 브라우저에 **공격자 계정
  *     세션**이 심기고, 피해자가 남기는 주소·주문이 전부 공격자 계정에 쌓인다.
@@ -48,12 +49,24 @@ export async function POST(req: Request) {
 
     let redirectUri: string | undefined;
     if (social) {
-        // ② state ↔ 쿠키 대조(provider 동일성까지). 통과 여부와 무관하게 쿠키는 소각된다 — 리플레이 차단.
-        //
-        // TEST 는 이 검사를 **타지 않는다.** 외부 리다이렉트가 없어 authorize 왕복 자체가 없고,
-        // 따라서 바인딩할 state 도 존재하지 않는다. 면제가 아니라 **적용 대상이 아닌 것**이다
-        // (그리고 위에서 프로덕션 차단이 이미 걸려 있다).
-        if (!(await consumeOAuthState(body?.state, social))) {
+        // `redirect_uri` 를 **본문에서 받지 않는다** — 요청이 도달한 오리진에서 파생한다(개시와 같은
+        // 방식이라 두 값이 반드시 일치한다). 클라이언트가 준 값을 그대로 실으면 열린 리다이렉터가 된다.
+        const origin = requestOrigin(req); // assertSameOrigin 이 보장한 뒤라 파싱이 안전하다.
+        redirectUri = `${origin}${callbackPath(social)}`;
+    }
+
+    try {
+        // ② state ↔ 쿠키 대조(provider 동일성까지)는 `exchangeSocialLogin` 이 교환 **전에** 하고, 안 맞으면 교환을
+        // 부르지 않고 `null` 을 돌려준다. 통과 여부와 무관하게 쿠키는 소각된다 — 리플레이 차단.
+        // TEST 는 대조 대상이 아니다 — authorize 왕복이 없어 바인딩할 state 가 없다(운영 차단은 위와 그 입구 둘 다).
+        // consents 는 신규 가입 시 백엔드가 필수 동의를 검증하는 데 쓴다(미충족 시 400 CONSENT_REQUIRED).
+        const tokens = await exchangeSocialLogin(await cookies(), body?.state, {
+            provider: (social ?? raw) as SocialProvider,
+            code,
+            redirectUri,
+            consents: body?.consents,
+        });
+        if (!tokens) {
             return NextResponse.json(
                 {
                     message: "로그인 요청을 확인할 수 없습니다. 로그인 화면에서 처음부터 다시 시도해 주세요.",
@@ -62,20 +75,6 @@ export async function POST(req: Request) {
                 {status: 400},
             );
         }
-        // `redirect_uri` 를 **본문에서 받지 않는다** — 요청이 도달한 오리진에서 파생한다(개시와 같은
-        // 방식이라 두 값이 반드시 일치한다). 클라이언트가 준 값을 그대로 실으면 열린 리다이렉터가 된다.
-        const origin = requestOrigin(req); // assertSameOrigin 이 보장한 뒤라 파싱이 안전하다.
-        redirectUri = `${origin}${callbackPath(social)}`;
-    }
-
-    try {
-        // consents 는 신규 가입 시 백엔드가 필수 동의를 검증하는 데 쓴다(미충족 시 400 CONSENT_REQUIRED).
-        const tokens = await zalkera.socialLogin({
-            provider: (social ?? raw) as SocialProvider,
-            code,
-            redirectUri,
-            consents: body?.consents,
-        });
         await setCustomerTokens(tokens.accessToken, tokens.refreshToken);
         const response = NextResponse.json({customer: tokens.customer});
         // 로그인 성공 → 낙관적 로그인 힌트를 심어 헤더/셸이 서버 세션 읽기 없이 로그인 크롬을 그린다.

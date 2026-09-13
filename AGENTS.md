@@ -128,7 +128,9 @@ export async function POST(req: Request) {
   ⚠ 종전에는 이 규약을 소스를 **텍스트로 파싱**해 재는 시험이 있었고 **네 판 연속 뚫렸다.**
   그 이력은 `src/lib/preview.ts` 머리말에 있다 — 파싱으로 되돌리지 마라.
 - 소셜 로그인은 **서버 `state` 쿠키 대조**가 한 겹 더 있다(`/api/auth/social/start` 발행 → 교환에서 대조 →
-  즉시 소각). `CallbackHandler` 의 `sessionStorage` 대조는 **UX 지 방어가 아니다** — 그걸 방어로 세지 마라.
+  즉시 소각). 교환은 `@/lib/zalkera` 의 `exchangeSocialLogin` 으로만 한다 — 싱글턴 `zalkera` 에는 `socialLogin` 이
+  없어 대조를 건너뛸 수 없다. 클라이언트를 `src/lib/zalkera.ts` 밖에서 또 만들지 마라(`guardWiring.test.ts` 가 막는다).
+  `CallbackHandler` 의 `sessionStorage` 대조는 **UX 지 방어가 아니다** — 그걸 방어로 세지 마라.
   state 쿠키는 `sameSite: "lax"` 여야 한다(`strict` 면 authorize 복귀에서 안 실려 로그인이 깨진다).
 - `readJsonBody` 는 **형식 가드**다. `Content-Type` 을 보지 않으므로 CSRF 방어로 쓰지 마라.
 

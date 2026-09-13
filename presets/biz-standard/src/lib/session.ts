@@ -1,6 +1,6 @@
 import {randomUUID} from "node:crypto";
 import {cookies} from "next/headers";
-import {matchesOAuthState, newOAuthState} from "@/lib/oauthState";
+import {OAUTH_STATE_COOKIE, newOAuthState} from "@/lib/oauthState";
 import type {NextResponse} from "next/server";
 import type {ShopSession} from "@zalkera/client";
 
@@ -81,9 +81,8 @@ export async function clearCustomerTokens(): Promise<void> {
 
 // ── OAuth state 쿠키 ──────────────────────────────────────────────
 //
-// 판정 규칙과 그 근거는 `@/lib/oauthState` 에 있다. 여기는 쿠키 정책만 맡는다.
-
-const OAUTH_STATE_COOKIE = "zalkera_oauth_state";
+// 대조·소각·교환 입구는 `@/lib/oauthState` 에 있다(`consumeOAuthState`·`bindSocialExchange`). 여기는 발행 쿠키의
+// 정책만 맡는다.
 const TEN_MINUTES = 600;
 
 /** 발행 — authorize 로 보내기 직전에 서버가 심는다. 이전 값은 덮어쓴다(마지막 시도만 유효). */
@@ -99,17 +98,4 @@ export async function issueOAuthState(provider: string): Promise<string> {
         maxAge: TEN_MINUTES,
     });
     return state;
-}
-
-/**
- * 대조 + **1회용 소각**. 통과 여부와 무관하게 쿠키를 지운다 — 남기면 리플레이가 가능하다.
- *
- * `false` 면 호출부는 **세션을 만들기 전에** 끝내야 한다. 차단 응답에 `Set-Cookie` 로 세션이 실리면
- * 방어가 무의미해진다.
- */
-export async function consumeOAuthState(state: unknown, provider: unknown): Promise<boolean> {
-    const jar = await cookies();
-    const raw = jar.get(OAUTH_STATE_COOKIE)?.value;
-    jar.delete(OAUTH_STATE_COOKIE);
-    return matchesOAuthState(raw, state, provider);
 }
