@@ -238,6 +238,21 @@ function crossOriginExemptReason(text: string): string | null {
     return head.match(CROSS_ORIGIN_MARKER)?.[1].trim() ?? null;
 }
 
+/** 그 이름을 부르는 자리의 수 — 식별자 호출이든 멤버 호출이든. */
+function countCalls(root: TS.Node, name: string): number {
+    let n = 0;
+    const visit = (node: TS.Node): void => {
+        if (ts.isCallExpression(node)) {
+            const e = node.expression;
+            if ((ts.isIdentifier(e) && e.text === name) || (ts.isPropertyAccessExpression(e) && e.name.text === name))
+                n++;
+        }
+        ts.forEachChild(node, visit);
+    };
+    visit(root);
+    return n;
+}
+
 /** 이름으로 부르는가 — 식별자 호출(`f()`)이든 멤버 호출(`zalkera.f()`)이든. */
 function callsName(root: TS.Node, name: string): boolean {
     let found = false;
@@ -459,7 +474,15 @@ test("🔴 소셜 교환 문이 ②층(consumeOAuthState)을 부른다 — 콜�
     for (const [label, dir] of PACK_SRCS) {
         for (const path of routeFiles(dir)) {
             const route = relative(join(dir, "app", "api"), path);
-            for (const h of exportedHandlers(parse(path))) {
+            const sf = parse(path);
+            const handlers = exportedHandlers(sf);
+            // 같은 파일의 헬퍼 안에서 부르면 핸들러에서 state 를 잴 수 없다 — 부르는 자리 수를 핸들러 본문 안의 수와 맞춘다.
+            for (const name of ["socialLogin", "buildAuthorizeUrl"]) {
+                const inHandlers = handlers.reduce((n, h) => n + countCalls(h.body, name), 0);
+                if (countCalls(sf, name) > inHandlers)
+                    missing.push(`${label}:${route} — ${name} 을 핸들러 밖에서 부른다`);
+            }
+            for (const h of handlers) {
                 if (callsName(h.body, "socialLogin")) {
                     exchanges++;
                     if (!calls(h.body, "consumeOAuthState")) missing.push(`${label}:${route}#${h.name} 교환`);
