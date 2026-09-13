@@ -41,7 +41,7 @@
  * 🔴 헤더 원문을 그대로 이어 붙이면 **재는 값과 쓰는 값이 갈린다.** [isSameOriginRequest] 는 `new URL(origin).host`
  * 로 재는데, 원문에는 그 host 판정을 지나면서도 다른 것이 붙어 있을 수 있다 —
  * `https://evil.example@shop.example.com` 은 host 가 `shop.example.com` 이라 가드를 통과하지만, 원문을 이어 붙이면
- * `redirect_uri` 에 userinfo 가 실려 나간다(심의 실측). 브라우저는 `Origin` 에 userinfo 를 안 싣지만, 그 사실에
+ * `redirect_uri` 에 userinfo 가 실려 나간다. 브라우저는 `Origin` 에 userinfo 를 안 싣지만, 그 사실에
  * 기대는 대신 **파서가 정규화한 값**을 쓴다.
  *
  * [isSameOriginRequest] 가 참일 때만 부른다 — 그 판정이 이미 `Origin` 의 존재·파싱·일치를 보장한다.

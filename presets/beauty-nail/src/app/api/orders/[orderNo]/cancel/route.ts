@@ -17,7 +17,7 @@ import {setAuthHint} from "@/lib/authHint";
  * 없이 POST 하므로 readJsonBody 가 null 이어도 400 을 내지 않는다(phone 없으면 undefined → 토큰 경로).
  *
  * 🔴 그래서 이 문에는 **③층(`assertJsonContentType`)을 걸지 않는다** — 본문 없는 POST 는 `Content-Type` 자체가
- * 없어 415 로 튕긴다(마이페이지 취소 버튼이 그렇게 깨져 있었다 · 심의 실측). 교차사이트 폼 운반체는 ①층이 막고,
+ * 없어 415 로 튕긴다 — 마이페이지 취소 버튼이 그 자리다. 교차사이트 폼 운반체는 ①층이 막고,
  * ③층은 **본문이 필수인** 문에만 선다(memo118 §5). 그 대응을 `guardWiring.test.ts` 가 기계로 잠근다.
  */
 export async function POST(req: Request, {params}: {params: Promise<{orderNo: string}>}) {
