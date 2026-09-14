@@ -254,6 +254,18 @@ test("팩·테넌트 트리에서는 여유를 반려하지 않는다 — 고객
         assert.match(out, /astGuards\.test\.ts — 통과 11건\(하한 12\)/);
     });
 
+    test("대상이 없는데 시험이 실패하면 반려하되 무엇을 낮췄는지는 같이 찍는다", () => {
+        const root = tree({omit: SUBJECTS, counts: short});
+        writeFileSync(
+            join(root, "scripts/lib/vendorSet.test.mjs"),
+            'import {test} from "node:test";\ntest("깨진다", () => { throw new Error("실패"); });\n',
+        );
+        const {rc, out} = runGate(root);
+        assert.equal(rc, 1, out.slice(-600));
+        assert.match(out, /시험이 실패했습니다/);
+        assert.match(out, /astGuards\.test\.ts 의 하한을 3 낮춥니다/);
+    });
+
     test("정본 저장소에서 대상이 없으면 낮추지 않고 반려한다", () => {
         const {rc, out} = runGate(tree({canonical: true, omit: ["src/app/blog"]}));
         assert.equal(rc, 1, out.slice(-600));

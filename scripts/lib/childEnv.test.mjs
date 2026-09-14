@@ -153,6 +153,8 @@ test("완화 문면(걷은·낮춘 자리)은 게이트의 출력·파일이 아
     // 거짓 완화 문장이 ✅ 줄에 실리고, 파일로 넘기면 시험이(지연 프로세스로도) 덮는다. 그래서 verify-zip 은
     // 같은 함수를 자기 프로세스에서 불러 값으로 얻는다. 이 시험이 무는 것: 누군가 stdout 걸러내기·판정 파일을 되살리면.
     assert.match(RUNNER, /import \{[^}]*\bjudgeFloors\b[^}]*\} from "\.\/lib\/floors\.mjs"/, "verify-zip 이 자기 judgeFloors 를 안 가져온다");
+    assert.match(RUNNER, /return judgeFloors\(declared, /, "판정을 judgeFloors 로 만드는 자리가 없다(상수로 갈아 끼웠는가)");
+    assert.match(RUNNER, /easeKey\(verdict\) !== easeKey\(after\)/, "게이트 전후 판정을 대조하는 자리가 없다 — 지연 프로세스가 대상 디렉터리를 만들면 문면이 갈린다");
     assert.match(RUNNER, /easeNotes\(verdict\)/, "완화 문면을 judgeFloors 의 판정(verdict)으로 만들지 않는다");
     assert.doesNotMatch(RUNNER, /--judgment|floor-judgment|startsWith\("ℹ 가드 회귀 스위트/, "게이트의 파일·stdout 에서 완화 문면을 읽는 자리가 되살아났다");
 });

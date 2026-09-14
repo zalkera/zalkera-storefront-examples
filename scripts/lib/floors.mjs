@@ -57,7 +57,7 @@ export const REQUIRED_FLOORS = {
     "scripts/lib/childEnv.test.mjs": 13,
     "scripts/lib/vendorSet.test.mjs": 3,
     "scripts/workflow-syntax.test.mjs": 35,
-    "scripts/lib/floorGate.test.mjs": 17,
+    "scripts/lib/floorGate.test.mjs": 18,
     "scripts/lib/contentRoutes.test.mjs": 12,
     "src/lib/preview.test.ts": 4,
     "src/lib/siteVerification.test.ts": 23,
@@ -297,8 +297,9 @@ export function judgeFloors(floors, exists, partial = FLOOR_SUBJECT_PARTIAL) {
 
 /**
  * [judgeFloors] 의 판정(`{skipped, reduced}`)을 **사람이 읽는 문장**으로. `verify-zip` 이 같은 함수를 자기
- * 프로세스에서 불러 얻은 판정을 ✅ 줄에 싣는다 — 게이트의 stdout·파일을 옮기지 않는다(zip 의 시험이 흉내
- * 내거나 덮을 수 있다). 판정 자체(rc·하한)는 게이트가 이미 집행했다 — 여기는 보고 문면뿐이다.
+ * 프로세스에서 게이트 앞뒤로 불러, 둘이 같을 때만 앞 판정을 ✅ 줄에 싣는다 — 게이트의 stdout·파일은 옮기지
+ * 않고(zip 의 시험이 흉내 내거나 덮을 수 있다), 트리가 게이트 도중 바뀐 zip 은 반려한다. 판정 자체(rc·하한)는
+ * 게이트가 이미 집행했다 — 여기는 보고 문면뿐이다.
  *
  * 형태가 아니면 빈 목록(방어) — 호출부가 판정을 못 얻은 경우는 호출부가 반려한다.
  *
