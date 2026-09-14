@@ -24,6 +24,7 @@
 | 능력별 삭제표를 뺐습니다 | 표대로 지워도 검사가 초록이 되지 않았습니다 — 안 쓰는 능력은 파일을 지우지 말고 **입구를 닫습니다** | `AGENTS.md` 「안 쓰는 능력」 절 |
 | `@zalkera/client` 0.37.0 | 새 메서드 둘(`listSessions`·`revokeSession`) — 팩은 부르지 않습니다 | `npm install @zalkera/client@^0.37.0` · 루트 `llms.txt`(최신 zip 에서) |
 | 블로그·프리셋 섹션을 **지운 트리**에서 가드 회귀 스위트가 반려되던 것 | 시안 레인(`docs/mockup-to-pack.md`)은 그 둘을 지우는데, 그 디렉터리를 읽는 시험 아홉이 있어 지운 팩이 `verify-zip` 에서 막혔습니다. 디렉터리가 없으면 그 시험은 이유를 찍고 건너뛰고 하한도 같은 수만큼 낮아집니다(정본 저장소·일부만 남긴 디렉터리는 반려) | `src/lib/astGuards.test.ts` · `src/lib/blogListRender.test.ts` · `scripts/lib/floors.mjs` · `scripts/lib/floor-gate.mjs` · `scripts/lib/test-floors.json` · `scripts/lib/floors.test.mjs` · `scripts/lib/floorGate.test.mjs` |
+| 소셜 state 쿠키의 **발행** 그물 · 운영 코드가 **시험 파일을 가져오는** 그물 신설 | 발행이 `src/lib/session.ts` 한 곳에서 발행 상수 그대로(`{...OAUTH_STATE_COOKIE_OPTIONS, secure}` · 상수 출처 · `secure` 는 파일 상단 환경 판정 하나)인지 — 펼친 뒤 `sameSite` 를 덮거나 옆에 더 심거나 지역 상수로 가리면 검사기가 읽는 값과 심는 값이 갈립니다. 시험 파일 면제는 운영 코드가 그것을 가져오지 않을 때만 섭니다 | `src/lib/guardWiring.test.ts` · `scripts/lib/floors.mjs` · `scripts/lib/test-floors.json`(하한 9) · `src/lib/zalkera.ts`(주석) · `AGENTS.md`(BFF 절 발행 규칙) |
 
 옛 표대로 이미 파일을 지운 사이트는 지운 파일을 최신 zip 에서 되살리고, 옛 표가 함께 고치게 한
 `src/lib/reservedSegments.ts`·`src/app/robots.ts` 도 원래대로 되돌린 뒤 입구를 닫으십시오 — 지운 채로는 검사가
