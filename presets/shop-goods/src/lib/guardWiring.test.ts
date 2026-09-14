@@ -421,20 +421,23 @@ test("🔴 ①층 면제 마커는 사유를 같은 줄에 갖는다 — 정본�
 });
 
 /** 시험 파일의 꼴 — `packSources` 가 빼는 것과 같은 규칙. 운영 코드가 이것을 가져오면 면제가 구멍이 된다. */
-const TEST_LIKE = /(^|\/)__tests__\/|\.(test|spec)(\.[cm]?[jt]sx?)?$/;
+const TEST_LIKE = /(^|\/)__tests__(\/|$)|\.(test|spec)(\.[cm]?[jt]sx?)?$/;
 
-/** 노드가 모듈 지정자를 들고 있으면 그 문자열 — `import`·`export … from`·`import()`·`require()`. */
+/**
+ * 노드가 모듈 지정자를 들고 있으면 그 문자열 — `import`·`export … from`·`import()`·`require()`. 타입 전용 import 도 센다(런타임엔
+ * 안 실려도 운영→시험 의존 방향은 막는다 — 위 `createZalkeraClient` 훑기가 타입 자리를 면제하는 것과 다른 물음이다).
+ * 치환 있는 템플릿·식별자 인자 같은 **동적 지정자는 `"<dynamic>"`** 으로 돌려준다 — 번들러가 디렉터리째 묶어 시험 파일까지 실을 수
+ * 있어 셀 수 없는 것은 red 다.
+ */
 function moduleSpecifierOf(n: TS.Node): string | null {
-    if (
-        (ts.isImportDeclaration(n) || ts.isExportDeclaration(n)) &&
-        n.moduleSpecifier &&
-        ts.isStringLiteralLike(n.moduleSpecifier)
-    )
-        return n.moduleSpecifier.text;
-    if (ts.isCallExpression(n) && n.arguments.length > 0 && ts.isStringLiteralLike(n.arguments[0])) {
+    if ((ts.isImportDeclaration(n) || ts.isExportDeclaration(n)) && n.moduleSpecifier)
+        return ts.isStringLiteralLike(n.moduleSpecifier) ? n.moduleSpecifier.text : "<dynamic>";
+    if (ts.isCallExpression(n)) {
         const callee = n.expression;
-        if (callee.kind === ts.SyntaxKind.ImportKeyword || (ts.isIdentifier(callee) && callee.text === "require"))
-            return n.arguments[0].text;
+        if (callee.kind === ts.SyntaxKind.ImportKeyword || (ts.isIdentifier(callee) && callee.text === "require")) {
+            const [arg] = n.arguments;
+            return arg && ts.isStringLiteralLike(arg) ? arg.text : "<dynamic>";
+        }
     }
     return null;
 }
@@ -498,6 +501,7 @@ function socialEntranceProblem(sf: TS.SourceFile, hits: TS.Node[]): string | nul
 test("🔴 소셜 교환은 한 입구로만 — 클라이언트는 `lib/zalkera.ts` 에서만 만들고 `socialLogin` 을 뗀다", () => {
     const bad: string[] = [];
     let shaped = 0;
+    let specifiers = 0; // 양성 짝 — 지정자 훑기가 죽어 빈 채로 초록이 되지 않게
     for (const [label, dir] of PACK_SRCS) {
         const owner = join(dir, "lib", "zalkera.ts");
         for (const path of packSources(dir)) {
@@ -507,7 +511,10 @@ test("🔴 소셜 교환은 한 입구로만 — 클라이언트는 `lib/zalkera
             const visit = (n: TS.Node): void => {
                 // 시험 파일은 위 훑기에서 빠진다 — 운영 코드가 시험 파일을 가져오면 거기서 만든 클라이언트가 운영에 실리므로 면제가 구멍이다.
                 const spec = moduleSpecifierOf(n);
-                if (spec !== null && TEST_LIKE.test(spec)) testImports.push(spec);
+                if (spec !== null) {
+                    specifiers++;
+                    if (spec === "<dynamic>" || TEST_LIKE.test(spec)) testImports.push(spec);
+                }
                 // 타입 자리(`typeof createZalkeraClient`)와 type-only import 는 클라이언트를 만들지 않는다.
                 if ((ts.isIdentifier(n) || ts.isStringLiteralLike(n)) && n.text === "createZalkeraClient") {
                     const p = n.parent;
@@ -520,7 +527,12 @@ test("🔴 소셜 교환은 한 입구로만 — 클라이언트는 `lib/zalkera
             };
             visit(sf);
             const rel = relative(dir, path).split("\\").join("/");
-            for (const spec of testImports) bad.push(`${label}:${rel} — 운영 코드가 시험 파일을 가져온다(${spec})`);
+            for (const spec of testImports)
+                bad.push(
+                    spec === "<dynamic>"
+                        ? `${label}:${rel} — 동적 지정자로 가져온다(무엇이 실리는지 셀 수 없다)`
+                        : `${label}:${rel} — 운영 코드가 시험 파일을 가져온다(${spec})`,
+                );
             if (hits.length === 0) continue;
             if (path !== owner) {
                 bad.push(`${label}:${rel} — 클라이언트를 lib/zalkera.ts 밖에서 만든다`);
@@ -531,8 +543,10 @@ test("🔴 소셜 교환은 한 입구로만 — 클라이언트는 `lib/zalkera
             else shaped++;
         }
     }
-    if (CANONICAL)
+    if (CANONICAL) {
         assert.equal(shaped, PACK_SRCS.length, `입구 형상을 확인한 사본 ${shaped}/${PACK_SRCS.length} — 판정이 죽었다`);
+        assert.ok(specifiers > 0, "지정자를 하나도 못 읽었다 — 시험 파일 가져오기 훑기가 죽었다");
+    }
     assert.deepEqual(
         bad,
         [],
@@ -540,28 +554,57 @@ test("🔴 소셜 교환은 한 입구로만 — 클라이언트는 `lib/zalkera
     );
 });
 
+/** `oauthState.ts` 가 내보내는 state 쿠키 이름의 값 — 없으면 `null`(그 파일이 없거나 리터럴이 아니다). */
+function stateCookieName(oauthStatePath: string): string | null {
+    if (!existsSync(oauthStatePath)) return null;
+    let name: string | null = null;
+    const visit = (n: TS.Node): void => {
+        if (
+            ts.isVariableDeclaration(n) &&
+            ts.isIdentifier(n.name) &&
+            n.name.text === "OAUTH_STATE_COOKIE" &&
+            n.initializer &&
+            ts.isStringLiteralLike(n.initializer)
+        )
+            name = n.initializer.text;
+        ts.forEachChild(n, visit);
+    };
+    visit(parse(oauthStatePath));
+    return name;
+}
+
+/**
+ * `.set(…)` 호출이 state 쿠키를 심는가 — 이름을 식별자로 · 값 리터럴로 · Next 의 객체형(`{name, value, …}`)으로 주는 세 꼴 전부.
+ * 받는 쪽(`jar`·`response.cookies`·아무 이름)은 묻지 않는다 — 정본 줄을 그대로 두고 옆에 더하는 형상을 세려는 것이다.
+ */
+function setsStateCookie(call: TS.CallExpression, cookieName: string): boolean {
+    const [first] = call.arguments;
+    if (!first) return false;
+    const isName = (n: TS.Node): boolean =>
+        (ts.isIdentifier(n) && n.text === "OAUTH_STATE_COOKIE") || (ts.isStringLiteralLike(n) && n.text === cookieName);
+    if (isName(first)) return true;
+    return (
+        ts.isObjectLiteralExpression(first) &&
+        first.properties.some(
+            (p) =>
+                ts.isPropertyAssignment(p) &&
+                ts.isIdentifier(p.name) &&
+                p.name.text === "name" &&
+                isName(p.initializer),
+        )
+    );
+}
+
 /**
  * `session.ts` 가 state 쿠키를 심을 때 쓰는 옵션 리터럴이 어긋난 까닭 — 맞으면 `null`.
  * `{...OAUTH_STATE_COOKIE_OPTIONS, secure}` 만 허용한다 — 발행 상수를 펼친 뒤 `sameSite`·`httpOnly`·`path`·`maxAge` 를 덮으면
- * 검사기(X3)가 읽는 상수와 실제 심는 값이 갈려 「lax 로 심는다」는 문서·검사가 거짓이 된다. `secure` 만 환경(배포 여부)에 따른다.
+ * 검사기(X3)가 읽는 상수와 실제 심는 값이 갈려 「lax 로 심는다」는 문서·검사가 거짓이 된다. `secure` 는 파일 상단의 환경 판정을
+ * 축약 표기로만 싣는다(`secure: false`·getter 는 red). 펼치는 상수는 `oauthState` 모듈에서 가져온 것이어야 한다 — 같은 이름의
+ * 지역 상수로 가리면 이름만 같고 값이 다르다.
  */
-function issuedCookieOptionsProblem(sf: TS.SourceFile): string | null {
-    const sets: TS.CallExpression[] = [];
-    const visit = (n: TS.Node): void => {
-        if (
-            ts.isCallExpression(n) &&
-            ts.isPropertyAccessExpression(n.expression) &&
-            n.expression.name.text === "set" &&
-            n.arguments.length === 3 &&
-            ts.isIdentifier(n.arguments[0]) &&
-            n.arguments[0].text === "OAUTH_STATE_COOKIE"
-        )
-            sets.push(n);
-        ts.forEachChild(n, visit);
-    };
-    visit(sf);
-    if (sets.length !== 1) return `OAUTH_STATE_COOKIE 를 심는 자리가 ${sets.length}곳 — 한 곳이어야 한다`;
-    const options = sets[0].arguments[2];
+function issuedCookieOptionsProblem(sf: TS.SourceFile, call: TS.CallExpression): string | null {
+    if (call.arguments.length !== 3) return "state 쿠키를 (이름, 값, 옵션) 세 인자로 심지 않는다";
+    const options = call.arguments[2];
     if (!ts.isObjectLiteralExpression(options)) return "옵션이 객체 리터럴이 아니다";
     const [first, ...rest] = options.properties;
     if (
@@ -571,24 +614,75 @@ function issuedCookieOptionsProblem(sf: TS.SourceFile): string | null {
         first.expression.text !== "OAUTH_STATE_COOKIE_OPTIONS"
     )
         return "첫 항이 `...OAUTH_STATE_COOKIE_OPTIONS` 가 아니다";
-    const extra = rest
-        .map((p) => (p.name && ts.isIdentifier(p.name) ? p.name.text : "?"))
-        .filter((k) => k !== "secure");
-    return extra.length === 0
-        ? null
-        : `발행 상수를 펼친 뒤 덮는다: ${extra.join(", ")} — 검사기가 읽는 값과 심는 값이 갈린다`;
+    const secureOnly = rest.length === 1 && ts.isShorthandPropertyAssignment(rest[0]) && rest[0].name.text === "secure";
+    if (!secureOnly) {
+        const names = rest.map((p) => (p.name && ts.isIdentifier(p.name) ? p.name.text : "?"));
+        return names.length === 0
+            ? "`secure` 가 없다 — 상용에서 Secure 없는 state 쿠키가 나간다"
+            : `펼친 뒤의 항이 축약 \`secure\` 하나가 아니다: ${names.join(", ")} — 검사기가 읽는 값과 심는 값이 갈린다`;
+    }
+    // 출처 — `oauthState` 모듈의 import 로 들어온 이름이어야 하고, 같은 이름의 다른 선언이 파일에 없어야 한다.
+    let fromOauthState = false;
+    let shadowed = false;
+    const visit = (n: TS.Node): void => {
+        if (ts.isImportSpecifier(n) && n.name.text === "OAUTH_STATE_COOKIE_OPTIONS") {
+            const mod = n.parent.parent.parent.moduleSpecifier;
+            if (ts.isStringLiteralLike(mod) && /(^|\/)oauthState$/.test(mod.text)) fromOauthState = true;
+            else shadowed = true;
+        } else if (
+            (ts.isVariableDeclaration(n) ||
+                ts.isFunctionDeclaration(n) ||
+                ts.isBindingElement(n) ||
+                ts.isParameter(n)) &&
+            n.name &&
+            ts.isIdentifier(n.name) &&
+            n.name.text === "OAUTH_STATE_COOKIE_OPTIONS"
+        ) {
+            shadowed = true;
+        }
+        ts.forEachChild(n, visit);
+    };
+    visit(sf);
+    if (!fromOauthState) return "OAUTH_STATE_COOKIE_OPTIONS 를 `@/lib/oauthState` 에서 가져오지 않는다";
+    if (shadowed)
+        return "OAUTH_STATE_COOKIE_OPTIONS 와 같은 이름의 선언이 파일에 또 있다 — 펼치는 것이 발행 상수가 아니다";
+    return null;
 }
 
-test("🔴 state 쿠키는 발행 상수 그대로 심는다 — `session.ts` 가 펼친 뒤 sameSite 를 덮지 않는다", () => {
+test("🔴 state 쿠키는 `session.ts` 한 곳에서 발행 상수 그대로 심는다 — 펼친 뒤 덮거나 옆에 더하거나 가리지 않는다", () => {
     const bad: string[] = [];
     let shaped = 0;
     for (const [label, dir] of PACK_SRCS) {
-        const path = join(dir, "lib", "session.ts");
-        if (!existsSync(path)) {
-            bad.push(`${label}:lib/session.ts — 없다`);
+        const cookieName = stateCookieName(join(dir, "lib", "oauthState.ts"));
+        if (cookieName === null) {
+            bad.push(`${label}:lib/oauthState.ts — OAUTH_STATE_COOKIE 리터럴을 찾지 못했다`);
             continue;
         }
-        const problem = issuedCookieOptionsProblem(parse(path));
+        // 심는 자리 — 운영 소스 전부에서 세 꼴을 다 센다. 정확히 하나여야 하고 `lib/session.ts` 여야 한다.
+        const issued: {path: string; sf: TS.SourceFile; call: TS.CallExpression}[] = [];
+        for (const path of packSources(dir)) {
+            const sf = parse(path);
+            const visit = (n: TS.Node): void => {
+                if (
+                    ts.isCallExpression(n) &&
+                    ts.isPropertyAccessExpression(n.expression) &&
+                    n.expression.name.text === "set" &&
+                    setsStateCookie(n, cookieName)
+                )
+                    issued.push({path, sf, call: n});
+                ts.forEachChild(n, visit);
+            };
+            visit(sf);
+        }
+        const owner = join(dir, "lib", "session.ts");
+        const where = issued.map((i) => relative(dir, i.path).split("\\").join("/"));
+        if (issued.length !== 1 || issued[0].path !== owner) {
+            bad.push(
+                `${label} — state 쿠키를 심는 자리가 ${issued.length}곳(${where.join(", ") || "없음"}) — lib/session.ts 한 곳이어야 한다`,
+            );
+            continue;
+        }
+        const problem = issuedCookieOptionsProblem(issued[0].sf, issued[0].call);
         if (problem) bad.push(`${label}:lib/session.ts — ${problem}`);
         else shaped++;
     }
@@ -597,7 +691,7 @@ test("🔴 state 쿠키는 발행 상수 그대로 심는다 — `session.ts` �
     assert.deepEqual(
         bad,
         [],
-        "state 쿠키 옵션이 발행 상수와 갈린다 — `jar.set(OAUTH_STATE_COOKIE, …, {...OAUTH_STATE_COOKIE_OPTIONS, secure})` 꼴만",
+        "state 쿠키 발행이 발행 상수와 갈린다 — `lib/session.ts` 에서만 `jar.set(OAUTH_STATE_COOKIE, …, {...OAUTH_STATE_COOKIE_OPTIONS, secure})` 꼴로",
     );
 });
 

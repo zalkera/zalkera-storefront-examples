@@ -64,6 +64,8 @@ export const WIRING_FILES = [
     "src/lib/jsonLdScript.ts",
     "src/components/JsonLd.tsx", // 그 소독기의 **유일한 집행 지점**(원시 HTML 삽입 자리)
     "src/lib/oauthState.ts", // OAuth state 대조(fail-closed)
+    // 세 층 배선·소셜 입구·state 쿠키 발행의 **판정**. 본체만 잠그면 한 벌의 시험이 낡아 그 팩 트리의 게이트만 갈린다.
+    "src/lib/guardWiring.test.ts",
     "src/lib/env.ts", // 서버 전용 env·테넌트 코드(폴백 없음이 의도)
     "src/lib/buildEnv.ts", // 오프라인 빌드 강하 — 서빙 빌드에 켜지면 콘텐츠 빈 아티팩트가 나간다
     "src/lib/zalkera.ts", // 클라이언트 싱글턴(baseUrl·X-Tenant·스토어프론트 키 주입 지점)
