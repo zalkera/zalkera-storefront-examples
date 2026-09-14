@@ -423,25 +423,20 @@ test("🔴 ①층 면제 마커는 사유를 같은 줄에 갖는다 — 정본�
 /** 시험 파일의 꼴 — `packSources` 가 빼는 것과 같은 규칙. 운영 코드가 이것을 가져오면 면제가 구멍이 된다. */
 const TEST_LIKE = /(^|\/)__tests__\/|\.(test|spec)(\.[cm]?[jt]sx?)?$/;
 
-/** 파일이 가져오는 모듈 지정자 전부 — `import`·`export … from`·`import()`·`require()`. */
-function importedSpecifiers(sf: TS.SourceFile): string[] {
-    const out: string[] = [];
-    const visit = (n: TS.Node): void => {
-        if (
-            (ts.isImportDeclaration(n) || ts.isExportDeclaration(n)) &&
-            n.moduleSpecifier &&
-            ts.isStringLiteralLike(n.moduleSpecifier)
-        ) {
-            out.push(n.moduleSpecifier.text);
-        } else if (ts.isCallExpression(n) && n.arguments.length > 0 && ts.isStringLiteralLike(n.arguments[0])) {
-            const callee = n.expression;
-            if (callee.kind === ts.SyntaxKind.ImportKeyword || (ts.isIdentifier(callee) && callee.text === "require"))
-                out.push(n.arguments[0].text);
-        }
-        ts.forEachChild(n, visit);
-    };
-    visit(sf);
-    return out;
+/** 노드가 모듈 지정자를 들고 있으면 그 문자열 — `import`·`export … from`·`import()`·`require()`. */
+function moduleSpecifierOf(n: TS.Node): string | null {
+    if (
+        (ts.isImportDeclaration(n) || ts.isExportDeclaration(n)) &&
+        n.moduleSpecifier &&
+        ts.isStringLiteralLike(n.moduleSpecifier)
+    )
+        return n.moduleSpecifier.text;
+    if (ts.isCallExpression(n) && n.arguments.length > 0 && ts.isStringLiteralLike(n.arguments[0])) {
+        const callee = n.expression;
+        if (callee.kind === ts.SyntaxKind.ImportKeyword || (ts.isIdentifier(callee) && callee.text === "require"))
+            return n.arguments[0].text;
+    }
+    return null;
 }
 
 /** 팩 소스 전부 — 시험 파일은 뺀다(그 면제가 서는 조건은 아래 「운영 코드가 시험 파일을 가져오지 않는다」 시험). */
@@ -508,7 +503,11 @@ test("🔴 소셜 교환은 한 입구로만 — 클라이언트는 `lib/zalkera
         for (const path of packSources(dir)) {
             const sf = parse(path);
             const hits: TS.Node[] = [];
+            const testImports: string[] = [];
             const visit = (n: TS.Node): void => {
+                // 시험 파일은 위 훑기에서 빠진다 — 운영 코드가 시험 파일을 가져오면 거기서 만든 클라이언트가 운영에 실리므로 면제가 구멍이다.
+                const spec = moduleSpecifierOf(n);
+                if (spec !== null && TEST_LIKE.test(spec)) testImports.push(spec);
                 // 타입 자리(`typeof createZalkeraClient`)와 type-only import 는 클라이언트를 만들지 않는다.
                 if ((ts.isIdentifier(n) || ts.isStringLiteralLike(n)) && n.text === "createZalkeraClient") {
                     const p = n.parent;
@@ -521,10 +520,7 @@ test("🔴 소셜 교환은 한 입구로만 — 클라이언트는 `lib/zalkera
             };
             visit(sf);
             const rel = relative(dir, path).split("\\").join("/");
-            // 시험 파일은 위 훑기에서 빠진다 — 운영 코드가 시험 파일을 가져오면 거기서 만든 클라이언트가 운영에 실리므로 면제가 구멍이다.
-            for (const spec of importedSpecifiers(sf)) {
-                if (TEST_LIKE.test(spec)) bad.push(`${label}:${rel} — 운영 코드가 시험 파일을 가져온다(${spec})`);
-            }
+            for (const spec of testImports) bad.push(`${label}:${rel} — 운영 코드가 시험 파일을 가져온다(${spec})`);
             if (hits.length === 0) continue;
             if (path !== owner) {
                 bad.push(`${label}:${rel} — 클라이언트를 lib/zalkera.ts 밖에서 만든다`);
