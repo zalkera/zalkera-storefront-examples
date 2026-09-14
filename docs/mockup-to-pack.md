@@ -140,7 +140,8 @@ Tailwind 가 랜딩에 닿으면 시안이 어긋납니다. 그래서 둘을 **�
 그 시험은 **이유를 찍고 건너뛰고**(`npm test` 출력에 `﹣ <시험 이름> … # <사유>` · 요약 `ℹ skipped 9`), 하한도 같은
 디렉터리로 같은 수만큼 낮아집니다(`floors.mjs` 의 `FLOOR_SUBJECT_PARTIAL` · `floor-gate` 의 `ℹ … 하한을 N 낮춥니다` 줄).
 지운 채로 `npm test`·`verify-zip` 이 초록인 것이 정상입니다 — 시험을 되살리려고 그 파일을 만들지 마십시오(시안에 없던
-화면이 생깁니다). 디렉터리를 **일부만** 남기면(예: `sections/` 에 파일 몇 개) 시험이 돌다 red 로 닫힙니다 — 통째로 지우십시오.
+화면이 생깁니다). 디렉터리를 **일부만** 남기면 시험이 남은 파일을 그대로 잽니다(빈 디렉터리·라우트 파일 부재는 red) — 통째로
+지우십시오.
 
 덫이 있습니다.
 
@@ -1011,7 +1012,7 @@ node scripts/verify-zip.mjs ../pack-<이름>-<날짜>.zip     # rc 0
 | `Invalid or unexpected token` (런타임) | `String.raw` 로 넣음 | §1-5 |
 | `근거 없는 이름은 목록에 없다` | 라우트를 지움 | §1-2 |
 | `<파일> 가 없습니다 — 가드를 재는 자리입니다` | `src/lib/*.ts` 를 지움 | §1-2 |
-| `시험이 실패했습니다(하한을 재기 전입니다)` · `ENOENT … src/app/blog/[slug]/page.tsx` | blog·sections 를 지웠는데 `src/lib/*.test.ts` 가 옛 판(3.7.14 이전)이다 — 대상이 없을 때 건너뛰는 술어가 없다 | §1-2 · 최신 시작 팩의 `src/lib/astGuards.test.ts`·`blogListRender.test.ts` 를 가져온다(`scripts/lib/floors.mjs`·`test-floors.json` 도 같은 판으로) |
+| `시험이 실패했습니다(하한을 재기 전입니다)` · `ENOENT … src/app/blog/[slug]/page.tsx` | blog·sections 를 지웠는데 `src/lib/*.test.ts` 가 3.7.14 까지의 판이다 — 대상이 없을 때 건너뛰는 술어가 없다 | §1-2 · 최신 시작 팩의 `src/lib/astGuards.test.ts`·`blogListRender.test.ts` 를 가져온다(`scripts/lib/floors.mjs`·`test-floors.json` 도 같은 판으로) |
 | `astGuards.test.ts — 통과 12건(하한 16)` · `blogListRender.test.ts — 통과 8건(하한 13)` | 시험은 새 판인데 판정(`scripts/lib/floors.mjs` 또는 검수기)이 옛 판이다 — 대상 부재로 하한을 낮추는 판정이 없다 | §1-2 · `scripts/`(팩) 또는 `zalkera-storefront-examples`(검수기)를 최신으로 |
 | `[EDECL]` rc=7 | 선언은 **없는데** 루트가 싣는 CSS 가 우리 토큰 이름을 쓴다(`--radius-knob`·`--color-surface` 등 다섯 중 둘 이상). 두 루트 레이아웃 형상에서는 검사기가 그 CSS 를 읽지 않아 서지 않는다 | §1-3 · §3-1 |
 | `[S2]`·`[S4]`·`[S8]`·N 이 error | `zalkera` 선언을 **안 지웠다** | §1-3 |

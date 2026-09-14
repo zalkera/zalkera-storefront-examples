@@ -62,7 +62,11 @@ try {
 }
 
 const {bad, effective, skipped, reduced} = judgeFloors(declared, (f) => existsSync(join(root, f)));
-if (judgmentOut) writeFileSync(judgmentOut, JSON.stringify({skipped, reduced}, null, 2) + "\n");
+// 판정 파일은 러너가 **끝난 뒤**에 쓴다 — 앞에 쓰면 zip 의 시험이 그 파일을 덮어 보고 문면을 바꿀 수 있다
+// (경로는 러너의 cwd 밖이지만 상대 경로로 닿는다). 반려로 먼저 나가는 자리에서는 그 자리에서 쓴다.
+const writeJudgment = () => {
+    if (judgmentOut) writeFileSync(judgmentOut, JSON.stringify({skipped, reduced}, null, 2) + "\n");
+};
 // ⚠ **건너뛴 자리·낮춘 자리는 반드시 찍는다.** 조용히 넘어가면 「대상을 지워 가드를 끈다」가 무비용이 된다.
 //    시험 출력 **뒤**에 찍는다(아래 `printEased`) — 앞에 찍으면 스크롤 위로 사라지고, 판정을 값으로
 //    받는 쪽은 `--judgment` 를 읽는다.
@@ -75,6 +79,7 @@ const printEased = () => {
     }
 };
 if (bad.length) {
+    writeJudgment();
     printEased();
     console.error("❌ 가드 회귀 스위트 — 하한표가 판정을 통과하지 못했습니다:");
     for (const b of bad) console.error(`   · ${b}`);
@@ -139,6 +144,7 @@ if (counted.size === 0) {
     console.error("❌ 가드 회귀 스위트 — 통과 수를 한 건도 못 읽었습니다(통과가 아닙니다).");
     process.exit(2);
 }
+writeJudgment();
 printEased();
 
 // ⚠ **표 밖의 스위트를 남기지 않는다.** 표에 없으면 하한이 없고, 하한이 없으면 그 스위트는

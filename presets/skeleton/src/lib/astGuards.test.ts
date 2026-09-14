@@ -355,8 +355,8 @@ function callsFunction(sf: TS.SourceFile, name: string): boolean {
 // 시험을 요구하지 않는다. 지킬 대상이 없으면 지킬 약속도 없다 — 하한도 같은 대상으로 같은 수만큼 낮아진다
 // (`scripts/lib/floors.mjs` 의 FLOOR_SUBJECT_PARTIAL — 술어·폭이 같은지는 `floors.test.mjs` 배선 시험이 잠근다).
 // ⚠ 술어는 **디렉터리**다 — 파일 하나(`SectionRenderer.tsx`)로 두면 그 파일만 지우고 나머지 섹션을 남긴
-//    트리에서 디렉터리 전량을 재는 소독기 시험이 꺼진다. 디렉터리가 있으면 시험이 돌고, 일부만 남긴
-//    디렉터리는 시험이 red 로 닫는다.
+//    트리에서 디렉터리 전량을 재는 소독기 시험이 꺼진다. 디렉터리가 있으면 남은 파일을 그대로 잰다
+//    (빈 디렉터리·분모 미달·라우트 파일 부재는 red).
 // ⚠ 정본 저장소에서는 켜지지 않는다 — 프리셋 4벌의 원본이라 대상이 없을 정당한 형상이 없고, 없으면
 //    `readFileSync` 가 ENOENT 로 시끄럽게 죽는 것이 맞다. ⚠ 건너뛰면 반드시 말한다.
 const BLOG_SKIP =

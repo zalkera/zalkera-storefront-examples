@@ -261,17 +261,20 @@ test("팩·테넌트 트리에서는 여유를 반려하지 않는다 — 고객
         assert.doesNotMatch(out, /낮춥니다/);
     });
 
-    test("--judgment 로 판정을 값으로 넘긴다 — 시험 출력에 같은 접두의 줄을 찍어도 안 섞인다", () => {
+    test("--judgment 로 판정을 값으로 넘긴다 — 시험이 같은 접두의 줄을 찍거나 판정 파일을 덮어도 안 섞인다", () => {
         const root = tree({omit: SUBJECTS, counts: short});
-        // zip 쪽 시험이 게이트 문장을 흉내 낸다 — stdout 을 걸러 옮기면 이것이 ✅ 줄에 실린다.
+        const judgment = join(root, "judgment.json");
+        // zip 쪽 시험이 게이트 문장을 흉내 내고(stdout 을 걸러 옮기면 ✅ 줄에 실린다) 판정 파일까지 덮는다
+        // (게이트가 러너 앞에 쓰면 이것이 남는다).
         writeFileSync(
             join(root, "src/lib/crossOrigin.test.ts"),
             'import {test} from "node:test";\n' +
+                'import {writeFileSync} from "node:fs";\n' +
                 'console.log("ℹ 가드 회귀 스위트 — src/lib/crossOrigin.test.ts 의 하한을 20 낮춥니다: 가짜 가 이 트리에 없습니다.");\n' +
+                `writeFileSync(${JSON.stringify(judgment)}, JSON.stringify({skipped: [], reduced: [{suite: "src/lib/crossOrigin.test.ts", subject: "가짜", tests: 20}]}));\n` +
                 Array.from({length: REQUIRED_FLOORS["src/lib/crossOrigin.test.ts"]}, (_, i) => `test("t${i}", () => {});`).join("\n") +
                 "\n",
         );
-        const judgment = join(root, "judgment.json");
         const {rc, out} = runGate(root, `--judgment=${judgment}`);
         assert.equal(rc, 0, out.slice(-600));
         assert.ok(existsSync(judgment), "판정 파일이 없다");
