@@ -704,7 +704,7 @@ test("🔴 state 쿠키는 `session.ts` 한 곳에서 발행 상수 그대로 �
     for (const [label, dir] of PACK_SRCS) {
         const cookieName = stateCookieName(join(dir, "lib", "oauthState.ts"));
         if (cookieName === null) {
-            // 지킬 대상이 없으면 지킬 약속도 없다(`floors.mjs` 의 능력별 규칙) — 로그인 화면을 걷은 고객 트리는 이 파일을 지울 수 있다.
+            // 지킬 대상이 없으면 지킬 약속도 없다(`floors.mjs` 의 능력별 규칙) — 쇼핑몰(클라이언트)을 통째로 걷은 고객 트리는 이 파일도 없다.
             // 정본에서는 없을 수 없고, 어느 트리든 파일은 없는데 발행 호출이 남아 있으면 그것은 걷다 만 것이라 red.
             if (CANONICAL) bad.push(`${label}:lib/oauthState.ts — OAUTH_STATE_COOKIE 리터럴을 찾지 못했다`);
             else if (packSources(dir).some((path) => /\bOAUTH_STATE_COOKIE\b/.test(readFileSync(path, "utf8"))))

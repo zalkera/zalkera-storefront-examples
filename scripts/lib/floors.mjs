@@ -130,8 +130,10 @@ export const FLOOR_KEY_REGEX =
  * 고객 트리가 쇼핑몰을 지우며 `src/lib/{oauth,oauthState}.ts` 를 지울 수 있는데,
  * 그러면 그 시험도 같이 지워야 하고 여기서 반려됐다. 로그인 화면이 없는 사이트가 **쓰지도 않는
  * 파일 둘을 남겨야** 통과하는 자리였다.
- *   재현: 트리에서 `src/lib/oauthState.{ts,test.ts}` 를 지우고 `node scripts/lib/floor-gate.mjs; echo rc=$?`
- *   → 고치기 전 rc=1(가드 미달) · 고친 뒤 rc=0 + 건너뜀 한 줄
+ *   재현: 쇼핑몰(클라이언트)을 걷은 트리 — `src/lib/{oauthState,session,zalkera}.ts`·`src/app/api/auth/` 까지 없는 —
+ *   에서 `node scripts/lib/floor-gate.mjs; echo rc=$?` → 고치기 전 rc=1(가드 미달) · 고친 뒤 rc=0 + 건너뜀 한 줄.
+ *   ⚠ `oauthState.{ts,test.ts}` **만** 지운 트리는 그 반대다 — 발행(`session.ts`)이 남아 `guardWiring.test.ts` 가
+ *   「쓰는 운영 소스가 남아 있다」로 red(rc=1). 걷다 만 것이고 컴파일도 안 된다.
  *
  * 지킬 대상이 없으면 지킬 약속도 없다. 그러니 **대상이 있을 때만** 요구한다.
  *
