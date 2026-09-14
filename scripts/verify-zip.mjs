@@ -1279,7 +1279,13 @@ try {
                     } else {
                         // 게이트가 낸 마지막 줄을 그대로 옮긴다 — 개수를 여기서 다시 세면 사본이 갈린다.
                         const said = out.trim().split("\n").filter(Boolean).at(-1) ?? "스위트별 하한 통과";
-                        record("가드 회귀 스위트", true, said.replace(/^✅\s*/, ""));
+                        // ⚠ 게이트가 요구를 걷거나 낮춘 자리(ℹ 줄)는 **여기서도 말한다** — 마지막 줄만 옮기면
+                        //    「대상이 없어 안 쟀다」가 ✅ 한 줄 뒤에 숨는다(건너뛰면 반드시 말한다 — floors.mjs).
+                        const eased = out
+                            .split("\n")
+                            .filter((l) => l.startsWith("ℹ 가드 회귀 스위트 — "))
+                            .map((l) => l.replace(/^ℹ 가드 회귀 스위트 — /, ""));
+                        record("가드 회귀 스위트", true, [said.replace(/^✅\s*/, ""), ...eased].join(" · "));
                     }
                 }
 
