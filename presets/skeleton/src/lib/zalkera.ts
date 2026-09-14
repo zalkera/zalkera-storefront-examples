@@ -24,7 +24,7 @@ export const zalkera = client;
 const exchange = bindSocialExchange(socialLogin, () => process.env.NODE_ENV === "production");
 
 /**
- * 항아리는 `next/headers` 의 `cookies()` 가 돌려주는 것만 받는다 — 요청 쪽 쿠키(`req.cookies`)는 타입이 달라 거절된다.
+ * 항아리는 `next/headers` 의 `cookies()` 가 돌려주는 것과 **같은 꼴만** 받는다 — 요청 쪽 쿠키(`req.cookies`)는 꼴이 달라 타입에서 거절된다.
  * 그 항아리에서 지운 것은 응답에 실리지 않아 1회용 소각이 브라우저에 닿지 않기 때문이다. `cookies()` 를 이 파일에서
  * 부르지 않는 것은 이 파일을 가져오는 SEO 페이지가 요청마다 렌더되지 않게 하려는 것이다(검사기 C1).
  */
