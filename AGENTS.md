@@ -136,7 +136,8 @@ export async function POST(req: Request) {
   즉시 소각). 교환은 `@/lib/zalkera` 의 `exchangeSocialLogin` 으로만 한다 — 싱글턴 `zalkera` 에는 `socialLogin` 이
   없어, SDK 로 교환하는 한 대조를 건너뛸 수 없다. 클라이언트를 `src/lib/zalkera.ts` 밖에서 또 만들지 마라(`guardWiring.test.ts` 가 막는다).
   `CallbackHandler` 의 `sessionStorage` 대조는 **UX 지 방어가 아니다** — 그걸 방어로 세지 마라.
-  state 쿠키는 `sameSite: "lax"` 여야 한다(`strict` 면 authorize 복귀에서 안 실려 로그인이 깨진다).
+  state 쿠키는 `sameSite: "lax"` 여야 한다(`strict` 면 authorize 복귀에서 안 실려 로그인이 깨진다). 발행은 `src/lib/session.ts` 한 곳에서
+  `{...OAUTH_STATE_COOKIE_OPTIONS, secure}` 꼴로만 — 상수를 펼친 뒤 덮거나, 옆에 더 심거나, 같은 이름의 지역 상수로 가리지 마라(`guardWiring.test.ts` 가 막는다).
 - `readJsonBody` 는 **형식 가드**다. `Content-Type` 을 보지 않으므로 CSRF 방어로 쓰지 마라.
 
 판정 규칙의 근거는 `src/lib/crossOrigin.ts` 주석에, 관용구는 `src/lib/http.ts` 에 있다.

@@ -430,13 +430,25 @@ const TEST_LIKE = /(^|\/)__tests__(\/|$)|\.(test|spec)(\.[cm]?[jt]sx?)?$/;
  * 있어 셀 수 없는 것은 red 다.
  */
 function moduleSpecifierOf(n: TS.Node): string | null {
+    // 치환 있는 템플릿은 머리·꼬리 리터럴로만 판정한다 — 꼬리가 `.json` 처럼 시험 파일일 수 없는 꼴이면 통과, 꼬리가 비었거나
+    // 시험 꼴이면 셀 수 없는 것으로 red(`next-intl` 의 `import(\`./messages/${locale}.json\`)` 같은 정당한 꼴을 살린다).
+    const specifierOf = (expr: TS.Expression): string => {
+        if (ts.isStringLiteralLike(expr)) return expr.text;
+        if (ts.isTemplateExpression(expr)) {
+            const tail = expr.templateSpans[expr.templateSpans.length - 1].literal.text;
+            return tail === "" || /(^|\/)__tests__(\/|$)/.test(expr.head.text)
+                ? "<dynamic>"
+                : `${expr.head.text}…${tail}`;
+        }
+        return "<dynamic>";
+    };
     if ((ts.isImportDeclaration(n) || ts.isExportDeclaration(n)) && n.moduleSpecifier)
-        return ts.isStringLiteralLike(n.moduleSpecifier) ? n.moduleSpecifier.text : "<dynamic>";
+        return specifierOf(n.moduleSpecifier);
     if (ts.isCallExpression(n)) {
         const callee = n.expression;
         if (callee.kind === ts.SyntaxKind.ImportKeyword || (ts.isIdentifier(callee) && callee.text === "require")) {
             const [arg] = n.arguments;
-            return arg && ts.isStringLiteralLike(arg) ? arg.text : "<dynamic>";
+            return arg ? specifierOf(arg) : "<dynamic>";
         }
     }
     return null;
@@ -563,10 +575,12 @@ function stateCookieName(oauthStatePath: string): string | null {
             ts.isVariableDeclaration(n) &&
             ts.isIdentifier(n.name) &&
             n.name.text === "OAUTH_STATE_COOKIE" &&
-            n.initializer &&
-            ts.isStringLiteralLike(n.initializer)
-        )
-            name = n.initializer.text;
+            n.initializer
+        ) {
+            let init: TS.Expression = n.initializer;
+            while (ts.isAsExpression(init) || ts.isParenthesizedExpression(init)) init = init.expression;
+            if (ts.isStringLiteralLike(init)) name = init.text;
+        }
         ts.forEachChild(n, visit);
     };
     visit(parse(oauthStatePath));
@@ -576,6 +590,7 @@ function stateCookieName(oauthStatePath: string): string | null {
 /**
  * `.set(…)` 호출이 state 쿠키를 심는가 — 이름을 식별자로 · 값 리터럴로 · Next 의 객체형(`{name, value, …}`)으로 주는 세 꼴 전부.
  * 받는 쪽(`jar`·`response.cookies`·아무 이름)은 묻지 않는다 — 정본 줄을 그대로 두고 옆에 더하는 형상을 세려는 것이다.
+ * 한계: 이름을 별칭·문자열 조합으로 만들거나 `.set` 을 `Reflect.apply`·`.call` 로 부르는 형상은 이 세 꼴 밖이다(문면 그물).
  */
 function setsStateCookie(call: TS.CallExpression, cookieName: string): boolean {
     const [first] = call.arguments;
@@ -598,8 +613,9 @@ function setsStateCookie(call: TS.CallExpression, cookieName: string): boolean {
 /**
  * `session.ts` 가 state 쿠키를 심을 때 쓰는 옵션 리터럴이 어긋난 까닭 — 맞으면 `null`.
  * `{...OAUTH_STATE_COOKIE_OPTIONS, secure}` 만 허용한다 — 발행 상수를 펼친 뒤 `sameSite`·`httpOnly`·`path`·`maxAge` 를 덮으면
- * 검사기(X3)가 읽는 상수와 실제 심는 값이 갈려 「lax 로 심는다」는 문서·검사가 거짓이 된다. `secure` 는 파일 상단의 환경 판정을
- * 축약 표기로만 싣는다(`secure: false`·getter 는 red). 펼치는 상수는 `oauthState` 모듈에서 가져온 것이어야 한다 — 같은 이름의
+ * 검사기(X3)가 읽는 상수와 실제 심는 값이 갈려 「lax 로 심는다」는 문서·검사가 거짓이 된다. `secure` 는 **축약**으로만 — 축약이어야
+ * 이 파일의 형제 쿠키 넷과 같은 바인딩(모듈 상단의 환경 판정 하나)을 쓰는 것이 보장되고, `secure: isProd` 같은 재작성은 같은 사실의
+ * 두 번째 표현이라 시험이 `secure: false` 와 가를 수 없다. 펼치는 상수는 `oauthState` 모듈에서 가져온 것이어야 한다 — 같은 이름의
  * 지역 상수로 가리면 이름만 같고 값이 다르다.
  */
 function issuedCookieOptionsProblem(sf: TS.SourceFile, call: TS.CallExpression): string | null {
@@ -617,28 +633,48 @@ function issuedCookieOptionsProblem(sf: TS.SourceFile, call: TS.CallExpression):
     const secureOnly = rest.length === 1 && ts.isShorthandPropertyAssignment(rest[0]) && rest[0].name.text === "secure";
     if (!secureOnly) {
         const names = rest.map((p) => (p.name && ts.isIdentifier(p.name) ? p.name.text : "?"));
-        return names.length === 0
-            ? "`secure` 가 없다 — 상용에서 Secure 없는 state 쿠키가 나간다"
-            : `펼친 뒤의 항이 축약 \`secure\` 하나가 아니다: ${names.join(", ")} — 검사기가 읽는 값과 심는 값이 갈린다`;
+        if (names.length === 0) return "`secure` 가 없다 — 상용에서 Secure 없는 state 쿠키가 나간다";
+        if (names.length === 1 && names[0] === "secure")
+            return "`secure` 는 축약으로만 — 형제 쿠키와 같은 환경 판정 하나를 쓴다(다른 표기는 두 번째 Secure 정책이다)";
+        return `펼친 뒤의 항이 축약 \`secure\` 하나가 아니다: ${names.join(", ")} — 검사기가 읽는 값과 심는 값이 갈린다`;
     }
     // 출처 — `oauthState` 모듈의 import 로 들어온 이름이어야 하고, 같은 이름의 다른 선언이 파일에 없어야 한다.
+    // 출처 — `oauthState` 모듈의 import 로 들어온 이름이어야 하고, 같은 이름의 다른 선언이 파일에 없어야 한다. `secure` 도 같다 —
+    // 파일 안 유일한 선언이 모듈 상단 `const secure = process.env.NODE_ENV === "production"` 이어야 축약 `secure` 가 그 값이다
+    // (함수 안 `const secure = false`·매개변수 기본값이면 꼴은 같은데 상용에 Secure 없는 쿠키가 나간다).
     let fromOauthState = false;
     let shadowed = false;
-    const visit = (n: TS.Node): void => {
-        if (ts.isImportSpecifier(n) && n.name.text === "OAUTH_STATE_COOKIE_OPTIONS") {
-            const mod = n.parent.parent.parent.moduleSpecifier;
-            if (ts.isStringLiteralLike(mod) && /(^|\/)oauthState$/.test(mod.text)) fromOauthState = true;
-            else shadowed = true;
-        } else if (
+    const secureDecls: TS.Node[] = [];
+    const declaredName = (n: TS.Node): string | null => {
+        if (ts.isImportSpecifier(n)) return n.name.text;
+        if (
             (ts.isVariableDeclaration(n) ||
                 ts.isFunctionDeclaration(n) ||
+                ts.isClassDeclaration(n) ||
+                ts.isEnumDeclaration(n) ||
                 ts.isBindingElement(n) ||
                 ts.isParameter(n)) &&
             n.name &&
-            ts.isIdentifier(n.name) &&
-            n.name.text === "OAUTH_STATE_COOKIE_OPTIONS"
-        ) {
-            shadowed = true;
+            ts.isIdentifier(n.name)
+        )
+            return n.name.text;
+        return null;
+    };
+    const visit = (n: TS.Node): void => {
+        const name = declaredName(n);
+        if (name === "OAUTH_STATE_COOKIE_OPTIONS") {
+            const mod = ts.isImportSpecifier(n) ? n.parent.parent.parent.moduleSpecifier : undefined;
+            // 별칭(`{X as OAUTH_STATE_COOKIE_OPTIONS}`)은 다른 것을 이 이름으로 부르는 것 — 출처로 안 친다.
+            if (
+                mod &&
+                ts.isStringLiteralLike(mod) &&
+                /^(@\/lib|\.)\/oauthState(\.[cm]?[jt]s)?$/.test(mod.text) &&
+                !(n as TS.ImportSpecifier).propertyName
+            )
+                fromOauthState = true;
+            else shadowed = true;
+        } else if (name === "secure") {
+            secureDecls.push(n);
         }
         ts.forEachChild(n, visit);
     };
@@ -646,6 +682,18 @@ function issuedCookieOptionsProblem(sf: TS.SourceFile, call: TS.CallExpression):
     if (!fromOauthState) return "OAUTH_STATE_COOKIE_OPTIONS 를 `@/lib/oauthState` 에서 가져오지 않는다";
     if (shadowed)
         return "OAUTH_STATE_COOKIE_OPTIONS 와 같은 이름의 선언이 파일에 또 있다 — 펼치는 것이 발행 상수가 아니다";
+    const [secureDecl] = secureDecls;
+    const topLevelConst =
+        secureDecls.length === 1 &&
+        ts.isVariableDeclaration(secureDecl) &&
+        ts.isVariableDeclarationList(secureDecl.parent) &&
+        (secureDecl.parent.flags & ts.NodeFlags.Const) !== 0 &&
+        ts.isVariableStatement(secureDecl.parent.parent) &&
+        ts.isSourceFile(secureDecl.parent.parent.parent) &&
+        secureDecl.initializer !== undefined &&
+        secureDecl.initializer.getText(sf).replace(/\s+/g, "") === 'process.env.NODE_ENV==="production"';
+    if (!topLevelConst)
+        return `\`secure\` 의 선언이 ${secureDecls.length}곳 — 모듈 상단 \`const secure = process.env.NODE_ENV === "production"\` 하나여야 한다`;
     return null;
 }
 
@@ -713,7 +761,7 @@ test("🔴 CORS 를 여는 자리가 없다 — 라우트뿐 아니라 next.conf
 
 /**
  * ⚠ **스킵하지 않는다.** 사본이 하나뿐인 팩 트리에서 건너뛰면 통과 수가 한 개 줄고(스킵은 통과로 안 센다)
- * 하한표가 정본 레포(8)와 팩 트리(7) 어느 쪽에도 못 맞는다 — 한쪽을 맞추면 다른 쪽 게이트가 빨개진다.
+ * 하한표가 정본 레포(9)와 팩 트리(8) 어느 쪽에도 못 맞는다 — 한쪽을 맞추면 다른 쪽 게이트가 빨개진다.
  * 재현: `node scripts/lib/floor-gate.mjs` 를 이 레포와 `presets/skeleton` 양쪽에서.
  * 사본이 하나면 드리프트가 없는 것이 **참**이므로 그대로 통과시킨다.
  */
