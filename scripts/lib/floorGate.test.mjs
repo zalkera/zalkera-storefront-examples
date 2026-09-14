@@ -21,7 +21,7 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
 import {spawnSync} from "node:child_process";
-import {existsSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync} from "node:fs";
+import {mkdtempSync, mkdirSync, writeFileSync, rmSync} from "node:fs";
 import {dirname, join} from "node:path";
 import {tmpdir} from "node:os";
 import {fileURLToPath} from "node:url";
@@ -92,12 +92,12 @@ function tree(patch = {}) {
     return root;
 }
 
-function runGate(root, ...extra) {
+function runGate(root) {
     // `NODE_OPTIONS` 를 비운다 — 부모가 켠 값이 자식 러너의 뜻을 바꾼다.
     const env = {...process.env};
     delete env.NODE_OPTIONS;
     delete env.NODE_TEST_CONTEXT;
-    const r = spawnSync(process.execPath, [GATE, root, ...extra], {encoding: "utf8", env, maxBuffer: 64 * 1024 * 1024});
+    const r = spawnSync(process.execPath, [GATE, root], {encoding: "utf8", env, maxBuffer: 64 * 1024 * 1024});
     return {rc: r.status, out: `${r.stdout ?? ""}${r.stderr ?? ""}`};
 }
 
@@ -219,7 +219,7 @@ test("팩·테넌트 트리에서는 여유를 반려하지 않는다 — 고객
 
 /*
  * 한 스위트 안의 능력별 시험 — 대상이 없으면 선언한 수만큼만 낮춘다(`FLOOR_SUBJECT_PARTIAL`).
- * 판정은 `floors.test.mjs` 가 재고, 여기는 그 판정이 **집행·출력·이송**되는지를 문다.
+ * 판정은 `floors.test.mjs` 가 재고, 여기는 그 판정이 **집행·출력**되는지를 문다.
  */
 {
     const AST = "src/lib/astGuards.test.ts";
@@ -261,33 +261,4 @@ test("팩·테넌트 트리에서는 여유를 반려하지 않는다 — 고객
         assert.doesNotMatch(out, /낮춥니다/);
     });
 
-    test("--judgment 로 판정을 값으로 넘긴다 — 시험이 같은 접두의 줄을 찍거나 판정 파일을 덮어도 안 섞인다", () => {
-        const root = tree({omit: SUBJECTS, counts: short});
-        const judgment = join(root, "judgment.json");
-        // zip 쪽 시험이 게이트 문장을 흉내 내고(stdout 을 걸러 옮기면 ✅ 줄에 실린다) 판정 파일까지 덮는다
-        // (게이트가 러너 앞에 쓰면 이것이 남는다).
-        writeFileSync(
-            join(root, "src/lib/crossOrigin.test.ts"),
-            'import {test} from "node:test";\n' +
-                'import {writeFileSync} from "node:fs";\n' +
-                'console.log("ℹ 가드 회귀 스위트 — src/lib/crossOrigin.test.ts 의 하한을 20 낮춥니다: 가짜 가 이 트리에 없습니다.");\n' +
-                `writeFileSync(${JSON.stringify(judgment)}, JSON.stringify({skipped: [], reduced: [{suite: "src/lib/crossOrigin.test.ts", subject: "가짜", tests: 20}]}));\n` +
-                Array.from({length: REQUIRED_FLOORS["src/lib/crossOrigin.test.ts"]}, (_, i) => `test("t${i}", () => {});`).join("\n") +
-                "\n",
-        );
-        const {rc, out} = runGate(root, `--judgment=${judgment}`);
-        assert.equal(rc, 0, out.slice(-600));
-        assert.ok(existsSync(judgment), "판정 파일이 없다");
-        const j = JSON.parse(readFileSync(judgment, "utf8"));
-        assert.deepEqual(
-            j.reduced.map((r) => [r.suite, r.subject, r.tests]),
-            [
-                [AST, "src/app/blog", 3],
-                [AST, "src/components/sections", 1],
-                [BLOG_LIST, "src/app/blog", 5],
-            ],
-        );
-        assert.ok(!JSON.stringify(j).includes("가짜"), "시험이 찍은 거짓 줄이 판정에 섞였다");
-        assert.match(out, /가짜/, "통제군 — 거짓 줄이 stdout 에는 실제로 찍혔어야 한다");
-    });
 }

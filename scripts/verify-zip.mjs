@@ -76,7 +76,7 @@ import {basename, join, relative, resolve} from "node:path";
 import {tmpdir} from "node:os";
 import {fileURLToPath} from "node:url";
 import {childEnv} from "./lib/childEnv.mjs";
-import {easeNotes} from "./lib/floors.mjs";
+import {easeNotes, judgeFloors} from "./lib/floors.mjs";
 import {probeDevCompile} from "./lib/devCompile.mjs";
 import {junkTopLevel} from "./lib/junkEntries.mjs";
 import {SECRET_CONTENT} from "./lib/secret-content.mjs";
@@ -1262,10 +1262,7 @@ try {
                 } else {
                     // 경로를 **호출 자리에** 둔다 — 변수로 빼면 「러너 자신의 것을 쓰는가」를 재는
                     // 시험이 그 자리를 못 본다(실측: 못 찾아 반려했다).
-                    // 판정(걷은 스위트·낮춘 자리)은 **값으로** 받는다(`--judgment`). stdout 을 걸러 옮기면 zip 의
-                    // 시험이 같은 접두의 줄을 찍어 ✅ 줄에 거짓 완화 문장을 실을 수 있다(자식 러너의 출력이 섞인다).
-                    const judgment = join(work, "floor-judgment.json");
-                    const t = spawnSync("node", [join(HERE, "lib", "floor-gate.mjs"), root, `--judgment=${judgment}`], {
+                    const t = spawnSync("node", [join(HERE, "lib", "floor-gate.mjs"), root], {
                         cwd: root,
                         encoding: "utf8",
                         env: childEnv(BUILD_ENV),
@@ -1285,15 +1282,23 @@ try {
                         const said = out.trim().split("\n").filter(Boolean).at(-1) ?? "스위트별 하한 통과";
                         // ⚠ 게이트가 요구를 걷거나 낮춘 자리는 **여기서도 말한다** — 마지막 줄만 옮기면
                         //    「대상이 없어 안 쟀다」가 ✅ 한 줄 뒤에 숨는다(건너뛰면 반드시 말한다 — floors.mjs).
-                        //    판정 파일이 없으면(옛 게이트) 완화도 없었던 것이다 — 빈 목록.
-                        let parsed = null;
+                        //    판정은 게이트의 stdout·파일이 아니라 **같은 `judgeFloors` 를 여기서 불러** 얻는다 —
+                        //    출력은 zip 의 시험이 같은 접두 줄로 흉내 낼 수 있고, 파일은 시험이(지연 프로세스로도)
+                        //    덮을 수 있다. 같은 함수·같은 입력(표·트리)이라 게이트가 집행한 판정과 갈리지 않는다.
+                        //    표를 못 읽으면 반려 — 게이트가 rc 0 을 냈다면 표는 있었던 것이라, 못 읽는 것은 결함이다.
+                        let verdict = null;
                         try {
-                            parsed = JSON.parse(readFileSync(judgment, "utf8"));
+                            const declared = JSON.parse(readFileSync(join(root, "scripts", "lib", "test-floors.json"), "utf8"));
+                            verdict = judgeFloors(declared, (f) => existsSync(join(root, f)));
                         } catch {
-                            parsed = null;
+                            verdict = null;
                         }
-                        const eased = easeNotes(parsed);
-                        record("가드 회귀 스위트", true, [said.replace(/^✅\s*/, ""), ...eased].join(" · "));
+                        if (verdict === null) {
+                            record("가드 회귀 스위트", false, "게이트는 통과했는데 하한표를 다시 읽지 못했습니다 — 완화 여부를 말할 수 없습니다(통과가 아닙니다)");
+                            failed = true;
+                        } else {
+                            record("가드 회귀 스위트", true, [said.replace(/^✅\s*/, ""), ...easeNotes(verdict)].join(" · "));
+                        }
                     }
                 }
 
