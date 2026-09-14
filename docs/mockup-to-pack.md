@@ -135,6 +135,12 @@ Tailwind 가 랜딩에 닿으면 시안이 어긋납니다. 그래서 둘을 **�
 하한표(`scripts/lib/floors.mjs` 의 `REQUIRED_FLOORS`)가 스위트별 시험 수를 요구하고,
 그 요구는 **검사기 자신의 표**로 집행되므로 zip 안의 표를 고쳐서 낮출 수 없습니다.
 
+그 안의 시험 몇은 §2-1 ⑴ 이 지우는 파일을 경로 그대로 읽습니다 — `astGuards.test.ts` 의 넷(`src/app/blog/*`·
+`src/components/sections/*`)과 `blogListRender.test.ts` 의 다섯(`src/app/blog/page/[n]/page.tsx`). 그 파일이 없으면
+그 시험은 **이유를 찍고 건너뛰고**(`npm test` 출력의 `# SKIP …`), 하한도 같은 경로로 같은 수만큼 낮아집니다
+(`floors.mjs` 의 `FLOOR_SUBJECT_PARTIAL` · `floor-gate` 의 `ℹ … 하한을 N 낮춥니다` 줄). 지운 채로 `npm test`·
+`verify-zip` 이 초록인 것이 정상입니다 — 시험을 되살리려고 그 파일을 만들지 마십시오(시안에 없던 화면이 생깁니다).
+
 덫이 있습니다.
 
 - **`src/middleware.ts`** — 미리보기 쓰기 관문입니다. 「미리보기 관문 등재」 검사가 빌드
@@ -1004,6 +1010,7 @@ node scripts/verify-zip.mjs ../pack-<이름>-<날짜>.zip     # rc 0
 | `Invalid or unexpected token` (런타임) | `String.raw` 로 넣음 | §1-5 |
 | `근거 없는 이름은 목록에 없다` | 라우트를 지움 | §1-2 |
 | `<파일> 가 없습니다 — 가드를 재는 자리입니다` | `src/lib/*.ts` 를 지움 | §1-2 |
+| `astGuards.test.ts — 통과 12건(하한 16)` · `blogListRender.test.ts — 통과 8건(하한 13)` | blog·sections 를 지웠는데 검수기(또는 가져온 `src/lib`·`scripts`)가 낡았다 — 대상 부재로 하한을 낮추는 판정이 없다 | §1-2 · 최신 시작 팩의 `src/lib/*.test.ts`·`scripts/lib/floors.mjs`·`test-floors.json` 을 가져온다 |
 | `[EDECL]` rc=7 | 선언은 **없는데** 루트가 싣는 CSS 가 우리 토큰 이름을 쓴다(`--radius-knob`·`--color-surface` 등 다섯 중 둘 이상). 두 루트 레이아웃 형상에서는 검사기가 그 CSS 를 읽지 않아 서지 않는다 | §1-3 · §3-1 |
 | `[S2]`·`[S4]`·`[S8]`·N 이 error | `zalkera` 선언을 **안 지웠다** | §1-3 |
 | `content/pages 가 없는데 매니페스트가 그 안을 가져옵니다` | ⑴ 로 `content/pages` 를 지우고 `content/index.ts` 의 `import … from "./pages/…"` 를 남겼다 | §2-1 ⑷ |

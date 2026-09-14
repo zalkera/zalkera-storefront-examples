@@ -25,7 +25,7 @@ import {mkdtempSync, mkdirSync, writeFileSync, rmSync} from "node:fs";
 import {dirname, join} from "node:path";
 import {tmpdir} from "node:os";
 import {fileURLToPath} from "node:url";
-import {REPO_ONLY_FLOORS, REQUIRED_FLOORS} from "./floors.mjs";
+import {FLOOR_SUBJECT_PARTIAL, REPO_ONLY_FLOORS, REQUIRED_FLOORS} from "./floors.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const GATE = join(HERE, "floor-gate.mjs");
@@ -58,6 +58,16 @@ function tree(patch = {}) {
         const full = join(root, file);
         mkdirSync(dirname(full), {recursive: true});
         writeFileSync(full, suite(patch.counts?.[file] ?? min));
+    }
+    // 능력별 시험이 지킬 **대상**도 세운다(빈 파일이면 된다 — 게이트는 존재만 묻는다). 없으면 판정이
+    // 「대상 부재」로 하한을 낮춰, 아래 시험들이 재려는 것과 다른 트리를 재게 된다.
+    for (const parts of Object.values(FLOOR_SUBJECT_PARTIAL)) {
+        for (const {subject} of parts) {
+            if (patch.omit?.includes(subject)) continue;
+            const full = join(root, subject);
+            mkdirSync(dirname(full), {recursive: true});
+            writeFileSync(full, "");
+        }
     }
     if (patch.table !== null) {
         const tablePath = join(root, "scripts", "lib", "test-floors.json");
@@ -208,3 +218,39 @@ test("팩·테넌트 트리에서는 여유를 반려하지 않는다 — 고객
     assert.equal(rc, 0, out.slice(-600));
     assert.match(out, /스위트별 하한 통과/);
 });
+
+/*
+ * 한 스위트 안의 능력별 시험 — 대상이 없으면 선언한 수만큼만 낮춘다(`FLOOR_SUBJECT_PARTIAL`).
+ * 판정은 `floors.test.mjs` 가 재고, 여기는 그 판정이 **집행·출력**되는지를 문다.
+ */
+{
+    const AST = "src/lib/astGuards.test.ts";
+    const BLOG_LIST = "src/lib/blogListRender.test.ts";
+    const SUBJECTS = Object.values(FLOOR_SUBJECT_PARTIAL).flatMap((parts) => parts.map((p) => p.subject));
+    const short = {[AST]: REQUIRED_FLOORS[AST] - 4, [BLOG_LIST]: REQUIRED_FLOORS[BLOG_LIST] - 5};
+
+    test("대상이 없는 트리는 그 시험 수만큼 하한을 낮추고 «낮췄다고» 찍는다", () => {
+        const {rc, out} = runGate(tree({omit: SUBJECTS, counts: short}));
+        assert.equal(rc, 0, out.slice(-600));
+        assert.match(out, /astGuards\.test\.ts 의 하한을 3 낮춥니다: src\/app\/blog\/page\.tsx/);
+        assert.match(out, /astGuards\.test\.ts 의 하한을 1 낮춥니다: src\/components\/sections\/SectionRenderer\.tsx/);
+        assert.match(out, /blogListRender\.test\.ts 의 하한을 5 낮춥니다: src\/app\/blog\/page\/\[n\]\/page\.tsx/);
+        assert.match(out, /스위트별 하한 통과/);
+    });
+
+    test("대상이 있는 트리에서 같은 통과 수는 반려한다 — 낮춤은 부재에만 걸린다", () => {
+        const {rc, out} = runGate(tree({counts: short}));
+        assert.equal(rc, 1, out.slice(-600));
+        assert.match(out, /하한 미달/);
+        assert.match(out, /astGuards\.test\.ts/);
+        assert.match(out, /blogListRender\.test\.ts/);
+        assert.doesNotMatch(out, /낮춥니다/);
+    });
+
+    test("대상이 없어도 낮아진 하한에 모자라면 반려한다 — 완화는 폭이 정해져 있다", () => {
+        const {rc, out} = runGate(tree({omit: SUBJECTS, counts: {[AST]: REQUIRED_FLOORS[AST] - 5}}));
+        assert.equal(rc, 1, out.slice(-600));
+        assert.match(out, /하한 미달/);
+        assert.match(out, /astGuards\.test\.ts — 통과 11건\(하한 12\)/);
+    });
+}

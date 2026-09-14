@@ -13,7 +13,7 @@ import {mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, existsSync}
 import {dirname, join} from "node:path";
 import {tmpdir} from "node:os";
 import {fileURLToPath} from "node:url";
-import {judgeFloors, REQUIRED_FLOORS, REPO_ONLY_FLOORS, FLOOR_KEY_REGEX, isCanonicalRepo} from "./floors.mjs";
+import {judgeFloors, REQUIRED_FLOORS, REPO_ONLY_FLOORS, FLOOR_KEY_REGEX, FLOOR_SUBJECT_PARTIAL, isCanonicalRepo} from "./floors.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -406,5 +406,77 @@ test("키 형태가 받는 확장자를 러너의 글롭이 전부 돈다", () =
         // safeUrl 은 중립 배선이라 대상이 늘 있다 — 대상 매핑 자체가 없어야 한다.
         const {bad} = judgeFloors(ok(), tree(["src/lib/safeUrl.test.ts", "src/lib/safeUrl.ts"]));
         assert.ok(bad.some((b) => b.includes("safeUrl.test.ts")), bad.join(" · "));
+    });
+}
+
+/*
+ * 한 스위트 안의 능력별 시험 — 대상이 없으면 **그 시험 수만큼만** 하한을 낮춘다.
+ *
+ * 시안 레인 팩이 `src/app/blog`·`src/components/sections` 를 지우면 `astGuards`(16 중 4)·`blogListRender`(13 중 5)가
+ * 그 파일을 읽는 시험을 건너뛰는데, 스위트 전체를 걷으면 나머지 가드(본문 렌더러·시간대)까지 요구에서 빠진다.
+ * 그래서 폭을 선언하고 그만큼만 낮춘다. 아래가 함께 서야 완화가 구멍이 아니다.
+ */
+{
+    const AST = "src/lib/astGuards.test.ts";
+    const BLOG_LIST = "src/lib/blogListRender.test.ts";
+    const BLOG_PAGE = "src/app/blog/page.tsx";
+    const BLOG_ROUTE = "src/app/blog/page/[n]/page.tsx";
+    const SECTIONS = "src/components/sections/SectionRenderer.tsx";
+    const tree = (drop = []) => (f) => !drop.includes(f);
+
+    test("① 대상이 전부 있으면 낮추지 않는다", () => {
+        const {bad, effective, reduced} = judgeFloors(ok(), tree());
+        assert.equal(bad.length, 0);
+        assert.equal(reduced.length, 0);
+        assert.equal(effective[AST], REQUIRED_FLOORS[AST]);
+        assert.equal(effective[BLOG_LIST], REQUIRED_FLOORS[BLOG_LIST]);
+    });
+
+    test("② 대상이 없으면 선언한 수만큼만 낮추고 **낮췄다고 말한다** — 스위트는 요구에 남는다", () => {
+        const {bad, effective, reduced} = judgeFloors(ok(), tree([BLOG_PAGE, BLOG_ROUTE, SECTIONS]));
+        assert.equal(bad.length, 0, bad.join(" · "));
+        assert.deepEqual(
+            reduced.map((r) => [r.suite, r.subject, r.tests]),
+            [
+                [AST, BLOG_PAGE, 3],
+                [AST, SECTIONS, 1],
+                [BLOG_LIST, BLOG_ROUTE, 5],
+            ],
+        );
+        assert.equal(effective[AST], REQUIRED_FLOORS[AST] - 4);
+        assert.equal(effective[BLOG_LIST], REQUIRED_FLOORS[BLOG_LIST] - 5);
+        assert.ok(AST in effective && BLOG_LIST in effective, "스위트가 잴 목록에서 통째로 빠졌다");
+    });
+
+    test("②-b 대상 하나만 없으면 그 폭만 낮춘다", () => {
+        const {effective, reduced} = judgeFloors(ok(), tree([SECTIONS]));
+        assert.deepEqual(reduced.map((r) => r.subject), [SECTIONS]);
+        assert.equal(effective[AST], REQUIRED_FLOORS[AST] - 1);
+        assert.equal(effective[BLOG_LIST], REQUIRED_FLOORS[BLOG_LIST]);
+    });
+
+    test("③ 표가 올린 값에서도 같은 폭만큼 낮춘다 — 표는 요구를 강화하는 자리이지 부재를 되돌리는 자리가 아니다", () => {
+        const table = {...ok(), [AST]: REQUIRED_FLOORS[AST] + 10};
+        const {bad, effective} = judgeFloors(table, tree([BLOG_PAGE, SECTIONS]));
+        assert.equal(bad.length, 0, bad.join(" · "));
+        assert.equal(effective[AST], REQUIRED_FLOORS[AST] + 10 - 4);
+    });
+
+    test("④ 대상은 두고 시험 파일만 지우면 여전히 반려한다", () => {
+        const {bad, reduced} = judgeFloors(ok(), tree([AST]));
+        assert.equal(reduced.length, 0);
+        assert.ok(bad.some((b) => b.includes(AST)), bad.join(" · "));
+    });
+
+    test("⑤ 선언표는 요구 스위트만 가리키고 폭은 그 하한을 넘지 않는다 — 넘으면 하한이 음수로 무너진다", () => {
+        for (const [suite, parts] of Object.entries(FLOOR_SUBJECT_PARTIAL)) {
+            assert.ok(suite in REQUIRED_FLOORS, `${suite} 는 요구 스위트가 아니다`);
+            const total = parts.reduce((n, p) => n + p.tests, 0);
+            assert.ok(total > 0 && total < REQUIRED_FLOORS[suite], `${suite}: 낮추는 폭 ${total} 이 하한 ${REQUIRED_FLOORS[suite]} 에 맞지 않는다`);
+            for (const {subject, tests} of parts) {
+                assert.ok(Number.isInteger(tests) && tests > 0, `${suite}: ${subject} 의 폭이 양의 정수가 아니다`);
+                assert.ok(!subject.endsWith(".test.ts"), `${suite}: 대상이 시험 파일이다 — 대상은 지킬 소스여야 한다`);
+            }
+        }
     });
 }

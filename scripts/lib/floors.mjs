@@ -51,13 +51,13 @@ export const REQUIRED_FLOORS = {
     "src/lib/datetime.test.ts": 8,
     "src/lib/astGuards.test.ts": 16,
     "src/lib/bankTransferPolicy.test.ts": 14,
-    "scripts/lib/floors.test.mjs": 31,
+    "scripts/lib/floors.test.mjs": 37,
     "scripts/lib/gateProbe.test.mjs": 14,
     "scripts/lib/junkEntries.test.mjs": 8,
     "scripts/lib/childEnv.test.mjs": 12,
     "scripts/lib/vendorSet.test.mjs": 3,
     "scripts/workflow-syntax.test.mjs": 35,
-    "scripts/lib/floorGate.test.mjs": 13,
+    "scripts/lib/floorGate.test.mjs": 16,
     "scripts/lib/contentRoutes.test.mjs": 12,
     "src/lib/preview.test.ts": 4,
     "src/lib/siteVerification.test.ts": 23,
@@ -149,12 +149,41 @@ const FLOOR_SUBJECT = Object.freeze({
 });
 
 /**
+ * **한 스위트 안의 능력별 시험** — 지킬 대상이 트리에 없으면 그 시험 수만큼 하한을 낮춘다.
+ *
+ * [FLOOR_SUBJECT] 는 스위트 **전체**가 한 능력에 딸린 자리다. 여기는 스위트 하나가 여러 가드를 담고
+ * 그중 일부만 능력에 딸린 자리다 — 스위트를 통째로 걷으면 나머지 가드(`astGuards` 의 본문 렌더러·시간대
+ * 판정)까지 요구에서 빠진다. 그래서 «대상 · 그 대상을 읽는 시험 수»를 적고 **그만큼만** 낮춘다.
+ *
+ * 시안 레인 팩(`docs/mockup-to-pack.md` §2-1 ⑴)이 `src/app/blog/`·`src/components/sections/` 를 지우는데,
+ * 그 파일을 경로 그대로 읽는 시험 아홉이 있어 지운 트리가 「하한 미달」로 반려됐다 — 라우트를 남겨야
+ * 검수가 서는 자리였다(고객 사이트에 시안에 없던 `/blog` 가 실렸다).
+ *
+ * ■ 시험 쪽은 **같은 경로**로 건너뛴다(`{skip: <이유>}`). 파일이 없으면 `readFileSync` 가 던져 스위트가
+ *   실패하고, 실패는 하한을 재기 전에 러너를 멈춘다. 두 술어가 갈리면 한쪽이 반드시 red 다.
+ * ■ 낮추는 폭은 **이 파일이 든다** — 러너가 센 skip 수가 아니다. skip 수로 낮추면 시험을 skip 으로
+ *   바꾸는 것이 곧 게이트 스위치가 된다(`floor-reporter.mjs` 가 skip 을 통과로 안 세는 이유와 같다).
+ * ■ 표가 올린 값에서도 같은 폭만큼 낮춘다 — 표는 요구를 강화하는 자리이지 대상 부재를 되돌리는
+ *   자리가 아니다.
+ * ■ 재현: `unzip skeleton-<x>.zip; rm -rf src/app/blog src/components/sections; node scripts/lib/floor-gate.mjs`
+ *   → 고치기 전 `astGuards 12/16 · blogListRender 8/13` 미달 · 고친 뒤 rc 0 + ℹ 줄 셋.
+ */
+export const FLOOR_SUBJECT_PARTIAL = Object.freeze({
+    "src/lib/astGuards.test.ts": Object.freeze([
+        {subject: "src/app/blog/page.tsx", tests: 3},
+        {subject: "src/components/sections/SectionRenderer.tsx", tests: 1},
+    ]),
+    "src/lib/blogListRender.test.ts": Object.freeze([{subject: "src/app/blog/page/[n]/page.tsx", tests: 5}]),
+});
+
+/**
  * zip 의 하한표를 요구치와 합친다.
  *
  * @param floors  zip 에서 읽은 표(`null` 이면 못 읽은 것)
  * @param exists  스위트 파일이 트리에 있는지 묻는 함수 `(relPath) => boolean`
- * @returns `{bad, effective, skipped}` — `bad` 가 비어 있지 않으면 반려. `skipped` 는 대상 부재로
- *          요구를 걷은 스위트(호출부가 **출력해야 한다**).
+ * @returns `{bad, effective, skipped, reduced}` — `bad` 가 비어 있지 않으면 반려. `skipped` 는 대상 부재로
+ *          요구를 걷은 스위트, `reduced` 는 대상 부재로 하한을 낮춘 자리([FLOOR_SUBJECT_PARTIAL]) —
+ *          둘 다 호출부가 **출력해야 한다**.
  */
 export function judgeFloors(floors, exists) {
     const bad = [];
@@ -167,6 +196,15 @@ export function judgeFloors(floors, exists) {
         if (suite in required && !exists(subject)) {
             delete required[suite];
             skipped.push({suite, subject});
+        }
+    }
+    // 스위트 일부만 능력에 딸린 자리 — 대상이 없는 만큼만 낮춘다(위 [FLOOR_SUBJECT_PARTIAL]). 적용은
+    // 표를 합친 **뒤**다(아래) — 표가 올린 값도 같은 폭만큼 낮아야 한다.
+    const reduced = [];
+    for (const [suite, parts] of Object.entries(FLOOR_SUBJECT_PARTIAL)) {
+        if (!(suite in required)) continue;
+        for (const {subject, tests} of parts) {
+            if (!exists(subject)) reduced.push({suite, subject, tests});
         }
     }
     const effective = {...required};
@@ -182,6 +220,7 @@ export function judgeFloors(floors, exists) {
             bad: [`하한표가 객체가 아닙니다(${what}) — 요구 ${Object.keys(required).length}개를 잴 수 없습니다`],
             effective: {},
             skipped,
+            reduced,
         };
     }
 
@@ -216,6 +255,9 @@ export function judgeFloors(floors, exists) {
     //   절반만 걸린 상태다(실측으로 밟았다).
     //   재현: 대상 없는 트리에서 `node scripts/lib/floor-gate.mjs` → `통과 0건(하한 11)`
     for (const {suite} of skipped) delete effective[suite];
+    for (const {suite, tests} of reduced) {
+        if (suite in effective) effective[suite] = Math.max(0, effective[suite] - tests);
+    }
 
     // 요구 스위트 파일이 없으면 반려.
     for (const f of Object.keys(required)) {
@@ -230,5 +272,5 @@ export function judgeFloors(floors, exists) {
         bad.push(`하한표 항목이 ${listed}개입니다 — 비었거나 지워졌습니다(요구 ${want}개)`);
     }
 
-    return {bad, effective, skipped};
+    return {bad, effective, skipped, reduced};
 }
