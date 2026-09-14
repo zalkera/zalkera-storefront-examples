@@ -25,7 +25,7 @@ import {mkdtempSync, mkdirSync, writeFileSync, rmSync} from "node:fs";
 import {dirname, join} from "node:path";
 import {tmpdir} from "node:os";
 import {fileURLToPath} from "node:url";
-import {REPO_ONLY_FLOORS, REQUIRED_FLOORS} from "./floors.mjs";
+import {FLOOR_SUBJECT_PARTIAL, REPO_ONLY_FLOORS, REQUIRED_FLOORS} from "./floors.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const GATE = join(HERE, "floor-gate.mjs");
@@ -58,6 +58,14 @@ function tree(patch = {}) {
         const full = join(root, file);
         mkdirSync(dirname(full), {recursive: true});
         writeFileSync(full, suite(patch.counts?.[file] ?? min));
+    }
+    // 능력별 시험이 지킬 **대상**도 세운다(대상은 디렉터리다 — 빈 디렉터리면 된다, 게이트는 존재만 묻는다).
+    // 없으면 판정이 「대상 부재」로 하한을 낮춰, 아래 시험들이 재려는 것과 다른 트리를 재게 된다.
+    for (const parts of Object.values(FLOOR_SUBJECT_PARTIAL)) {
+        for (const {subject} of parts) {
+            if (patch.omit?.includes(subject)) continue;
+            mkdirSync(join(root, subject), {recursive: true});
+        }
     }
     if (patch.table !== null) {
         const tablePath = join(root, "scripts", "lib", "test-floors.json");
@@ -208,3 +216,62 @@ test("팩·테넌트 트리에서는 여유를 반려하지 않는다 — 고객
     assert.equal(rc, 0, out.slice(-600));
     assert.match(out, /스위트별 하한 통과/);
 });
+
+/*
+ * 한 스위트 안의 능력별 시험 — 대상이 없으면 선언한 수만큼만 낮춘다(`FLOOR_SUBJECT_PARTIAL`).
+ * 판정은 `floors.test.mjs` 가 재고, 여기는 그 판정이 **집행·출력**되는지를 문다.
+ */
+{
+    const AST = "src/lib/astGuards.test.ts";
+    const BLOG_LIST = "src/lib/blogListRender.test.ts";
+    const SUBJECTS = [...new Set(Object.values(FLOOR_SUBJECT_PARTIAL).flatMap((parts) => parts.map((p) => p.subject)))];
+    const short = {[AST]: REQUIRED_FLOORS[AST] - 4, [BLOG_LIST]: REQUIRED_FLOORS[BLOG_LIST] - 5};
+
+    test("대상이 없는 트리는 그 시험 수만큼 하한을 낮추고 «낮췄다고» 찍는다 — 시험 출력 뒤에", () => {
+        const {rc, out} = runGate(tree({omit: SUBJECTS, counts: short}));
+        assert.equal(rc, 0, out.slice(-600));
+        // 접두까지 잠근다 — verify-zip 이 이 접두로 게이트의 줄을 골라 판정과 대조한다(한 상수 EASE_PREFIX).
+        assert.match(out, /^ℹ 가드 회귀 스위트 — src\/lib\/astGuards\.test\.ts 의 하한을 3 낮춥니다: src\/app\/blog 가 이 트리에 없습니다$/m);
+        assert.match(out, /^ℹ 가드 회귀 스위트 — src\/lib\/astGuards\.test\.ts 의 하한을 1 낮춥니다: src\/components\/sections 가 이 트리에 없습니다$/m);
+        assert.match(out, /^ℹ 가드 회귀 스위트 — src\/lib\/blogListRender\.test\.ts 의 하한을 5 낮춥니다: src\/app\/blog 가 이 트리에 없습니다$/m);
+        assert.match(out, /스위트별 하한 통과/);
+        // ℹ 줄이 러너 출력(ℹ pass …) **뒤**에 있다 — 앞에 찍으면 스크롤 위로 사라진다.
+        assert.ok(out.indexOf("ℹ pass ") < out.indexOf("하한을 3 낮춥니다"), "ℹ 줄이 시험 출력 앞에 찍혔다");
+    });
+
+    test("대상이 있는 트리에서 같은 통과 수는 반려한다 — 낮춤은 부재에만 걸린다", () => {
+        const {rc, out} = runGate(tree({counts: short}));
+        assert.equal(rc, 1, out.slice(-600));
+        assert.match(out, /하한 미달/);
+        assert.match(out, /astGuards\.test\.ts/);
+        assert.match(out, /blogListRender\.test\.ts/);
+        assert.doesNotMatch(out, /낮춥니다/);
+    });
+
+    test("대상이 없어도 낮아진 하한에 모자라면 반려한다 — 완화는 폭이 정해져 있다", () => {
+        const {rc, out} = runGate(tree({omit: SUBJECTS, counts: {[AST]: REQUIRED_FLOORS[AST] - 5}}));
+        assert.equal(rc, 1, out.slice(-600));
+        assert.match(out, /하한 미달/);
+        assert.match(out, /astGuards\.test\.ts — 통과 11건\(하한 12\)/);
+    });
+
+    test("대상이 없는데 시험이 실패하면 반려하되 무엇을 낮췄는지는 같이 찍는다", () => {
+        const root = tree({omit: SUBJECTS, counts: short});
+        writeFileSync(
+            join(root, "scripts/lib/vendorSet.test.mjs"),
+            'import {test} from "node:test";\ntest("깨진다", () => { throw new Error("실패"); });\n',
+        );
+        const {rc, out} = runGate(root);
+        assert.equal(rc, 1, out.slice(-600));
+        assert.match(out, /시험이 실패했습니다/);
+        assert.match(out, /astGuards\.test\.ts 의 하한을 3 낮춥니다/);
+    });
+
+    test("정본 저장소에서 대상이 없으면 낮추지 않고 반려한다", () => {
+        const {rc, out} = runGate(tree({canonical: true, omit: ["src/app/blog"]}));
+        assert.equal(rc, 1, out.slice(-600));
+        assert.match(out, /src\/app\/blog 가 정본에 없습니다/);
+        assert.doesNotMatch(out, /낮춥니다/);
+    });
+
+}

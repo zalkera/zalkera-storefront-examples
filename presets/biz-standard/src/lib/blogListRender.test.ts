@@ -233,6 +233,15 @@ test("글이 있으면 ItemList 그래프를 낸다", async () => {
  * 전부 진짜 코드가 한다(`parseBlogPageSegment` → `listBlogPage` → `isOutOfRange` → `notFound`). */
 
 const ROUTE = "app/blog/page/[n]/page";
+// 블로그 라우트를 걷은 트리(시안 레인 — `docs/mockup-to-pack.md` §2-1 ⑴)에서는 아래 라우트 시험을 요구하지 않는다.
+// 지킬 대상이 없으면 지킬 약속도 없다 — 하한도 같은 대상(디렉터리)으로 같은 수만큼 낮아진다(`scripts/lib/floors.mjs`
+// 의 FLOOR_SUBJECT_PARTIAL — 술어·폭이 같은지는 `floors.test.mjs` 배선 시험이 잠근다). 정본 저장소에서는
+// 켜지지 않는다(대상이 없을 정당한 형상이 없다 — ENOENT 로 죽는 것이 맞다). ⚠ 건너뛰면 반드시 말한다.
+const CANONICAL = existsSync(join(SRC, "..", "presets")) && existsSync(join(SRC, "..", "scripts", "pack-preset.mjs"));
+const ROUTE_SKIP =
+    CANONICAL || existsSync(join(SRC, "app/blog"))
+        ? false
+        : "블로그 라우트가 이 트리에 없다 — 지킬 대상이 없어 건너뜀(하한도 같은 수만큼 낮아진다)";
 
 type RouteModule = {
     default: (props: {params: Promise<{n: string}>}) => Promise<unknown>;
@@ -267,7 +276,7 @@ async function call(n: string, posts: unknown): Promise<{threw: unknown} | {valu
  * `node --experimental-strip-types --test src/lib/blogListRender.test.ts; echo rc=$?` → rc=1
  * (이 시험과 아래 400→404 시험, 둘이 red 다).
  */
-test("🔴 라우트 — 글 0건인 4쪽은 404 를 던진다", async () => {
+test("🔴 라우트 — 글 0건인 4쪽은 404 를 던진다", {skip: ROUTE_SKIP}, async () => {
     const result = await call("4", {content: [], last: true});
     assert.ok("threw" in result, "404 를 안 던졌다 — 빈 쪽이 200 으로 선다");
     assert.ok(isNotFound(result.threw), `404 가 아닌 것을 던졌다: ${String(result.threw)}`);
@@ -279,7 +288,7 @@ test("🔴 라우트 — 글 0건인 4쪽은 404 를 던진다", async () => {
  * `undefined` 도 같은 자리다: `@zalkera/client` 는 2xx **빈 본문**에 `undefined` 를 돌려주고,
  * `=== null` 로만 갈랐을 때 라우트가 `TypeError` 로 죽었다(500).
  */
-test("🔴 라우트 — 백엔드가 죽으면(null·undefined) 404 를 안 던진다", async () => {
+test("🔴 라우트 — 백엔드가 죽으면(null·undefined) 404 를 안 던진다", {skip: ROUTE_SKIP}, async () => {
     for (const 모름 of [null, undefined]) {
         const result = await call("4", 모름);
         assert.ok("value" in result, `${String(모름)} 에 던졌다: ${String((result as {threw: unknown}).threw)}`);
@@ -287,7 +296,7 @@ test("🔴 라우트 — 백엔드가 죽으면(null·undefined) 404 를 안 던
 });
 
 /** **양성 짝** — 정상 쪽을 404 로 만들면 2쪽 이후가 통째로 사라진다. */
-test("라우트 — 글이 있는 쪽은 그대로 그린다", async () => {
+test("라우트 — 글이 있는 쪽은 그대로 그린다", {skip: ROUTE_SKIP}, async () => {
     const posts = {content: [{id: 1, slug: "a", title: "가"}], last: false};
     const result = await call("2", posts);
     assert.ok("value" in result, `정상 쪽에서 던졌다: ${String((result as {threw: unknown}).threw)}`);
@@ -296,7 +305,7 @@ test("라우트 — 글이 있는 쪽은 그대로 그린다", async () => {
 });
 
 /** 🔴 **1쪽 세그먼트와 다른 표기는 라우트에서 404 다** — 같은 내용이 두 주소에 서면 색인이 갈린다. */
-test("🔴 라우트 — 1쪽·다른 표기 세그먼트는 404 다", async () => {
+test("🔴 라우트 — 1쪽·다른 표기 세그먼트는 404 다", {skip: ROUTE_SKIP}, async () => {
     const posts = {content: [{id: 1, slug: "a", title: "가"}], last: false};
     for (const bad of ["1", "0", "03", "2.0", "abc"]) {
         const result = await call(bad, posts);
@@ -312,7 +321,7 @@ test("🔴 라우트 — 1쪽·다른 표기 세그먼트는 404 다", async () 
  * 와서 404 였는데, 이제는 **400** 이 온다. 그것을 「모름」으로 접으면 그 주소들이 전부
  * **200 소프트 404** 로 서고 `n` 이 무한하므로 그 집합이 무한해진다.
  */
-test("🔴 라우트 — 백엔드가 거절한 쪽(400)은 404 를 던진다", async () => {
+test("🔴 라우트 — 백엔드가 거절한 쪽(400)은 404 를 던진다", {skip: ROUTE_SKIP}, async () => {
     const result = await call("501", PAGE_NOT_ADDRESSABLE);
     assert.ok("threw" in result, "400 을 받고도 200 을 냈다 — 무한한 소프트 404 주소가 선다");
     assert.ok(isNotFound(result.threw), `404 가 아닌 것을 던졌다: ${String(result.threw)}`);

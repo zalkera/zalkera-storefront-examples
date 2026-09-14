@@ -51,13 +51,13 @@ export const REQUIRED_FLOORS = {
     "src/lib/datetime.test.ts": 8,
     "src/lib/astGuards.test.ts": 16,
     "src/lib/bankTransferPolicy.test.ts": 14,
-    "scripts/lib/floors.test.mjs": 31,
+    "scripts/lib/floors.test.mjs": 41,
     "scripts/lib/gateProbe.test.mjs": 14,
     "scripts/lib/junkEntries.test.mjs": 8,
-    "scripts/lib/childEnv.test.mjs": 12,
+    "scripts/lib/childEnv.test.mjs": 13,
     "scripts/lib/vendorSet.test.mjs": 3,
     "scripts/workflow-syntax.test.mjs": 35,
-    "scripts/lib/floorGate.test.mjs": 13,
+    "scripts/lib/floorGate.test.mjs": 18,
     "scripts/lib/contentRoutes.test.mjs": 12,
     "src/lib/preview.test.ts": 4,
     "src/lib/siteVerification.test.ts": 23,
@@ -149,24 +149,75 @@ const FLOOR_SUBJECT = Object.freeze({
 });
 
 /**
+ * **한 스위트 안의 능력별 시험** — 지킬 대상이 트리에 없으면 그 시험 수만큼 하한을 낮춘다.
+ *
+ * [FLOOR_SUBJECT] 는 스위트 **전체**가 한 능력에 딸린 자리다. 여기는 스위트 하나가 여러 가드를 담고
+ * 그중 일부만 능력에 딸린 자리다 — 스위트를 통째로 걷으면 나머지 가드(`astGuards` 의 본문 렌더러·시간대
+ * 판정)까지 요구에서 빠진다. 그래서 «대상 · 그 대상을 읽는 시험 수»를 적고 **그만큼만** 낮춘다.
+ *
+ * 시안 레인 팩(`docs/mockup-to-pack.md` §2-1 ⑴)이 `src/app/blog/`·`src/components/sections/` 를 지우는데,
+ * 그 파일을 경로 그대로 읽는 시험 아홉이 있어 지운 트리가 검수에서 막혔다 — 라우트를 남겨야 검수가
+ * 서는 자리였다(고객 사이트에 시안에 없던 `/blog` 가 실렸다).
+ *
+ * ■ **대상은 디렉터리다.** 시험이 재는 것이 디렉터리 전량(섹션 14벌 · blog 의 세 라우트)이라, 파일 하나
+ *   (`SectionRenderer.tsx`)를 술어로 두면 그 파일만 지우고 나머지를 남기는 트리에서 가드가 꺼진다 —
+ *   렌더러를 다른 파일에 인라인하고 소독기를 떼도 초록이 된다. 디렉터리가 있으면 시험이 **남은 파일을
+ *   그대로 잰다**(빈 디렉터리·분모 미달·라우트 파일 부재는 red) — 없으면 낮춘다.
+ * ■ 시험 쪽은 **같은 디렉터리**로 건너뛴다(`{skip: <이유>}`). 파일이 없으면 `readFileSync` 가 던져 스위트가
+ *   실패하고, 실패는 하한을 재기 전에 러너를 멈춘다. 두 술어와 폭이 같은지는 `floors.test.mjs` 의 배선
+ *   시험이 스위트 파일을 읽어 잠근다(`const <이름>_SKIP = existsSync(…"<대상>")` 과 `{skip: <이름>}` 의 수).
+ * ■ **정본 저장소에서는 낮추지 않는다** — 프리셋 4벌의 원본이라 대상이 없을 정당한 형상이 없다. 없으면 반려.
+ * ■ 낮추는 폭은 **이 파일이 든다** — 러너가 센 skip 수가 아니다. skip 수로 낮추면 시험을 skip 으로
+ *   바꾸는 것이 곧 게이트 스위치가 된다(`floor-reporter.mjs` 가 skip 을 통과로 안 세는 이유와 같다).
+ * ■ 표가 올린 값에서도 같은 폭만큼 낮춘다 — 표는 요구를 강화하는 자리이지 대상 부재를 되돌리는
+ *   자리가 아니다.
+ * ■ 재현: skeleton zip 을 풀고 `rm -rf src/app/blog src/components/sections; node scripts/lib/floor-gate.mjs`
+ *   → rc 0 + ℹ 셋. 시험 파일과 이 판정은 **같은 판이어야 한다** — 시험에 건너뛰는 술어가 없으면 `ENOENT` 로
+ *   「시험이 실패했습니다(하한을 재기 전입니다)」가 먼저 서고, 판정에 이 표가 없으면 「하한 미달」이 선다.
+ */
+export const FLOOR_SUBJECT_PARTIAL = Object.freeze({
+    "src/lib/astGuards.test.ts": Object.freeze([
+        {subject: "src/app/blog", tests: 3},
+        {subject: "src/components/sections", tests: 1},
+    ]),
+    "src/lib/blogListRender.test.ts": Object.freeze([{subject: "src/app/blog", tests: 5}]),
+});
+
+/**
  * zip 의 하한표를 요구치와 합친다.
  *
  * @param floors  zip 에서 읽은 표(`null` 이면 못 읽은 것)
  * @param exists  스위트 파일이 트리에 있는지 묻는 함수 `(relPath) => boolean`
- * @returns `{bad, effective, skipped}` — `bad` 가 비어 있지 않으면 반려. `skipped` 는 대상 부재로
- *          요구를 걷은 스위트(호출부가 **출력해야 한다**).
+ * @param partial 능력별 부분 선언표 — 기본은 [FLOOR_SUBJECT_PARTIAL]. 시험이 틀린 표를 넣어 방어를 잰다
+ * @returns `{bad, effective, skipped, reduced}` — `bad` 가 비어 있지 않으면 반려. `skipped` 는 대상 부재로
+ *          요구를 걷은 스위트, `reduced` 는 대상 부재로 하한을 낮춘 자리([FLOOR_SUBJECT_PARTIAL]) —
+ *          둘 다 호출부가 **출력해야 한다**.
  */
-export function judgeFloors(floors, exists) {
+export function judgeFloors(floors, exists, partial = FLOOR_SUBJECT_PARTIAL) {
     const bad = [];
     // 정본 저장소면 팩에 안 실리는 것까지 요구한다. 팩 트리에서는 요구하지 않는다 — 거기 없는
     // 파일을 요구하면 멀쩡한 팩이 「가드 미달」이라는 틀린 사유로 막힌다.
-    const required = isCanonicalRepo(exists) ? {...REQUIRED_FLOORS, ...REPO_ONLY_FLOORS} : {...REQUIRED_FLOORS};
+    const canonical = isCanonicalRepo(exists);
+    const required = canonical ? {...REQUIRED_FLOORS, ...REPO_ONLY_FLOORS} : {...REQUIRED_FLOORS};
     // 지킬 대상이 없는 가드는 요구에서 걷는다(위 [FLOOR_SUBJECT]). 걷은 자리는 호출부가 찍는다.
     const skipped = [];
     for (const [suite, subject] of Object.entries(FLOOR_SUBJECT)) {
         if (suite in required && !exists(subject)) {
             delete required[suite];
             skipped.push({suite, subject});
+        }
+    }
+    // 스위트 일부만 능력에 딸린 자리 — 대상이 없는 만큼만 낮춘다(위 [FLOOR_SUBJECT_PARTIAL]). 적용은
+    // 표를 합친 **뒤**다(아래) — 표가 올린 값도 같은 폭만큼 낮아야 한다.
+    // ⚠ 정본 저장소에서는 낮추지 않고 **반려**한다 — 프리셋 4벌의 원본이라 대상이 없을 정당한 형상이
+    //    없고, 여기서 낮추면 정본 CI 가 초록인 채로 4벌의 가드가 사라진다.
+    const reduced = [];
+    for (const [suite, parts] of Object.entries(partial)) {
+        if (!(suite in required)) continue;
+        for (const {subject, tests} of parts) {
+            if (exists(subject)) continue;
+            if (canonical) bad.push(`${subject} 가 정본에 없습니다 — ${suite} 의 능력별 시험을 걷을 자리가 아닙니다`);
+            else reduced.push({suite, subject, tests});
         }
     }
     const effective = {...required};
@@ -182,6 +233,7 @@ export function judgeFloors(floors, exists) {
             bad: [`하한표가 객체가 아닙니다(${what}) — 요구 ${Object.keys(required).length}개를 잴 수 없습니다`],
             effective: {},
             skipped,
+            reduced,
         };
     }
 
@@ -216,6 +268,16 @@ export function judgeFloors(floors, exists) {
     //   절반만 걸린 상태다(실측으로 밟았다).
     //   재현: 대상 없는 트리에서 `node scripts/lib/floor-gate.mjs` → `통과 0건(하한 11)`
     for (const {suite} of skipped) delete effective[suite];
+    for (const {suite, tests} of reduced) {
+        if (!(suite in effective)) continue;
+        // 폭이 하한을 삼키면 그 스위트가 무요구가 된다 — 조용히 0 으로 접지 않고 반려한다(표 오기재는
+        // 정본 시험 ⑤ 가 잠그지만, 판정 자리에서도 시끄럽게 선다).
+        if (effective[suite] - tests <= 0) {
+            bad.push(`${suite} 의 낮추는 폭 ${tests} 이 하한 ${effective[suite]} 을 삼킵니다 — 선언표가 틀렸습니다`);
+            continue;
+        }
+        effective[suite] -= tests;
+    }
 
     // 요구 스위트 파일이 없으면 반려.
     for (const f of Object.keys(required)) {
@@ -230,5 +292,31 @@ export function judgeFloors(floors, exists) {
         bad.push(`하한표 항목이 ${listed}개입니다 — 비었거나 지워졌습니다(요구 ${want}개)`);
     }
 
-    return {bad, effective, skipped};
+    return {bad, effective, skipped, reduced};
+}
+
+/**
+ * 게이트가 완화 문장을 찍을 때 앞에 붙이는 접두. `floor-gate`(찍는 쪽)와 `verify-zip`(그 줄 집합을 판정과 대조하는
+ * 쪽)이 **같은 값**을 써야 한다 — 한쪽만 바뀌면 대상을 지운 멀쩡한 팩이 전부 「문장 불일치」로 반려된다.
+ */
+export const EASE_PREFIX = "ℹ 가드 회귀 스위트 — ";
+
+/**
+ * [judgeFloors] 의 판정(`{skipped, reduced}`)을 **사람이 읽는 문장**으로. `floor-gate` 가 이 문장을 ℹ 줄로 찍고,
+ * `verify-zip` 은 같은 함수를 자기 프로세스에서 게이트 앞뒤로 불러 ⑴ 앞뒤가 같고 ⑵ 게이트가 스스로 찍은 ℹ 줄
+ * 집합과도 같을 때만 앞 판정을 ✅ 줄에 싣는다 — 게이트의 출력·파일을 문면의 출처로 쓰지 않고(zip 의 시험이 흉내
+ * 내거나 덮을 수 있다), 어긋나는 zip 은 반려한다. 판정 자체(rc·하한)는 게이트가 이미 집행했다 — 여기는 보고 문면뿐이다.
+ *
+ * 형태가 아니면 빈 목록(방어) — 호출부가 판정을 못 얻은 경우는 호출부가 반려한다.
+ *
+ * @param judgment [judgeFloors] 가 돌려준 객체
+ */
+export function easeNotes(judgment) {
+    if (!judgment || typeof judgment !== "object") return [];
+    const skipped = Array.isArray(judgment.skipped) ? judgment.skipped : [];
+    const reduced = Array.isArray(judgment.reduced) ? judgment.reduced : [];
+    return [
+        ...skipped.map((e) => `${e.suite} 는 요구하지 않습니다: ${e.subject} 가 이 트리에 없습니다`),
+        ...reduced.map((e) => `${e.suite} 의 하한을 ${e.tests} 낮춥니다: ${e.subject} 가 이 트리에 없습니다`),
+    ];
 }

@@ -148,6 +148,24 @@ test("하한표의 키를 argv 로 넘기지 않는다", () => {
     assert.match(gate.call, /join\(HERE,/, `러너 자신의 게이트가 아니라 zip 의 사본을 부른다:\n${gate.call}`);
 });
 
+test("완화 문면(걷은·낮춘 자리)은 게이트의 출력·파일이 아니라 자기 `judgeFloors` 로 얻는다", () => {
+    // zip 의 시험은 게이트 자식 러너 안에서 돌고 그 출력이 게이트 stdout 에 섞인다 — 같은 접두의 줄을 찍으면
+    // 거짓 완화 문장이 ✅ 줄에 실리고, 파일로 넘기면 시험이(지연 프로세스로도) 덮는다. 그래서 verify-zip 은
+    // 같은 함수를 자기 프로세스에서 불러 값으로 얻는다. 이 시험이 무는 것: 누군가 stdout 걸러내기·판정 파일을 되살리면.
+    assert.match(RUNNER, /import \{[^}]*\bjudgeFloors\b[^}]*\} from "\.\/lib\/floors\.mjs"/, "verify-zip 이 자기 judgeFloors 를 안 가져온다");
+    assert.match(RUNNER, /return judgeFloors\(declared, /, "판정을 judgeFloors 로 만드는 자리가 없다(상수로 갈아 끼웠는가)");
+    assert.match(RUNNER, /easeKey\(verdict\) !== easeKey\(after\)/, "게이트 전후 판정을 대조하는 자리가 없다 — 지연 프로세스가 대상 디렉터리를 만들면 문면이 갈린다");
+    assert.match(RUNNER, /easeNotes\(verdict\)/, "완화 문면을 judgeFloors 의 판정(verdict)으로 만들지 않는다");
+    assert.doesNotMatch(RUNNER, /--judgment|floor-judgment/, "게이트의 파일에서 완화 문면을 읽는 자리가 되살아났다");
+    // stdout 은 **반려 용도로만** — 게이트가 스스로 찍은 ℹ 줄 집합이 판정과 다르면 반려. ✅ 문면의 출처(`easeNotes(`)는
+    // `verdict` 하나뿐이어야 한다.
+    assert.match(RUNNER, /sameSet\(gateEase\(out\), easeNotes\(verdict\)\)/, "게이트의 ℹ 줄 집합과 판정을 대조하는 자리가 없다");
+    // 접두는 게이트와 **한 상수**를 나눠 쓴다 — 리터럴 사본이 한쪽만 바뀌면 대상을 지운 멀쩡한 팩이 전부 반려된다.
+    assert.match(RUNNER, /startsWith\(EASE_PREFIX\)/, "게이트 ℹ 줄을 EASE_PREFIX 로 고르지 않는다");
+    assert.doesNotMatch(RUNNER, /"ℹ 가드 회귀 스위트/, "접두 리터럴 사본이 있다 — floors.mjs 의 EASE_PREFIX 를 쓰라");
+    assert.deepEqual(RUNNER.match(/easeNotes\(\w+\)/g), ["easeNotes(verdict)", "easeNotes(verdict)"], "easeNotes 의 입력이 verdict 가 아닌 자리가 있다");
+});
+
 // ── 규율의 **실물**을 문다 ─────────────────────────────────────────────────
 //
 // 위 시험들은 규율을 **베껴 적은 사본**(`clean()`)을 잰다. 사본은 넷 중 둘만 지웠고, 나머지 둘을

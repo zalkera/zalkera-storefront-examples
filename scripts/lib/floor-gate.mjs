@@ -33,13 +33,14 @@ import {tmpdir} from "node:os";
 import {dirname, join, relative, resolve} from "node:path";
 import {fileURLToPath} from "node:url";
 import {childEnv} from "./childEnv.mjs";
-import {isCanonicalRepo, judgeFloors, REQUIRED_FLOORS} from "./floors.mjs";
+import {EASE_PREFIX, easeNotes, isCanonicalRepo, judgeFloors, REQUIRED_FLOORS} from "./floors.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 // ⚠ **실경로로 맞춘다.** node 러너는 시험 파일을 realpath 로 보고한다. 뿌리에 심링크가 끼어 있으면
 //   (`TMPDIR` 이 심링크인 박스·macOS 의 `/tmp`) `relative(root, file)` 이 전부 어긋나 **12개 스위트가
 //   통째로 «통과 0건»으로 오반려**된다 — 멀쩡한 팩을 «고객 가드가 미달»이라는 틀린 사유로 막는다.
-const root = realpathSync(resolve(process.argv[2] ?? "."));
+const argv = process.argv.slice(2);
+const root = realpathSync(resolve(argv.find((a) => !a.startsWith("--")) ?? "."));
 const REPORTER = join(HERE, "floor-reporter.mjs");
 
 /** zip 이 든 표. 못 읽으면 `null` — 요구치는 그래도 산다. */
@@ -56,12 +57,17 @@ try {
     process.exit(e.code === "ENOENT" ? 1 : 2);
 }
 
-const {bad, effective, skipped} = judgeFloors(declared, (f) => existsSync(join(root, f)));
-// ⚠ **건너뛴 자리는 반드시 찍는다.** 조용히 넘어가면 「대상을 지워 가드를 끈다」가 무비용이 된다.
-for (const {suite, subject} of skipped) {
-    console.log(`ℹ 가드 회귀 스위트 — ${suite} 는 요구하지 않습니다: ${subject} 가 이 트리에 없습니다.`);
-}
+const {bad, effective, skipped, reduced} = judgeFloors(declared, (f) => existsSync(join(root, f)));
+// ⚠ **건너뛴 자리·낮춘 자리는 반드시 찍는다.** 조용히 넘어가면 「대상을 지워 가드를 끈다」가 무비용이 된다.
+//    시험 출력 **뒤**에 찍는다(아래 `printEased`) — 앞에 찍으면 스크롤 위로 사라진다. 이 출력은 사람용이다 —
+//    판정을 값으로 쓰는 쪽은 같은 `judgeFloors` 를 자기 프로세스에서 얻는다(출력·파일은 zip 의 시험이
+//    흉내 내거나 덮을 수 있다).
+const printEased = () => {
+    // 서식은 `easeNotes` 하나다 — `verify-zip` 이 이 줄 집합을 자기 판정의 문장 집합과 대조한다(다르면 반려).
+    for (const line of easeNotes({skipped, reduced})) console.log(`${EASE_PREFIX}${line}`);
+};
 if (bad.length) {
+    printEased();
     console.error("❌ 가드 회귀 스위트 — 하한표가 판정을 통과하지 못했습니다:");
     for (const b of bad) console.error(`   · ${b}`);
     process.exit(1);
@@ -98,6 +104,7 @@ const r = spawnSync(
 );
 if (r.status !== 0) {
     rmSync(tallyDir, {recursive: true, force: true});
+    printEased(); // 「낮춘 뒤에도 실패」를 읽을 때 무엇이 걷혔는지 같이 보이게
     console.error("❌ 가드 회귀 스위트 — 시험이 실패했습니다(하한을 재기 전입니다).");
     process.exit(1);
 }
@@ -125,6 +132,7 @@ if (counted.size === 0) {
     console.error("❌ 가드 회귀 스위트 — 통과 수를 한 건도 못 읽었습니다(통과가 아닙니다).");
     process.exit(2);
 }
+printEased();
 
 // ⚠ **표 밖의 스위트를 남기지 않는다.** 표에 없으면 하한이 없고, 하한이 없으면 그 스위트는
 //   **조용히 지울 수 있다.** 팩 관문·팩 매니페스트처럼 배송을 막는 판정을 재는 것이 그 상태로
