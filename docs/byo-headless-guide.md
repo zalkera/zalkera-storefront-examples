@@ -61,6 +61,12 @@ export const zalkera = createZalkeraClient({
 동의와 함께 계정이 생깁니다. 별도 이메일/비번 가입은 없습니다. 소셜 앱(client_id)은 잘커라 콘솔에서
 당신 테넌트에 등록하고, 프론트엔드 env(`NEXT_PUBLIC_*_CLIENT_ID`)에 public client_id를 넣습니다.
 
+**콜백에서 `socialLogin` 을 바로 부르지 마세요.** 인가 요청을 보내기 전에 서버가 추측할 수 없는 `state` 를
+만들어 httpOnly 쿠키(`sameSite: "lax"` · 짧은 수명)에 심고, 콜백에서 받은 `state` 가 그 쿠키와 같을 때만 교환하며,
+대조 결과와 무관하게 쿠키는 그 자리에서 지웁니다(1회용). 빠뜨리면 공격자가 자기 계정 세션을 피해자 브라우저에
+심을 수 있습니다. 규칙의 정본은 `@zalkera/client` 의 `llms.txt` 「커머스 — 고객 인증(소셜)」이고, 시작 소스 팩은
+`src/lib/oauthState.ts`·`exchangeSocialLogin` 으로 이미 그렇게 묶여 있습니다 — 자기 소스에서 시작한다면 같은 꼴로 두세요.
+
 ## 5. 도메인 — 자기 호스팅이면 잘커라 서빙을 안 탑니다
 
 **중요(오해 방지)**: 당신이 자기 인프라(Vercel·자기 서버 등)에 배포하면, 트래픽은 당신 호스팅으로
