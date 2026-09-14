@@ -76,6 +76,7 @@ import {basename, join, relative, resolve} from "node:path";
 import {tmpdir} from "node:os";
 import {fileURLToPath} from "node:url";
 import {childEnv} from "./lib/childEnv.mjs";
+import {easeNotes} from "./lib/floors.mjs";
 import {probeDevCompile} from "./lib/devCompile.mjs";
 import {junkTopLevel} from "./lib/junkEntries.mjs";
 import {SECRET_CONTENT} from "./lib/secret-content.mjs";
@@ -1261,7 +1262,10 @@ try {
                 } else {
                     // 경로를 **호출 자리에** 둔다 — 변수로 빼면 「러너 자신의 것을 쓰는가」를 재는
                     // 시험이 그 자리를 못 본다(실측: 못 찾아 반려했다).
-                    const t = spawnSync("node", [join(HERE, "lib", "floor-gate.mjs"), root], {
+                    // 판정(걷은 스위트·낮춘 자리)은 **값으로** 받는다(`--judgment`). stdout 을 걸러 옮기면 zip 의
+                    // 시험이 같은 접두의 줄을 찍어 ✅ 줄에 거짓 완화 문장을 실을 수 있다(자식 러너의 출력이 섞인다).
+                    const judgment = join(work, "floor-judgment.json");
+                    const t = spawnSync("node", [join(HERE, "lib", "floor-gate.mjs"), root, `--judgment=${judgment}`], {
                         cwd: root,
                         encoding: "utf8",
                         env: childEnv(BUILD_ENV),
@@ -1279,12 +1283,16 @@ try {
                     } else {
                         // 게이트가 낸 마지막 줄을 그대로 옮긴다 — 개수를 여기서 다시 세면 사본이 갈린다.
                         const said = out.trim().split("\n").filter(Boolean).at(-1) ?? "스위트별 하한 통과";
-                        // ⚠ 게이트가 요구를 걷거나 낮춘 자리(ℹ 줄)는 **여기서도 말한다** — 마지막 줄만 옮기면
+                        // ⚠ 게이트가 요구를 걷거나 낮춘 자리는 **여기서도 말한다** — 마지막 줄만 옮기면
                         //    「대상이 없어 안 쟀다」가 ✅ 한 줄 뒤에 숨는다(건너뛰면 반드시 말한다 — floors.mjs).
-                        const eased = out
-                            .split("\n")
-                            .filter((l) => l.startsWith("ℹ 가드 회귀 스위트 — "))
-                            .map((l) => l.replace(/^ℹ 가드 회귀 스위트 — /, ""));
+                        //    판정 파일이 없으면(옛 게이트) 완화도 없었던 것이다 — 빈 목록.
+                        let parsed = null;
+                        try {
+                            parsed = JSON.parse(readFileSync(judgment, "utf8"));
+                        } catch {
+                            parsed = null;
+                        }
+                        const eased = easeNotes(parsed);
                         record("가드 회귀 스위트", true, [said.replace(/^✅\s*/, ""), ...eased].join(" · "));
                     }
                 }

@@ -28,7 +28,7 @@
  * 사용: `node scripts/lib/floor-gate.mjs [트리]`
  */
 import {spawnSync} from "node:child_process";
-import {existsSync, mkdtempSync, readFileSync, realpathSync, rmSync} from "node:fs";
+import {existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {dirname, join, relative, resolve} from "node:path";
 import {fileURLToPath} from "node:url";
@@ -39,7 +39,12 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 // ⚠ **실경로로 맞춘다.** node 러너는 시험 파일을 realpath 로 보고한다. 뿌리에 심링크가 끼어 있으면
 //   (`TMPDIR` 이 심링크인 박스·macOS 의 `/tmp`) `relative(root, file)` 이 전부 어긋나 **12개 스위트가
 //   통째로 «통과 0건»으로 오반려**된다 — 멀쩡한 팩을 «고객 가드가 미달»이라는 틀린 사유로 막는다.
-const root = realpathSync(resolve(process.argv[2] ?? "."));
+// 인자: `[<root>] [--judgment=<파일>]`. `--judgment` 가 있으면 판정(걷은 스위트·낮춘 자리)을 JSON 으로 그 파일에
+// 쓴다 — `verify-zip` 이 이것을 읽는다. stdout 문자열로 넘기면 zip 의 시험이 같은 접두의 줄을 찍어 ✅ 줄에
+// 거짓 완화 문장을 실을 수 있다(자식 러너의 출력이 이 stdout 에 섞인다 — 심의 실측).
+const argv = process.argv.slice(2);
+const judgmentOut = argv.find((a) => a.startsWith("--judgment="))?.slice("--judgment=".length) ?? null;
+const root = realpathSync(resolve(argv.find((a) => !a.startsWith("--")) ?? "."));
 const REPORTER = join(HERE, "floor-reporter.mjs");
 
 /** zip 이 든 표. 못 읽으면 `null` — 요구치는 그래도 산다. */
@@ -57,14 +62,20 @@ try {
 }
 
 const {bad, effective, skipped, reduced} = judgeFloors(declared, (f) => existsSync(join(root, f)));
+if (judgmentOut) writeFileSync(judgmentOut, JSON.stringify({skipped, reduced}, null, 2) + "\n");
 // ⚠ **건너뛴 자리·낮춘 자리는 반드시 찍는다.** 조용히 넘어가면 「대상을 지워 가드를 끈다」가 무비용이 된다.
-for (const {suite, subject} of skipped) {
-    console.log(`ℹ 가드 회귀 스위트 — ${suite} 는 요구하지 않습니다: ${subject} 가 이 트리에 없습니다.`);
-}
-for (const {suite, subject, tests} of reduced) {
-    console.log(`ℹ 가드 회귀 스위트 — ${suite} 의 하한을 ${tests} 낮춥니다: ${subject} 가 이 트리에 없습니다.`);
-}
+//    시험 출력 **뒤**에 찍는다(아래 `printEased`) — 앞에 찍으면 스크롤 위로 사라지고, 판정을 값으로
+//    받는 쪽은 `--judgment` 를 읽는다.
+const printEased = () => {
+    for (const {suite, subject} of skipped) {
+        console.log(`ℹ 가드 회귀 스위트 — ${suite} 는 요구하지 않습니다: ${subject} 가 이 트리에 없습니다.`);
+    }
+    for (const {suite, subject, tests} of reduced) {
+        console.log(`ℹ 가드 회귀 스위트 — ${suite} 의 하한을 ${tests} 낮춥니다: ${subject} 가 이 트리에 없습니다.`);
+    }
+};
 if (bad.length) {
+    printEased();
     console.error("❌ 가드 회귀 스위트 — 하한표가 판정을 통과하지 못했습니다:");
     for (const b of bad) console.error(`   · ${b}`);
     process.exit(1);
@@ -128,6 +139,7 @@ if (counted.size === 0) {
     console.error("❌ 가드 회귀 스위트 — 통과 수를 한 건도 못 읽었습니다(통과가 아닙니다).");
     process.exit(2);
 }
+printEased();
 
 // ⚠ **표 밖의 스위트를 남기지 않는다.** 표에 없으면 하한이 없고, 하한이 없으면 그 스위트는
 //   **조용히 지울 수 있다.** 팩 관문·팩 매니페스트처럼 배송을 막는 판정을 재는 것이 그 상태로

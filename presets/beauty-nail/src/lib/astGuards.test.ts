@@ -352,15 +352,21 @@ function callsFunction(sf: TS.SourceFile, name: string): boolean {
 }
 
 // 블로그 라우트·프리셋 섹션을 걷은 트리(시안 레인 — `docs/mockup-to-pack.md` §2-1 ⑴)에서는 그 파일을 읽는
-// 시험을 요구하지 않는다. 지킬 대상이 없으면 지킬 약속도 없다 — 하한도 같은 경로로 같은 수만큼 낮아진다
-// (`scripts/lib/floors.mjs` 의 FLOOR_SUBJECT_PARTIAL). 술어는 **자기 트리**(`PACK_SRCS[0]`)만 본다 — 정본
-// 저장소에서는 늘 있어 다섯 벌을 전부 잰다. ⚠ 건너뛰면 반드시 말한다.
-const BLOG_SKIP = existsSync(join(PACK_SRCS[0]![1], "app/blog/page.tsx"))
-    ? false
-    : "블로그 라우트가 이 트리에 없다 — 지킬 대상이 없어 건너뜀(하한도 같은 수만큼 낮아진다)";
-const SECTIONS_SKIP = existsSync(join(PACK_SRCS[0]![1], "components/sections/SectionRenderer.tsx"))
-    ? false
-    : "프리셋 섹션이 이 트리에 없다 — 지킬 대상이 없어 건너뜀(하한도 같은 수만큼 낮아진다)";
+// 시험을 요구하지 않는다. 지킬 대상이 없으면 지킬 약속도 없다 — 하한도 같은 대상으로 같은 수만큼 낮아진다
+// (`scripts/lib/floors.mjs` 의 FLOOR_SUBJECT_PARTIAL — 술어·폭이 같은지는 `floors.test.mjs` 배선 시험이 잠근다).
+// ⚠ 술어는 **디렉터리**다 — 파일 하나(`SectionRenderer.tsx`)로 두면 그 파일만 지우고 나머지 섹션을 남긴
+//    트리에서 디렉터리 전량을 재는 소독기 시험이 꺼진다. 디렉터리가 있으면 시험이 돌고, 일부만 남긴
+//    디렉터리는 시험이 red 로 닫는다.
+// ⚠ 정본 저장소에서는 켜지지 않는다 — 프리셋 4벌의 원본이라 대상이 없을 정당한 형상이 없고, 없으면
+//    `readFileSync` 가 ENOENT 로 시끄럽게 죽는 것이 맞다. ⚠ 건너뛰면 반드시 말한다.
+const BLOG_SKIP =
+    CANONICAL || existsSync(join(PACK_SRCS[0]![1], "app/blog"))
+        ? false
+        : "블로그 라우트가 이 트리에 없다 — 지킬 대상이 없어 건너뜀(하한도 같은 수만큼 낮아진다)";
+const SECTIONS_SKIP =
+    CANONICAL || existsSync(join(PACK_SRCS[0]![1], "components/sections"))
+        ? false
+        : "프리셋 섹션이 이 트리에 없다 — 지킬 대상이 없어 건너뜀(하한도 같은 수만큼 낮아진다)";
 
 test("블로그 상세 5벌이 본문을 `Markdown` 으로 그린다 — 평문 복귀를 잡는다", {skip: BLOG_SKIP}, () => {
     const copies = packCopies("app/blog/[slug]/page.tsx");

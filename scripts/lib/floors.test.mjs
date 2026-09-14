@@ -13,7 +13,15 @@ import {mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, existsSync}
 import {dirname, join} from "node:path";
 import {tmpdir} from "node:os";
 import {fileURLToPath} from "node:url";
-import {judgeFloors, REQUIRED_FLOORS, REPO_ONLY_FLOORS, FLOOR_KEY_REGEX, FLOOR_SUBJECT_PARTIAL, isCanonicalRepo} from "./floors.mjs";
+import {
+    judgeFloors,
+    REQUIRED_FLOORS,
+    REPO_ONLY_FLOORS,
+    FLOOR_KEY_REGEX,
+    FLOOR_SUBJECT_PARTIAL,
+    easeNotes,
+    isCanonicalRepo,
+} from "./floors.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -414,33 +422,37 @@ test("키 형태가 받는 확장자를 러너의 글롭이 전부 돈다", () =
  *
  * 시안 레인 팩이 `src/app/blog`·`src/components/sections` 를 지우면 `astGuards`(16 중 4)·`blogListRender`(13 중 5)가
  * 그 파일을 읽는 시험을 건너뛰는데, 스위트 전체를 걷으면 나머지 가드(본문 렌더러·시간대)까지 요구에서 빠진다.
- * 그래서 폭을 선언하고 그만큼만 낮춘다. 아래가 함께 서야 완화가 구멍이 아니다.
+ * 그래서 폭을 선언하고 그만큼만 낮춘다. 아래가 함께 서야 완화가 구멍이 아니다. 완화는 **팩 트리**의 것이다 —
+ * 정본에서는 대상이 없을 정당한 형상이 없어 반려한다.
  */
 {
     const AST = "src/lib/astGuards.test.ts";
     const BLOG_LIST = "src/lib/blogListRender.test.ts";
-    const BLOG_PAGE = "src/app/blog/page.tsx";
-    const BLOG_ROUTE = "src/app/blog/page/[n]/page.tsx";
-    const SECTIONS = "src/components/sections/SectionRenderer.tsx";
-    const tree = (drop = []) => (f) => !drop.includes(f);
+    const BLOG = "src/app/blog";
+    const SECTIONS = "src/components/sections";
+    /** 팩 트리(정본 표식 없음)에서 `drop` 만 없는 술어. */
+    const tree = (drop = []) => (f) => packTree(f) && !drop.includes(f);
+    /** 정본 트리에서 `drop` 만 없는 술어. */
+    const canonicalTree = (drop = []) => (f) => !drop.includes(f);
+    const packTable = () => ({...REQUIRED_FLOORS});
 
     test("① 대상이 전부 있으면 낮추지 않는다", () => {
-        const {bad, effective, reduced} = judgeFloors(ok(), tree());
-        assert.equal(bad.length, 0);
+        const {bad, effective, reduced} = judgeFloors(packTable(), tree());
+        assert.equal(bad.length, 0, bad.join(" · "));
         assert.equal(reduced.length, 0);
         assert.equal(effective[AST], REQUIRED_FLOORS[AST]);
         assert.equal(effective[BLOG_LIST], REQUIRED_FLOORS[BLOG_LIST]);
     });
 
     test("② 대상이 없으면 선언한 수만큼만 낮추고 **낮췄다고 말한다** — 스위트는 요구에 남는다", () => {
-        const {bad, effective, reduced} = judgeFloors(ok(), tree([BLOG_PAGE, BLOG_ROUTE, SECTIONS]));
+        const {bad, effective, reduced} = judgeFloors(packTable(), tree([BLOG, SECTIONS]));
         assert.equal(bad.length, 0, bad.join(" · "));
         assert.deepEqual(
             reduced.map((r) => [r.suite, r.subject, r.tests]),
             [
-                [AST, BLOG_PAGE, 3],
+                [AST, BLOG, 3],
                 [AST, SECTIONS, 1],
-                [BLOG_LIST, BLOG_ROUTE, 5],
+                [BLOG_LIST, BLOG, 5],
             ],
         );
         assert.equal(effective[AST], REQUIRED_FLOORS[AST] - 4);
@@ -449,26 +461,26 @@ test("키 형태가 받는 확장자를 러너의 글롭이 전부 돈다", () =
     });
 
     test("②-b 대상 하나만 없으면 그 폭만 낮춘다", () => {
-        const {effective, reduced} = judgeFloors(ok(), tree([SECTIONS]));
+        const {effective, reduced} = judgeFloors(packTable(), tree([SECTIONS]));
         assert.deepEqual(reduced.map((r) => r.subject), [SECTIONS]);
         assert.equal(effective[AST], REQUIRED_FLOORS[AST] - 1);
         assert.equal(effective[BLOG_LIST], REQUIRED_FLOORS[BLOG_LIST]);
     });
 
     test("③ 표가 올린 값에서도 같은 폭만큼 낮춘다 — 표는 요구를 강화하는 자리이지 부재를 되돌리는 자리가 아니다", () => {
-        const table = {...ok(), [AST]: REQUIRED_FLOORS[AST] + 10};
-        const {bad, effective} = judgeFloors(table, tree([BLOG_PAGE, SECTIONS]));
+        const table = {...packTable(), [AST]: REQUIRED_FLOORS[AST] + 10};
+        const {bad, effective} = judgeFloors(table, tree([BLOG, SECTIONS]));
         assert.equal(bad.length, 0, bad.join(" · "));
         assert.equal(effective[AST], REQUIRED_FLOORS[AST] + 10 - 4);
     });
 
     test("④ 대상은 두고 시험 파일만 지우면 여전히 반려한다", () => {
-        const {bad, reduced} = judgeFloors(ok(), tree([AST]));
+        const {bad, reduced} = judgeFloors(packTable(), tree([AST]));
         assert.equal(reduced.length, 0);
         assert.ok(bad.some((b) => b.includes(AST)), bad.join(" · "));
     });
 
-    test("⑤ 선언표는 요구 스위트만 가리키고 폭은 그 하한을 넘지 않는다 — 넘으면 하한이 음수로 무너진다", () => {
+    test("⑤ 선언표는 요구 스위트만 가리키고 폭은 그 하한을 넘지 않는다 — 넘으면 하한이 무너진다", () => {
         for (const [suite, parts] of Object.entries(FLOOR_SUBJECT_PARTIAL)) {
             assert.ok(suite in REQUIRED_FLOORS, `${suite} 는 요구 스위트가 아니다`);
             const total = parts.reduce((n, p) => n + p.tests, 0);
@@ -476,7 +488,58 @@ test("키 형태가 받는 확장자를 러너의 글롭이 전부 돈다", () =
             for (const {subject, tests} of parts) {
                 assert.ok(Number.isInteger(tests) && tests > 0, `${suite}: ${subject} 의 폭이 양의 정수가 아니다`);
                 assert.ok(!subject.endsWith(".test.ts"), `${suite}: 대상이 시험 파일이다 — 대상은 지킬 소스여야 한다`);
+                assert.ok(!/\.[a-z]+$/.test(subject), `${suite}: 대상 ${subject} 이 파일이다 — 파일 하나를 술어로 두면 그 파일만 지우고 나머지를 남긴 트리에서 가드가 꺼진다(디렉터리여야 한다)`);
             }
         }
+    });
+
+    test("⑥ 정본 저장소에서는 낮추지 않고 반려한다 — 프리셋 4벌의 원본에 대상이 없을 정당한 형상이 없다", () => {
+        const {bad, reduced} = judgeFloors(ok(), canonicalTree([BLOG]));
+        assert.equal(reduced.length, 0, "정본에서 낮췄다");
+        assert.ok(bad.some((b) => b.includes(BLOG) && b.includes("정본")), bad.join(" · "));
+        // 양성 짝 — 대상이 있으면 정본도 조용하다.
+        const fine = judgeFloors(ok(), canonicalTree());
+        assert.equal(fine.bad.length, 0, fine.bad.join(" · "));
+    });
+
+    test("⑦ 폭이 하한을 삼키면 판정 자리에서도 반려한다 — 조용히 0 으로 접지 않는다", () => {
+        // 선언표를 틀리게 넣는다(정본 시험 ⑤ 가 막는 형상) — 판정에도 같은 방어가 있어야 표 오기재가 무요구로 안 접힌다.
+        const wrong = {[AST]: [{subject: BLOG, tests: REQUIRED_FLOORS[AST]}]};
+        const {bad, effective} = judgeFloors(packTable(), tree([BLOG]), wrong);
+        assert.ok(bad.some((b) => b.includes(AST) && b.includes("삼킵니다")), bad.join(" · "));
+        assert.equal(effective[AST], REQUIRED_FLOORS[AST], "삼키는 폭이 그래도 빠졌다");
+        // 양성 짝 — 하한보다 하나 작은 폭은 통과하고 그만큼 빠진다.
+        const edge = {[AST]: [{subject: BLOG, tests: REQUIRED_FLOORS[AST] - 1}]};
+        const r = judgeFloors(packTable(), tree([BLOG]), edge);
+        assert.equal(r.bad.length, 0, r.bad.join(" · "));
+        assert.equal(r.effective[AST], 1);
+    });
+
+    test("⑧ 배선 — 시험 파일의 skip 술어가 선언표와 같은 대상을 보고, {skip} 시험 수가 선언 폭과 같다", () => {
+        // 정본에서는 skip 경로를 한 번도 밟지 않으므로(대상이 늘 있다) 두 계약이 갈려도 정본은 초록이다 —
+        // 그래서 문면으로 잠근다. 토큰이 고정이라(`const <이름>_SKIP = … existsSync(…"<대상>")` · `{skip: <이름>}`)
+        // 계수로 충분하다.
+        const root = join(HERE, "..", "..");
+        for (const [suite, parts] of Object.entries(FLOOR_SUBJECT_PARTIAL)) {
+            const text = readFileSync(join(root, suite), "utf8");
+            for (const {subject, tests} of parts) {
+                const rel = subject.replace(/^src\//, "");
+                const m = text.match(new RegExp(`const (\\w+_SKIP) =[^;]*existsSync\\([^;]*"${rel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`));
+                assert.ok(m, `${suite}: ${subject} 를 묻는 \`const <이름>_SKIP = … existsSync(…"${rel}")\` 가 없다`);
+                const name = m[1];
+                const uses = text.match(new RegExp(`\\{skip: ${name}\\}`, "g")) ?? [];
+                assert.equal(uses.length, tests, `${suite}: {skip: ${name}} 시험이 ${uses.length}건인데 선언 폭은 ${tests}`);
+            }
+        }
+    });
+
+    test("⑨ easeNotes — 판정 객체를 문장으로, 형태가 아니면 빈 목록", () => {
+        assert.deepEqual(easeNotes(null), []);
+        assert.deepEqual(easeNotes("문자열"), []);
+        assert.deepEqual(easeNotes({}), []);
+        assert.deepEqual(
+            easeNotes({skipped: [{suite: "s", subject: "t"}], reduced: [{suite: AST, subject: BLOG, tests: 3}]}),
+            ["s 는 요구하지 않습니다: t 가 이 트리에 없습니다", `${AST} 의 하한을 3 낮춥니다: ${BLOG} 가 이 트리에 없습니다`],
+        );
     });
 }

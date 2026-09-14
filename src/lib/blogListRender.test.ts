@@ -234,11 +234,14 @@ test("글이 있으면 ItemList 그래프를 낸다", async () => {
 
 const ROUTE = "app/blog/page/[n]/page";
 // 블로그 라우트를 걷은 트리(시안 레인 — `docs/mockup-to-pack.md` §2-1 ⑴)에서는 아래 라우트 시험을 요구하지 않는다.
-// 지킬 대상이 없으면 지킬 약속도 없다 — 하한도 같은 경로로 같은 수만큼 낮아진다(`scripts/lib/floors.mjs`
-// 의 FLOOR_SUBJECT_PARTIAL). ⚠ 건너뛰면 반드시 말한다 — 조용히 넘어가면 그것이 곧 게이트 스위치가 된다.
-const ROUTE_SKIP = existsSync(join(SRC, `${ROUTE}.tsx`))
-    ? false
-    : "블로그 라우트가 이 트리에 없다 — 지킬 대상이 없어 건너뜀(하한도 같은 수만큼 낮아진다)";
+// 지킬 대상이 없으면 지킬 약속도 없다 — 하한도 같은 대상(디렉터리)으로 같은 수만큼 낮아진다(`scripts/lib/floors.mjs`
+// 의 FLOOR_SUBJECT_PARTIAL — 술어·폭이 같은지는 `floors.test.mjs` 배선 시험이 잠근다). 정본 저장소에서는
+// 켜지지 않는다(대상이 없을 정당한 형상이 없다 — ENOENT 로 죽는 것이 맞다). ⚠ 건너뛰면 반드시 말한다.
+const CANONICAL = existsSync(join(SRC, "..", "presets")) && existsSync(join(SRC, "..", "scripts", "pack-preset.mjs"));
+const ROUTE_SKIP =
+    CANONICAL || existsSync(join(SRC, "app/blog"))
+        ? false
+        : "블로그 라우트가 이 트리에 없다 — 지킬 대상이 없어 건너뜀(하한도 같은 수만큼 낮아진다)";
 
 type RouteModule = {
     default: (props: {params: Promise<{n: string}>}) => Promise<unknown>;

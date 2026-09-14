@@ -21,7 +21,7 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
 import {spawnSync} from "node:child_process";
-import {mkdtempSync, mkdirSync, writeFileSync, rmSync} from "node:fs";
+import {existsSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync} from "node:fs";
 import {dirname, join} from "node:path";
 import {tmpdir} from "node:os";
 import {fileURLToPath} from "node:url";
@@ -59,14 +59,12 @@ function tree(patch = {}) {
         mkdirSync(dirname(full), {recursive: true});
         writeFileSync(full, suite(patch.counts?.[file] ?? min));
     }
-    // 능력별 시험이 지킬 **대상**도 세운다(빈 파일이면 된다 — 게이트는 존재만 묻는다). 없으면 판정이
-    // 「대상 부재」로 하한을 낮춰, 아래 시험들이 재려는 것과 다른 트리를 재게 된다.
+    // 능력별 시험이 지킬 **대상**도 세운다(대상은 디렉터리다 — 빈 디렉터리면 된다, 게이트는 존재만 묻는다).
+    // 없으면 판정이 「대상 부재」로 하한을 낮춰, 아래 시험들이 재려는 것과 다른 트리를 재게 된다.
     for (const parts of Object.values(FLOOR_SUBJECT_PARTIAL)) {
         for (const {subject} of parts) {
             if (patch.omit?.includes(subject)) continue;
-            const full = join(root, subject);
-            mkdirSync(dirname(full), {recursive: true});
-            writeFileSync(full, "");
+            mkdirSync(join(root, subject), {recursive: true});
         }
     }
     if (patch.table !== null) {
@@ -94,12 +92,12 @@ function tree(patch = {}) {
     return root;
 }
 
-function runGate(root) {
+function runGate(root, ...extra) {
     // `NODE_OPTIONS` 를 비운다 — 부모가 켠 값이 자식 러너의 뜻을 바꾼다.
     const env = {...process.env};
     delete env.NODE_OPTIONS;
     delete env.NODE_TEST_CONTEXT;
-    const r = spawnSync(process.execPath, [GATE, root], {encoding: "utf8", env, maxBuffer: 64 * 1024 * 1024});
+    const r = spawnSync(process.execPath, [GATE, root, ...extra], {encoding: "utf8", env, maxBuffer: 64 * 1024 * 1024});
     return {rc: r.status, out: `${r.stdout ?? ""}${r.stderr ?? ""}`};
 }
 
@@ -221,21 +219,23 @@ test("팩·테넌트 트리에서는 여유를 반려하지 않는다 — 고객
 
 /*
  * 한 스위트 안의 능력별 시험 — 대상이 없으면 선언한 수만큼만 낮춘다(`FLOOR_SUBJECT_PARTIAL`).
- * 판정은 `floors.test.mjs` 가 재고, 여기는 그 판정이 **집행·출력**되는지를 문다.
+ * 판정은 `floors.test.mjs` 가 재고, 여기는 그 판정이 **집행·출력·이송**되는지를 문다.
  */
 {
     const AST = "src/lib/astGuards.test.ts";
     const BLOG_LIST = "src/lib/blogListRender.test.ts";
-    const SUBJECTS = Object.values(FLOOR_SUBJECT_PARTIAL).flatMap((parts) => parts.map((p) => p.subject));
+    const SUBJECTS = [...new Set(Object.values(FLOOR_SUBJECT_PARTIAL).flatMap((parts) => parts.map((p) => p.subject)))];
     const short = {[AST]: REQUIRED_FLOORS[AST] - 4, [BLOG_LIST]: REQUIRED_FLOORS[BLOG_LIST] - 5};
 
-    test("대상이 없는 트리는 그 시험 수만큼 하한을 낮추고 «낮췄다고» 찍는다", () => {
+    test("대상이 없는 트리는 그 시험 수만큼 하한을 낮추고 «낮췄다고» 찍는다 — 시험 출력 뒤에", () => {
         const {rc, out} = runGate(tree({omit: SUBJECTS, counts: short}));
         assert.equal(rc, 0, out.slice(-600));
-        assert.match(out, /astGuards\.test\.ts 의 하한을 3 낮춥니다: src\/app\/blog\/page\.tsx/);
-        assert.match(out, /astGuards\.test\.ts 의 하한을 1 낮춥니다: src\/components\/sections\/SectionRenderer\.tsx/);
-        assert.match(out, /blogListRender\.test\.ts 의 하한을 5 낮춥니다: src\/app\/blog\/page\/\[n\]\/page\.tsx/);
+        assert.match(out, /astGuards\.test\.ts 의 하한을 3 낮춥니다: src\/app\/blog 가 이 트리에 없습니다/);
+        assert.match(out, /astGuards\.test\.ts 의 하한을 1 낮춥니다: src\/components\/sections 가 이 트리에 없습니다/);
+        assert.match(out, /blogListRender\.test\.ts 의 하한을 5 낮춥니다: src\/app\/blog 가 이 트리에 없습니다/);
         assert.match(out, /스위트별 하한 통과/);
+        // ℹ 줄이 러너 출력(ℹ pass …) **뒤**에 있다 — 앞에 찍으면 스크롤 위로 사라진다.
+        assert.ok(out.indexOf("ℹ pass ") < out.indexOf("하한을 3 낮춥니다"), "ℹ 줄이 시험 출력 앞에 찍혔다");
     });
 
     test("대상이 있는 트리에서 같은 통과 수는 반려한다 — 낮춤은 부재에만 걸린다", () => {
@@ -252,5 +252,39 @@ test("팩·테넌트 트리에서는 여유를 반려하지 않는다 — 고객
         assert.equal(rc, 1, out.slice(-600));
         assert.match(out, /하한 미달/);
         assert.match(out, /astGuards\.test\.ts — 통과 11건\(하한 12\)/);
+    });
+
+    test("정본 저장소에서 대상이 없으면 낮추지 않고 반려한다", () => {
+        const {rc, out} = runGate(tree({canonical: true, omit: ["src/app/blog"]}));
+        assert.equal(rc, 1, out.slice(-600));
+        assert.match(out, /src\/app\/blog 가 정본에 없습니다/);
+        assert.doesNotMatch(out, /낮춥니다/);
+    });
+
+    test("--judgment 로 판정을 값으로 넘긴다 — 시험 출력에 같은 접두의 줄을 찍어도 안 섞인다", () => {
+        const root = tree({omit: SUBJECTS, counts: short});
+        // zip 쪽 시험이 게이트 문장을 흉내 낸다 — stdout 을 걸러 옮기면 이것이 ✅ 줄에 실린다.
+        writeFileSync(
+            join(root, "src/lib/crossOrigin.test.ts"),
+            'import {test} from "node:test";\n' +
+                'console.log("ℹ 가드 회귀 스위트 — src/lib/crossOrigin.test.ts 의 하한을 20 낮춥니다: 가짜 가 이 트리에 없습니다.");\n' +
+                Array.from({length: REQUIRED_FLOORS["src/lib/crossOrigin.test.ts"]}, (_, i) => `test("t${i}", () => {});`).join("\n") +
+                "\n",
+        );
+        const judgment = join(root, "judgment.json");
+        const {rc, out} = runGate(root, `--judgment=${judgment}`);
+        assert.equal(rc, 0, out.slice(-600));
+        assert.ok(existsSync(judgment), "판정 파일이 없다");
+        const j = JSON.parse(readFileSync(judgment, "utf8"));
+        assert.deepEqual(
+            j.reduced.map((r) => [r.suite, r.subject, r.tests]),
+            [
+                [AST, "src/app/blog", 3],
+                [AST, "src/components/sections", 1],
+                [BLOG_LIST, "src/app/blog", 5],
+            ],
+        );
+        assert.ok(!JSON.stringify(j).includes("가짜"), "시험이 찍은 거짓 줄이 판정에 섞였다");
+        assert.match(out, /가짜/, "통제군 — 거짓 줄이 stdout 에는 실제로 찍혔어야 한다");
     });
 }
