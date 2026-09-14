@@ -27,10 +27,11 @@ export const REQUIRED_FLOORS = {
     // 이동 주소에 호스트가 없다 — 서빙 컨테이너의 요청 주소(0.0.0.0:3000)로 이동을 만들면 방문자가 그리로 간다.
     "src/lib/redirect.test.ts": 8,
     // 세 층의 «배선»(자리·면제·CORS 좌표) — 팩 트리에서도 자기 트리를 감사한다.
-    // ⚠ 이 스위트는 **어느 트리에서도 8 을 통과해야 한다** — 사본이 하나뿐인 팩 트리에서 스킵하면
+    // ⚠ 이 스위트는 **어느 트리에서도 9 를 통과해야 한다** — 사본이 하나뿐인 팩 트리에서 스킵하면
     //    통과 수가 갈려 정본 레포와 팩 중 한쪽 게이트가 반드시 빨개진다.
-    //    재현: `node scripts/lib/floor-gate.mjs` 를 이 레포와 `presets/skeleton` 양쪽에서.
-    "src/lib/guardWiring.test.ts": 8,
+    //    재현: 이 레포에서 `node scripts/lib/floor-gate.mjs` · 사본 하나뿐인 꼴은
+    //    `node --experimental-strip-types --test presets/skeleton/src/lib/guardWiring.test.ts`(9 통과).
+    "src/lib/guardWiring.test.ts": 9,
 
     "src/lib/oauthState.test.ts": 16,
     "src/lib/routeParam.test.ts": 5,
@@ -129,8 +130,10 @@ export const FLOOR_KEY_REGEX =
  * 고객 트리가 쇼핑몰을 지우며 `src/lib/{oauth,oauthState}.ts` 를 지울 수 있는데,
  * 그러면 그 시험도 같이 지워야 하고 여기서 반려됐다. 로그인 화면이 없는 사이트가 **쓰지도 않는
  * 파일 둘을 남겨야** 통과하는 자리였다.
- *   재현: 트리에서 `src/lib/oauthState.{ts,test.ts}` 를 지우고 `node scripts/lib/floor-gate.mjs; echo rc=$?`
- *   → 고치기 전 rc=1(가드 미달) · 고친 뒤 rc=0 + 건너뜀 한 줄
+ *   재현: 쇼핑몰(클라이언트)을 걷은 트리 — `src/lib/{oauthState,session,zalkera}.ts`·`src/app/api/auth/` 까지 없는 —
+ *   에서 `node scripts/lib/floor-gate.mjs; echo rc=$?` → 고치기 전 rc=1(가드 미달) · 고친 뒤 rc=0 + 건너뜀 한 줄.
+ *   ⚠ `oauthState.{ts,test.ts}` **만** 지운 트리는 그 반대다 — 발행(`session.ts`)이 남아 `guardWiring.test.ts` 가
+ *   「쓰는 운영 소스가 남아 있다」로 red(rc=1). 걷다 만 것이고 컴파일도 안 된다.
  *
  * 지킬 대상이 없으면 지킬 약속도 없다. 그러니 **대상이 있을 때만** 요구한다.
  *
