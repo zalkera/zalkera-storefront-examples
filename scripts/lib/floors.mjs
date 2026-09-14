@@ -29,7 +29,8 @@ export const REQUIRED_FLOORS = {
     // 세 층의 «배선»(자리·면제·CORS 좌표) — 팩 트리에서도 자기 트리를 감사한다.
     // ⚠ 이 스위트는 **어느 트리에서도 9 를 통과해야 한다** — 사본이 하나뿐인 팩 트리에서 스킵하면
     //    통과 수가 갈려 정본 레포와 팩 중 한쪽 게이트가 반드시 빨개진다.
-    //    재현: `node scripts/lib/floor-gate.mjs` 를 이 레포와 `presets/skeleton` 양쪽에서.
+    //    재현: 이 레포에서 `node scripts/lib/floor-gate.mjs` · 사본 하나뿐인 꼴은
+    //    `node --experimental-strip-types --test presets/skeleton/src/lib/guardWiring.test.ts`(9 통과).
     "src/lib/guardWiring.test.ts": 9,
 
     "src/lib/oauthState.test.ts": 16,

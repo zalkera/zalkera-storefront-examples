@@ -639,7 +639,6 @@ function issuedCookieOptionsProblem(sf: TS.SourceFile, call: TS.CallExpression):
             return "`secure` 는 축약으로만 — 형제 쿠키와 같은 환경 판정 하나를 쓴다(다른 표기는 두 번째 Secure 정책이다)";
         return `펼친 뒤의 항이 축약 \`secure\` 하나가 아니다: ${names.join(", ")} — 검사기가 읽는 값과 심는 값이 갈린다`;
     }
-    // 출처 — `oauthState` 모듈의 import 로 들어온 이름이어야 하고, 같은 이름의 다른 선언이 파일에 없어야 한다.
     // 출처 — `oauthState` 모듈의 import 로 들어온 이름이어야 하고, 같은 이름의 다른 선언이 파일에 없어야 한다. `secure` 도 같다 —
     // 파일 안 유일한 선언이 모듈 상단 `const secure = process.env.NODE_ENV === "production"` 이어야 축약 `secure` 가 그 값이다
     // (함수 안 `const secure = false`·매개변수 기본값이면 꼴은 같은데 상용에 Secure 없는 쿠키가 나간다).
@@ -683,18 +682,19 @@ function issuedCookieOptionsProblem(sf: TS.SourceFile, call: TS.CallExpression):
     if (!fromOauthState) return "OAUTH_STATE_COOKIE_OPTIONS 를 `@/lib/oauthState` 에서 가져오지 않는다";
     if (shadowed)
         return "OAUTH_STATE_COOKIE_OPTIONS 와 같은 이름의 선언이 파일에 또 있다 — 펼치는 것이 발행 상수가 아니다";
+    if (secureDecls.length !== 1)
+        return `\`secure\` 의 선언이 ${secureDecls.length}곳 — 모듈 상단 \`const secure = process.env.NODE_ENV === "production"\` 하나여야 한다`;
     const [secureDecl] = secureDecls;
     const topLevelConst =
-        secureDecls.length === 1 &&
         ts.isVariableDeclaration(secureDecl) &&
         ts.isVariableDeclarationList(secureDecl.parent) &&
         (secureDecl.parent.flags & ts.NodeFlags.Const) !== 0 &&
         ts.isVariableStatement(secureDecl.parent.parent) &&
-        ts.isSourceFile(secureDecl.parent.parent.parent) &&
-        secureDecl.initializer !== undefined &&
-        secureDecl.initializer.getText(sf).replace(/\s+/g, "") === 'process.env.NODE_ENV==="production"';
-    if (!topLevelConst)
-        return `\`secure\` 의 선언이 ${secureDecls.length}곳 — 모듈 상단 \`const secure = process.env.NODE_ENV === "production"\` 하나여야 한다`;
+        ts.isSourceFile(secureDecl.parent.parent.parent);
+    const initializer =
+        ts.isVariableDeclaration(secureDecl) && secureDecl.initializer ? secureDecl.initializer.getText(sf) : "";
+    if (!topLevelConst || initializer.replace(/\s+/g, "") !== 'process.env.NODE_ENV==="production"')
+        return `\`secure\` 가 모듈 상단 \`const secure = process.env.NODE_ENV === "production"\` 이 아니다(지금: \`${secureDecl.getText(sf)}\`) — 형제 쿠키 넷과 같은 판정이어야 한다`;
     return null;
 }
 
@@ -704,7 +704,11 @@ test("🔴 state 쿠키는 `session.ts` 한 곳에서 발행 상수 그대로 �
     for (const [label, dir] of PACK_SRCS) {
         const cookieName = stateCookieName(join(dir, "lib", "oauthState.ts"));
         if (cookieName === null) {
-            bad.push(`${label}:lib/oauthState.ts — OAUTH_STATE_COOKIE 리터럴을 찾지 못했다`);
+            // 지킬 대상이 없으면 지킬 약속도 없다(`floors.mjs` 의 능력별 규칙) — 로그인 화면을 걷은 고객 트리는 이 파일을 지울 수 있다.
+            // 정본에서는 없을 수 없고, 어느 트리든 파일은 없는데 발행 호출이 남아 있으면 그것은 걷다 만 것이라 red.
+            if (CANONICAL) bad.push(`${label}:lib/oauthState.ts — OAUTH_STATE_COOKIE 리터럴을 찾지 못했다`);
+            else if (packSources(dir).some((path) => /\bOAUTH_STATE_COOKIE\b/.test(readFileSync(path, "utf8"))))
+                bad.push(`${label} — lib/oauthState.ts 는 없는데 OAUTH_STATE_COOKIE 를 쓰는 운영 소스가 남아 있다`);
             continue;
         }
         // 심는 자리 — 운영 소스 전부에서 세 꼴을 다 센다. 정확히 하나여야 하고 `lib/session.ts` 여야 한다.
@@ -735,13 +739,14 @@ test("🔴 state 쿠키는 `session.ts` 한 곳에서 발행 상수 그대로 �
         if (problem) bad.push(`${label}:lib/session.ts — ${problem}`);
         else shaped++;
     }
-    if (CANONICAL)
-        assert.equal(shaped, PACK_SRCS.length, `발행 옵션을 확인한 사본 ${shaped}/${PACK_SRCS.length} — 판정이 죽었다`);
+    // 사유부터 — `shaped` 단언이 앞서면 어느 사본이 왜 어긋났는지가 「4/5」 뒤에 숨는다.
     assert.deepEqual(
         bad,
         [],
         "state 쿠키 발행이 발행 상수와 갈린다 — `lib/session.ts` 에서만 `jar.set(OAUTH_STATE_COOKIE, …, {...OAUTH_STATE_COOKIE_OPTIONS, secure})` 꼴로",
     );
+    if (CANONICAL)
+        assert.equal(shaped, PACK_SRCS.length, `발행 옵션을 확인한 사본 ${shaped}/${PACK_SRCS.length} — 판정이 죽었다`);
 });
 
 test("🔴 CORS 를 여는 자리가 없다 — 라우트뿐 아니라 next.config·middleware 까지 본다", () => {
@@ -763,7 +768,7 @@ test("🔴 CORS 를 여는 자리가 없다 — 라우트뿐 아니라 next.conf
 /**
  * ⚠ **스킵하지 않는다.** 사본이 하나뿐인 팩 트리에서 건너뛰면 통과 수가 한 개 줄고(스킵은 통과로 안 센다)
  * 하한표가 정본 레포(9)와 팩 트리(8) 어느 쪽에도 못 맞는다 — 한쪽을 맞추면 다른 쪽 게이트가 빨개진다.
- * 재현: `node scripts/lib/floor-gate.mjs` 를 이 레포와 `presets/skeleton` 양쪽에서.
+ * 재현: 이 레포에서 `node scripts/lib/floor-gate.mjs` · 사본 하나뿐인 꼴은 `node --experimental-strip-types --test presets/skeleton/src/lib/guardWiring.test.ts`(9 통과).
  * 사본이 하나면 드리프트가 없는 것이 **참**이므로 그대로 통과시킨다.
  */
 test("프리셋 5벌의 판정이 정본과 같다 — 한 벌만 고치는 사고를 잡는다", () => {
