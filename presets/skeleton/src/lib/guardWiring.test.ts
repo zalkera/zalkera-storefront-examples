@@ -430,15 +430,16 @@ const TEST_LIKE = /(^|\/)__tests__(\/|$)|\.(test|spec)(\.[cm]?[jt]sx?)?$/;
  * 있어 셀 수 없는 것은 red 다.
  */
 function moduleSpecifierOf(n: TS.Node): string | null {
-    // 치환 있는 템플릿은 머리·꼬리 리터럴로만 판정한다 — 꼬리가 `.json` 처럼 시험 파일일 수 없는 꼴이면 통과, 꼬리가 비었거나
-    // 시험 꼴이면 셀 수 없는 것으로 red(`next-intl` 의 `import(\`./messages/${locale}.json\`)` 같은 정당한 꼴을 살린다).
+    // 치환 있는 템플릿은 머리·꼬리 리터럴로만 판정한다 — 꼬리가 `.json` 처럼 소스 파일일 수 없는 꼴이면 통과(`next-intl` 의
+    // `import(`./messages/${locale}.json`)` 같은 정당한 꼴), 꼬리가 비었거나 소스 확장자면 셀 수 없는 것으로 red.
     const specifierOf = (expr: TS.Expression): string => {
         if (ts.isStringLiteralLike(expr)) return expr.text;
         if (ts.isTemplateExpression(expr)) {
             const tail = expr.templateSpans[expr.templateSpans.length - 1].literal.text;
-            return tail === "" || /(^|\/)__tests__(\/|$)/.test(expr.head.text)
-                ? "<dynamic>"
-                : `${expr.head.text}…${tail}`;
+            // 빈 꼬리·소스 확장자 꼬리(`./lib/${n}.ts` — 번들러가 디렉터리째 묶어 시험 파일까지 싣는 꼴)·`__tests__` 머리는 셀 수 없다.
+            const uncountable =
+                tail === "" || /\.[cm]?[jt]sx?$/.test(tail) || /(^|\/)__tests__(\/|$)/.test(expr.head.text);
+            return uncountable ? "<dynamic>" : `${expr.head.text}…${tail}`;
         }
         return "<dynamic>";
     };
