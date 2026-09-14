@@ -59,9 +59,9 @@ try {
 
 const {bad, effective, skipped, reduced} = judgeFloors(declared, (f) => existsSync(join(root, f)));
 // ⚠ **건너뛴 자리·낮춘 자리는 반드시 찍는다.** 조용히 넘어가면 「대상을 지워 가드를 끈다」가 무비용이 된다.
-//    시험 출력 **뒤**에 찍는다(아래 `printEased`) — 앞에 찍으면 스크롤 위로 사라진다. 판정을 값으로 받는
-//    쪽(`verify-zip`)은 이 출력을 읽지 않고 같은 `judgeFloors` 를 자기 프로세스에서 부른다 — 출력·파일은
-//    zip 의 시험이 흉내 내거나 덮을 수 있다.
+//    시험 출력 **뒤**에 찍는다(아래 `printEased`) — 앞에 찍으면 스크롤 위로 사라진다. 이 출력은 사람용이다 —
+//    판정을 값으로 쓰는 쪽은 같은 `judgeFloors` 를 자기 프로세스에서 얻는다(출력·파일은 zip 의 시험이
+//    흉내 내거나 덮을 수 있다).
 const printEased = () => {
     for (const {suite, subject} of skipped) {
         console.log(`ℹ 가드 회귀 스위트 — ${suite} 는 요구하지 않습니다: ${subject} 가 이 트리에 없습니다.`);
