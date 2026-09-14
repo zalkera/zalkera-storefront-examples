@@ -41,7 +41,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 //   통째로 «통과 0건»으로 오반려**된다 — 멀쩡한 팩을 «고객 가드가 미달»이라는 틀린 사유로 막는다.
 // 인자: `[<root>] [--judgment=<파일>]`. `--judgment` 가 있으면 판정(걷은 스위트·낮춘 자리)을 JSON 으로 그 파일에
 // 쓴다 — `verify-zip` 이 이것을 읽는다. stdout 문자열로 넘기면 zip 의 시험이 같은 접두의 줄을 찍어 ✅ 줄에
-// 거짓 완화 문장을 실을 수 있다(자식 러너의 출력이 이 stdout 에 섞인다 — 심의 실측).
+// 거짓 완화 문장을 실을 수 있다(자식 러너의 출력이 이 stdout 에 섞인다).
 const argv = process.argv.slice(2);
 const judgmentOut = argv.find((a) => a.startsWith("--judgment="))?.slice("--judgment=".length) ?? null;
 const root = realpathSync(resolve(argv.find((a) => !a.startsWith("--")) ?? "."));

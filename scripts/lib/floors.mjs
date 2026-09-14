@@ -160,9 +160,9 @@ const FLOOR_SUBJECT = Object.freeze({
  * 서는 자리였다(고객 사이트에 시안에 없던 `/blog` 가 실렸다).
  *
  * ■ **대상은 디렉터리다.** 시험이 재는 것이 디렉터리 전량(섹션 14벌 · blog 의 세 라우트)이라, 파일 하나
- *   (`SectionRenderer.tsx`)를 술어로 두면 그 파일만 지우고 나머지를 남기는 트리에서 가드가 꺼진다
- *   (심의 실측: 렌더러를 `SectionList` 에 인라인하고 소독기를 뗀 트리가 초록이었다). 디렉터리가 있으면
- *   시험이 돌고 — 빈 디렉터리·일부만 남긴 디렉터리는 시험이 red 로 닫는다 — 없으면 낮춘다.
+ *   (`SectionRenderer.tsx`)를 술어로 두면 그 파일만 지우고 나머지를 남기는 트리에서 가드가 꺼진다 —
+ *   렌더러를 다른 파일에 인라인하고 소독기를 떼도 초록이 된다. 디렉터리가 있으면 시험이 돌고 — 빈
+ *   디렉터리·일부만 남긴 디렉터리는 시험이 red 로 닫는다 — 없으면 낮춘다.
  * ■ 시험 쪽은 **같은 디렉터리**로 건너뛴다(`{skip: <이유>}`). 파일이 없으면 `readFileSync` 가 던져 스위트가
  *   실패하고, 실패는 하한을 재기 전에 러너를 멈춘다. 두 술어와 폭이 같은지는 `floors.test.mjs` 의 배선
  *   시험이 스위트 파일을 읽어 잠근다(`const <이름>_SKIP = existsSync(…"<대상>")` 과 `{skip: <이름>}` 의 수).
@@ -171,10 +171,9 @@ const FLOOR_SUBJECT = Object.freeze({
  *   바꾸는 것이 곧 게이트 스위치가 된다(`floor-reporter.mjs` 가 skip 을 통과로 안 세는 이유와 같다).
  * ■ 표가 올린 값에서도 같은 폭만큼 낮춘다 — 표는 요구를 강화하는 자리이지 대상 부재를 되돌리는
  *   자리가 아니다.
- * ■ 재현(대상 없는 팩 트리 = skeleton zip 을 풀고 `rm -rf src/app/blog src/components/sections`):
- *   · 시험·판정이 다 이 판이면 `node scripts/lib/floor-gate.mjs` → rc 0 + ℹ 셋.
- *   · 시험 파일이 옛 판(3.7.14)이면 → 「시험이 실패했습니다(하한을 재기 전입니다)」(`ENOENT … blog/[slug]/page.tsx`).
- *   · 시험은 이 판·`floors.mjs` 만 옛 판이면 → 「하한 미달 astGuards 12/16 · blogListRender 8/13」.
+ * ■ 재현: skeleton zip 을 풀고 `rm -rf src/app/blog src/components/sections; node scripts/lib/floor-gate.mjs`
+ *   → rc 0 + ℹ 셋. 시험 파일과 이 판정은 **같은 판이어야 한다** — 시험에 건너뛰는 술어가 없으면 `ENOENT` 로
+ *   「시험이 실패했습니다(하한을 재기 전입니다)」가 먼저 서고, 판정에 이 표가 없으면 「하한 미달」이 선다.
  */
 export const FLOOR_SUBJECT_PARTIAL = Object.freeze({
     "src/lib/astGuards.test.ts": Object.freeze([
