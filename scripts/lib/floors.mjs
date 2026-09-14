@@ -296,6 +296,12 @@ export function judgeFloors(floors, exists, partial = FLOOR_SUBJECT_PARTIAL) {
 }
 
 /**
+ * 게이트가 완화 문장을 찍을 때 앞에 붙이는 접두. `floor-gate`(찍는 쪽)와 `verify-zip`(그 줄 집합을 판정과 대조하는
+ * 쪽)이 **같은 값**을 써야 한다 — 한쪽만 바뀌면 대상을 지운 멀쩡한 팩이 전부 「문장 불일치」로 반려된다.
+ */
+export const EASE_PREFIX = "ℹ 가드 회귀 스위트 — ";
+
+/**
  * [judgeFloors] 의 판정(`{skipped, reduced}`)을 **사람이 읽는 문장**으로. `floor-gate` 가 이 문장을 ℹ 줄로 찍고,
  * `verify-zip` 은 같은 함수를 자기 프로세스에서 게이트 앞뒤로 불러 ⑴ 앞뒤가 같고 ⑵ 게이트가 스스로 찍은 ℹ 줄
  * 집합과도 같을 때만 앞 판정을 ✅ 줄에 싣는다 — 게이트의 출력·파일을 문면의 출처로 쓰지 않고(zip 의 시험이 흉내

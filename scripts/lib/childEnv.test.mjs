@@ -160,6 +160,9 @@ test("완화 문면(걷은·낮춘 자리)은 게이트의 출력·파일이 아
     // stdout 은 **반려 용도로만** — 게이트가 스스로 찍은 ℹ 줄 집합이 판정과 다르면 반려. ✅ 문면의 출처(`easeNotes(`)는
     // `verdict` 하나뿐이어야 한다.
     assert.match(RUNNER, /sameSet\(gateEase\(out\), easeNotes\(verdict\)\)/, "게이트의 ℹ 줄 집합과 판정을 대조하는 자리가 없다");
+    // 접두는 게이트와 **한 상수**를 나눠 쓴다 — 리터럴 사본이 한쪽만 바뀌면 대상을 지운 멀쩡한 팩이 전부 반려된다.
+    assert.match(RUNNER, /startsWith\(EASE_PREFIX\)/, "게이트 ℹ 줄을 EASE_PREFIX 로 고르지 않는다");
+    assert.doesNotMatch(RUNNER, /"ℹ 가드 회귀 스위트/, "접두 리터럴 사본이 있다 — floors.mjs 의 EASE_PREFIX 를 쓰라");
     assert.deepEqual(RUNNER.match(/easeNotes\(\w+\)/g), ["easeNotes(verdict)", "easeNotes(verdict)"], "easeNotes 의 입력이 verdict 가 아닌 자리가 있다");
 });
 

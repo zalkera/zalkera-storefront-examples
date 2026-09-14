@@ -76,7 +76,7 @@ import {basename, join, relative, resolve} from "node:path";
 import {tmpdir} from "node:os";
 import {fileURLToPath} from "node:url";
 import {childEnv} from "./lib/childEnv.mjs";
-import {easeNotes, judgeFloors} from "./lib/floors.mjs";
+import {EASE_PREFIX, easeNotes, judgeFloors} from "./lib/floors.mjs";
 import {probeDevCompile} from "./lib/devCompile.mjs";
 import {junkTopLevel} from "./lib/junkEntries.mjs";
 import {SECRET_CONTENT} from "./lib/secret-content.mjs";
@@ -1281,8 +1281,8 @@ try {
                     const gateEase = (text) =>
                         text
                             .split("\n")
-                            .filter((l) => l.startsWith("ℹ 가드 회귀 스위트 — "))
-                            .map((l) => l.slice("ℹ 가드 회귀 스위트 — ".length).trim());
+                            .filter((l) => l.startsWith(EASE_PREFIX))
+                            .map((l) => l.slice(EASE_PREFIX.length).trim());
                     const sameSet = (a, b) => a.length === b.length && [...a].sort().every((l, i) => l === [...b].sort()[i]);
                     const verdict = judgeNow();
                     // 경로를 **호출 자리에** 둔다 — 변수로 빼면 「러너 자신의 것을 쓰는가」를 재는

@@ -230,9 +230,10 @@ test("팩·테넌트 트리에서는 여유를 반려하지 않는다 — 고객
     test("대상이 없는 트리는 그 시험 수만큼 하한을 낮추고 «낮췄다고» 찍는다 — 시험 출력 뒤에", () => {
         const {rc, out} = runGate(tree({omit: SUBJECTS, counts: short}));
         assert.equal(rc, 0, out.slice(-600));
-        assert.match(out, /astGuards\.test\.ts 의 하한을 3 낮춥니다: src\/app\/blog 가 이 트리에 없습니다/);
-        assert.match(out, /astGuards\.test\.ts 의 하한을 1 낮춥니다: src\/components\/sections 가 이 트리에 없습니다/);
-        assert.match(out, /blogListRender\.test\.ts 의 하한을 5 낮춥니다: src\/app\/blog 가 이 트리에 없습니다/);
+        // 접두까지 잠근다 — verify-zip 이 이 접두로 게이트의 줄을 골라 판정과 대조한다(한 상수 EASE_PREFIX).
+        assert.match(out, /^ℹ 가드 회귀 스위트 — src\/lib\/astGuards\.test\.ts 의 하한을 3 낮춥니다: src\/app\/blog 가 이 트리에 없습니다$/m);
+        assert.match(out, /^ℹ 가드 회귀 스위트 — src\/lib\/astGuards\.test\.ts 의 하한을 1 낮춥니다: src\/components\/sections 가 이 트리에 없습니다$/m);
+        assert.match(out, /^ℹ 가드 회귀 스위트 — src\/lib\/blogListRender\.test\.ts 의 하한을 5 낮춥니다: src\/app\/blog 가 이 트리에 없습니다$/m);
         assert.match(out, /스위트별 하한 통과/);
         // ℹ 줄이 러너 출력(ℹ pass …) **뒤**에 있다 — 앞에 찍으면 스크롤 위로 사라진다.
         assert.ok(out.indexOf("ℹ pass ") < out.indexOf("하한을 3 낮춥니다"), "ℹ 줄이 시험 출력 앞에 찍혔다");
