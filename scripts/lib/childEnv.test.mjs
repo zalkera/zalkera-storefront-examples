@@ -156,7 +156,11 @@ test("완화 문면(걷은·낮춘 자리)은 게이트의 출력·파일이 아
     assert.match(RUNNER, /return judgeFloors\(declared, /, "판정을 judgeFloors 로 만드는 자리가 없다(상수로 갈아 끼웠는가)");
     assert.match(RUNNER, /easeKey\(verdict\) !== easeKey\(after\)/, "게이트 전후 판정을 대조하는 자리가 없다 — 지연 프로세스가 대상 디렉터리를 만들면 문면이 갈린다");
     assert.match(RUNNER, /easeNotes\(verdict\)/, "완화 문면을 judgeFloors 의 판정(verdict)으로 만들지 않는다");
-    assert.doesNotMatch(RUNNER, /--judgment|floor-judgment|startsWith\("ℹ 가드 회귀 스위트/, "게이트의 파일·stdout 에서 완화 문면을 읽는 자리가 되살아났다");
+    assert.doesNotMatch(RUNNER, /--judgment|floor-judgment/, "게이트의 파일에서 완화 문면을 읽는 자리가 되살아났다");
+    // stdout 은 **반려 용도로만** — 게이트가 스스로 찍은 ℹ 줄 집합이 판정과 다르면 반려. ✅ 문면의 출처(`easeNotes(`)는
+    // `verdict` 하나뿐이어야 한다.
+    assert.match(RUNNER, /sameSet\(gateEase\(out\), easeNotes\(verdict\)\)/, "게이트의 ℹ 줄 집합과 판정을 대조하는 자리가 없다");
+    assert.deepEqual(RUNNER.match(/easeNotes\(\w+\)/g), ["easeNotes(verdict)", "easeNotes(verdict)"], "easeNotes 의 입력이 verdict 가 아닌 자리가 있다");
 });
 
 // ── 규율의 **실물**을 문다 ─────────────────────────────────────────────────

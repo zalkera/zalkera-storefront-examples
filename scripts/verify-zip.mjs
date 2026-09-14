@@ -1277,6 +1277,13 @@ try {
                         }
                     };
                     const easeKey = (v) => JSON.stringify({skipped: v.skipped, reduced: v.reduced});
+                    /** 게이트 stdout 에서 게이트 자신의 ℹ 줄만(접두 뒤 본문). */
+                    const gateEase = (text) =>
+                        text
+                            .split("\n")
+                            .filter((l) => l.startsWith("ℹ 가드 회귀 스위트 — "))
+                            .map((l) => l.slice("ℹ 가드 회귀 스위트 — ".length).trim());
+                    const sameSet = (a, b) => a.length === b.length && [...a].sort().every((l, i) => l === [...b].sort()[i]);
                     const verdict = judgeNow();
                     // 경로를 **호출 자리에** 둔다 — 변수로 빼면 「러너 자신의 것을 쓰는가」를 재는
                     // 시험이 그 자리를 못 본다(실측: 못 찾아 반려했다).
@@ -1307,6 +1314,13 @@ try {
                             failed = true;
                         } else if (easeKey(verdict) !== easeKey(after)) {
                             record("가드 회귀 스위트", false, "게이트 도중 트리가 바뀌었습니다 — 걷은·낮춘 자리가 게이트 전후로 다릅니다(통과가 아닙니다)");
+                            failed = true;
+                        } else if (!sameSet(gateEase(out), easeNotes(verdict))) {
+                            // 게이트가 **스스로** 찍은 ℹ 줄(러너가 끝난 뒤 게이트 프로세스가 낸다 — zip 의 시험이 더할 수는
+                            // 있어도 지울 수는 없다)이 여기 판정과 다르면, 게이트가 본 트리와 여기가 본 트리가 다른 것이다
+                            // (게이트가 뜰 때만 대상을 지웠다 되돌리는 프로세스). stdout 은 **반려 용도로만** 쓴다 —
+                            // ✅ 문면의 출처는 여전히 `verdict` 다.
+                            record("가드 회귀 스위트", false, "게이트가 찍은 완화 문장과 여기 판정이 다릅니다 — 게이트가 도는 동안만 트리가 달랐거나 시험이 문장을 흉내 냈습니다(통과가 아닙니다)");
                             failed = true;
                         } else {
                             record("가드 회귀 스위트", true, [said.replace(/^✅\s*/, ""), ...easeNotes(verdict)].join(" · "));

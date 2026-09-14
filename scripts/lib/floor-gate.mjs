@@ -33,7 +33,7 @@ import {tmpdir} from "node:os";
 import {dirname, join, relative, resolve} from "node:path";
 import {fileURLToPath} from "node:url";
 import {childEnv} from "./childEnv.mjs";
-import {isCanonicalRepo, judgeFloors, REQUIRED_FLOORS} from "./floors.mjs";
+import {easeNotes, isCanonicalRepo, judgeFloors, REQUIRED_FLOORS} from "./floors.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 // ⚠ **실경로로 맞춘다.** node 러너는 시험 파일을 realpath 로 보고한다. 뿌리에 심링크가 끼어 있으면
@@ -63,12 +63,8 @@ const {bad, effective, skipped, reduced} = judgeFloors(declared, (f) => existsSy
 //    판정을 값으로 쓰는 쪽은 같은 `judgeFloors` 를 자기 프로세스에서 얻는다(출력·파일은 zip 의 시험이
 //    흉내 내거나 덮을 수 있다).
 const printEased = () => {
-    for (const {suite, subject} of skipped) {
-        console.log(`ℹ 가드 회귀 스위트 — ${suite} 는 요구하지 않습니다: ${subject} 가 이 트리에 없습니다.`);
-    }
-    for (const {suite, subject, tests} of reduced) {
-        console.log(`ℹ 가드 회귀 스위트 — ${suite} 의 하한을 ${tests} 낮춥니다: ${subject} 가 이 트리에 없습니다.`);
-    }
+    // 서식은 `easeNotes` 하나다 — `verify-zip` 이 이 줄 집합을 자기 판정의 문장 집합과 대조한다(다르면 반려).
+    for (const line of easeNotes({skipped, reduced})) console.log(`ℹ 가드 회귀 스위트 — ${line}`);
 };
 if (bad.length) {
     printEased();
