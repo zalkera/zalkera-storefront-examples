@@ -3,6 +3,8 @@ import {zalkera} from "@/lib/zalkera";
 import {assertJsonContentType, assertSameOrigin, errorResponse, invalidBody, readJsonBody} from "@/lib/http";
 import {isPreview} from "@/lib/preview";
 import {visitorIp} from "@zalkera/client";
+import {hasAdTouch, toLeadTracking} from "@/lib/attribution";
+import {getLandingAttribution} from "@/lib/session";
 
 /**
  * 광고 랜딩 리드 접수 BFF — **공개(인증 없음)**. inquiry/route.ts 의 clientIp 관용구 복제.
@@ -33,6 +35,12 @@ export async function POST(req: Request) {
     if (!input) return invalidBody();
     // 원 방문자 IP. 이걸 안 넘기면 위 주석의 사고가 난다(첫 홉 직접 추출은 위조 가능·금지).
     const ip = visitorIp(req.headers);
+    // 폼이 추적을 못 채웠으면(광고로 들어온 뒤 다른 페이지에서 문의) 들어온 요청에서 잡아 둔 유입으로 채운다.
+    // 판정 기준은 쿠키와 같다(`hasAdTouch`) — `utm_content` 만 붙은 페이지의 문의가 캠페인 없이 남지 않게.
+    if (!hasAdTouch((input as {tracking?: Record<string, unknown> | null}).tracking)) {
+        const landing = await getLandingAttribution();
+        if (landing) (input as {tracking?: unknown}).tracking = toLeadTracking(landing);
+    }
     try {
         const created = await zalkera.submitLead(input, {clientIp: ip});
         return NextResponse.json(created, {status: 201});

@@ -1,8 +1,9 @@
 import {randomUUID} from "node:crypto";
 import {cookies} from "next/headers";
 import {OAUTH_STATE_COOKIE, OAUTH_STATE_COOKIE_OPTIONS, newOAuthState} from "@/lib/oauthState";
+import {ATTRIBUTION_COOKIE, decodeTouch} from "@/lib/attribution";
 import type {NextResponse} from "next/server";
-import type {ShopSession} from "@zalkera/client";
+import type {OrderAttribution, ShopSession} from "@zalkera/client";
 
 /**
  * 스토어프론트 세션 쿠키. 전부 httpOnly — 브라우저 JS 에서 못 읽는다(토큰 탈취 방지).
@@ -102,6 +103,16 @@ export function markJustRefreshed(response: NextResponse): void {
 /** 인증필수 화면이 401 을 「갱신하라」로 읽을지 「로그인하라」로 읽을지 정하는 근거. */
 export async function wasJustRefreshed(): Promise<boolean> {
     return (await cookies()).get(REFRESHED_COOKIE)?.value === "1";
+}
+
+// ── 광고 유입 쿠키 ──────────────────────────────────────────────
+//
+// 쓰는 자리는 `middleware`(들어온 요청) · 규칙은 `@/lib/attribution`. 여기는 BFF 가 읽는 입구만 맡는다.
+
+/** 방문자가 들어온 광고 유입 — 없거나 못 읽으면 `null`. **route handler 에서만** 호출. */
+export async function getLandingAttribution(): Promise<OrderAttribution | null> {
+    const jar = await cookies();
+    return decodeTouch(jar.get(ATTRIBUTION_COOKIE)?.value);
 }
 
 // ── OAuth state 쿠키 ──────────────────────────────────────────────

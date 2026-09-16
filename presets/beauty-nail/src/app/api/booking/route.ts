@@ -2,7 +2,7 @@ import {visitorIp} from "@zalkera/client";
 import {NextResponse} from "next/server";
 import {zalkera} from "@/lib/zalkera";
 import {assertJsonContentType, assertSameOrigin, errorResponse, invalidBody, readJsonBody} from "@/lib/http";
-import {getAccessToken} from "@/lib/session";
+import {getAccessToken, getLandingAttribution} from "@/lib/session";
 import {isPreview} from "@/lib/preview";
 import {setAuthHint} from "@/lib/authHint";
 
@@ -39,6 +39,8 @@ export async function POST(req: Request) {
             quantity: Number(quantity) || 1,
             contactName: contactName || undefined,
             contactPhone: contactPhone || undefined,
+            // 광고 유입 — 유료 예약이 만드는 주문에 실린다(캠페인 매출).
+            attribution: await getLandingAttribution(),
         });
 
         // 무료 예약 — 결제가 없다. 즉시 확정이라 바로 알려준다.

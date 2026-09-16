@@ -139,6 +139,9 @@ export async function POST(req: Request) {
   state 쿠키는 `sameSite: "lax"` 여야 한다(`strict` 면 authorize 복귀에서 안 실려 로그인이 깨진다). 발행은 `src/lib/session.ts` 한 곳에서
   `{...OAUTH_STATE_COOKIE_OPTIONS, secure}` 꼴로만 — 상수를 펼친 뒤 덮거나, 옆에 더 심거나, 같은 이름의 지역 상수로 가리지 마라. `secure` 는 그 파일 상단의
   `const secure = process.env.NODE_ENV === "production"` 하나를 쿠키 다섯이 같이 쓴다 — 다른 식·다른 선언으로 바꾸지 마라(`@zalkera/client` `llms.txt` 「커머스 — 고객 인증(소셜)」의 조건 · `guardWiring.test.ts` 가 막는다).
+- 광고 유입은 `src/middleware.ts` 가 방문자가 연 문서 요청의 캠페인·소스·매체·클릭 ID 를 httpOnly 쿠키에 두고, 담기(`/api/cart/items`)·예약(`/api/booking`)·리드(`/api/lead`)
+  BFF 가 `getLandingAttribution()` 으로 읽어 넘긴다(규칙은 `src/lib/attribution.ts`). 빼면 캠페인 표의 매출이 0 이 된다 — 광고비만 찬다.
+  페이지 파일에서 `searchParams` 로 읽지 마라(그 페이지가 요청마다 렌더된다).
 - `readJsonBody` 는 **형식 가드**다. `Content-Type` 을 보지 않으므로 CSRF 방어로 쓰지 마라.
 
 판정 규칙의 근거는 `src/lib/crossOrigin.ts` 주석에, 관용구는 `src/lib/http.ts` 에 있다.
