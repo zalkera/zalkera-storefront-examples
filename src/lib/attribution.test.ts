@@ -1,6 +1,20 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {ATTRIBUTION_COOKIE_OPTIONS, decodeTouch, encodeTouch, readLandingTouch, toLeadTracking} from "./attribution.ts";
+import {existsSync, readFileSync} from "node:fs";
+import {createRequire} from "node:module";
+import {fileURLToPath} from "node:url";
+import {dirname, join} from "node:path";
+import type TS from "typescript";
+import {
+    ATTRIBUTION_COOKIE_OPTIONS,
+    decodeTouch,
+    encodeTouch,
+    hasAdTouch,
+    nextTouch,
+    readLandingTouch,
+    shouldCaptureLanding,
+    toLeadTracking,
+} from "./attribution.ts";
 
 /**
  * 광고 유입 — 들어온 요청에서 잡는 규칙(`attribution.ts`). 쿠키를 심는 자리는 `middleware`, 넘기는 자리는 담기·예약·리드 BFF 다.
@@ -108,4 +122,65 @@ test("리드 추적으로 옮길 때는 겹치는 칸만", () => {
 
 test("쿠키는 httpOnly · lax · 30일", () => {
     assert.deepEqual(ATTRIBUTION_COOKIE_OPTIONS, {httpOnly: true, sameSite: "lax", path: "/", maxAge: 2592000});
+});
+
+test("🔴 유입의 기준 — 캠페인·소스·매체·클릭 ID 중 하나 · utm_term·utm_content 만으로는 유입이 아니다", () => {
+    assert.equal(readLandingTouch(at("/?utm_content=hero&utm_term=t"), null, "h"), null);
+    assert.equal(hasAdTouch({utmContent: "hero", utmAdgroup: "g"}), false, "리드 폼 추적도 같은 기준");
+    assert.equal(hasAdTouch({utmContent: "hero", gclid: "g1"}), true);
+    assert.equal(hasAdTouch({utmCampaign: "   "}), false);
+    assert.equal(hasAdTouch(null), false);
+});
+
+test("🔴 잡는 요청은 방문자가 연 문서뿐 — 프리페치·하위 요청은 쿠키를 덮지 않는다", () => {
+    const h = (headers: Record<string, string>) => (name: string) => headers[name] ?? null;
+    assert.equal(shouldCaptureLanding("GET", h({"sec-fetch-dest": "document"})), true);
+    assert.equal(shouldCaptureLanding("GET", h({})), true, "Sec-Fetch-Dest 없는 클라이언트는 문서로 본다");
+    assert.equal(shouldCaptureLanding("GET", h({"sec-fetch-dest": "image"})), false, "다른 사이트의 <img>");
+    assert.equal(shouldCaptureLanding("GET", h({"sec-fetch-dest": "empty"})), false, "RSC fetch");
+    assert.equal(shouldCaptureLanding("GET", h({"next-router-prefetch": "1"})), false);
+    assert.equal(shouldCaptureLanding("GET", h({"sec-fetch-dest": "document", "sec-purpose": "prefetch"})), false);
+    assert.equal(shouldCaptureLanding("POST", h({"sec-fetch-dest": "document"})), false);
+});
+
+test("🔴 캠페인 없는 유입은 캠페인이 든 쿠키를 덮지 않는다 — 새 캠페인은 덮는다", () => {
+    const paid = {utmCampaign: "봄", utmSource: "naver"};
+    assert.equal(nextTouch(paid, {fbclid: "f1"}), null, "공유 링크의 fbclid 가 광고 캠페인을 지운다");
+    assert.deepEqual(nextTouch(paid, {utmCampaign: "가을"}), {utmCampaign: "가을"});
+    assert.deepEqual(nextTouch(null, {gclid: "g1"}), {gclid: "g1"});
+    assert.deepEqual(nextTouch({gclid: "g1"}, {fbclid: "f1"}), {fbclid: "f1"}, "캠페인 없는 쿠키는 덮는다");
+    assert.equal(nextTouch(paid, null), null);
+});
+
+/**
+ * 배선 — 이 호출이 빠지면 타입·배선 동일성·하한이 전부 초록인 채 캠페인 매출이 0 이 된다(인자가 선택이라).
+ * 라우트가 없는 트리(고객이 그 기능을 지운 형상)는 대상이 아니다.
+ */
+test("🔴 middleware 가 유입을 잡고, 담기·예약·리드 BFF 가 넘긴다", () => {
+    const ts: typeof TS = createRequire(import.meta.url)("typescript");
+    const src = join(dirname(fileURLToPath(import.meta.url)), "..");
+    const calls = (path: string, name: string): boolean => {
+        const sf = ts.createSourceFile(path, readFileSync(path, "utf8"), ts.ScriptTarget.Latest, true);
+        let found = false;
+        const visit = (n: TS.Node): void => {
+            if (ts.isCallExpression(n) && ts.isIdentifier(n.expression) && n.expression.text === name) found = true;
+            ts.forEachChild(n, visit);
+        };
+        visit(sf);
+        return found;
+    };
+    const missing: string[] = [];
+    let checked = 0;
+    const need = (rel: string, names: string[]) => {
+        const path = join(src, rel);
+        if (!existsSync(path)) return;
+        checked++;
+        for (const name of names) if (!calls(path, name)) missing.push(`${rel} — ${name}() 를 안 부른다`);
+    };
+    need("middleware.ts", ["shouldCaptureLanding", "readLandingTouch", "nextTouch"]);
+    need("app/api/cart/items/route.ts", ["getLandingAttribution"]);
+    need("app/api/booking/route.ts", ["getLandingAttribution"]);
+    need("app/api/lead/route.ts", ["getLandingAttribution", "hasAdTouch"]);
+    assert.ok(checked > 0, "대상 파일을 하나도 못 찾았다 — 경로가 바뀌었으면 이 시험도 옮겨라");
+    assert.deepEqual(missing, []);
 });

@@ -2,7 +2,15 @@ import {NextResponse} from "next/server";
 import type {NextRequest} from "next/server";
 import {isPreview} from "@/lib/preview";
 import {isPreviewBlockedWrite} from "@/lib/previewGuard";
-import {ATTRIBUTION_COOKIE, ATTRIBUTION_COOKIE_OPTIONS, encodeTouch, readLandingTouch} from "@/lib/attribution";
+import {
+    ATTRIBUTION_COOKIE,
+    ATTRIBUTION_COOKIE_OPTIONS,
+    decodeTouch,
+    encodeTouch,
+    nextTouch,
+    readLandingTouch,
+    shouldCaptureLanding,
+} from "@/lib/attribution";
 
 /**
  * 미리보기 모드 쓰기 차단의 **집행 지점**. 판정은 `src/lib/previewGuard.ts` 가 한다.
@@ -26,8 +34,9 @@ import {ATTRIBUTION_COOKIE, ATTRIBUTION_COOKIE_OPTIONS, encodeTouch, readLanding
  *
  * ## 광고 유입도 여기서 잡는다
  *
- * 들어온 GET 의 쿼리에 `utm_*`·클릭 ID 가 있으면 그 값을 httpOnly 쿠키에 둔다 — 담기·예약·리드 BFF 가 읽어 넘긴다
- * (규칙은 `src/lib/attribution.ts`). 페이지 파일에서 읽으면 SEO 페이지가 요청마다 렌더된다.
+ * 방문자가 연 문서 요청의 쿼리에 캠페인·소스·매체·클릭 ID 가 있으면 그 값을 httpOnly 쿠키에 둔다 — 담기·예약·리드 BFF 가 읽어
+ * 넘긴다(규칙은 `src/lib/attribution.ts`). 페이지 파일에서 읽으면 SEO 페이지가 요청마다 렌더된다.
+ * 쿠키를 심는 응답만 `Cache-Control: private, no-store` — 공유 캐시가 그 응답을 저장해 다른 방문자에게 쿠키째 재생하지 않게.
  *
  * ⚠ **이 파일은 배선이라 모든 팩에서 바이트가 같다.** 팩마다 갈리는 사실을 여기 적지 마라.
  */
@@ -42,14 +51,18 @@ export function middleware(req: NextRequest) {
         );
     }
     const response = NextResponse.next();
-    if (req.method === "GET") {
+    if (shouldCaptureLanding(req.method, (name) => req.headers.get(name))) {
         const ownHost = req.headers.get("x-forwarded-host") ?? req.headers.get("host");
-        const touch = readLandingTouch(req.nextUrl, req.headers.get("referer"), ownHost);
+        const touch = nextTouch(
+            decodeTouch(req.cookies.get(ATTRIBUTION_COOKIE)?.value),
+            readLandingTouch(req.nextUrl, req.headers.get("referer"), ownHost),
+        );
         if (touch) {
             response.cookies.set(ATTRIBUTION_COOKIE, encodeTouch(touch), {
                 ...ATTRIBUTION_COOKIE_OPTIONS,
                 secure: process.env.NODE_ENV === "production",
             });
+            response.headers.set("Cache-Control", "private, no-store");
         }
     }
     return response;
