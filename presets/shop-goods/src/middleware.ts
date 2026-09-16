@@ -36,7 +36,7 @@ import {
  *
  * 방문자가 연 문서 요청의 쿼리에 캠페인·소스·매체·클릭 ID 가 있으면 그 값을 httpOnly 쿠키에 둔다 — 담기·예약·리드 BFF 가 읽어
  * 넘긴다(규칙은 `src/lib/attribution.ts`). 페이지 파일에서 읽으면 SEO 페이지가 요청마다 렌더된다.
- * 쿠키를 심는 응답만 `Cache-Control: private, no-store` — 공유 캐시가 그 응답을 저장해 다른 방문자에게 쿠키째 재생하지 않게.
+ * 광고 URL 의 응답은 `Cache-Control: private, no-store` — 공유 캐시가 쿠키째 재생하거나 쿠키 없는 응답을 저장하지 않게.
  *
  * ⚠ **이 파일은 배선이라 모든 팩에서 바이트가 같다.** 팩마다 갈리는 사실을 여기 적지 마라.
  */
@@ -51,18 +51,21 @@ export function middleware(req: NextRequest) {
         );
     }
     const response = NextResponse.next();
-    if (shouldCaptureLanding(req.method, (name) => req.headers.get(name))) {
+    if (req.method === "GET") {
         const ownHost = req.headers.get("x-forwarded-host") ?? req.headers.get("host");
-        const touch = nextTouch(
-            decodeTouch(req.cookies.get(ATTRIBUTION_COOKIE)?.value),
-            readLandingTouch(req.nextUrl, req.headers.get("referer"), ownHost),
-        );
-        if (touch) {
-            response.cookies.set(ATTRIBUTION_COOKIE, encodeTouch(touch), {
-                ...ATTRIBUTION_COOKIE_OPTIONS,
-                secure: process.env.NODE_ENV === "production",
-            });
+        const incoming = readLandingTouch(req.nextUrl, req.headers.get("referer"), ownHost);
+        if (incoming) {
+            // 광고 URL 의 응답은 쿠키를 심든 안 심든 공유 캐시에 남기지 않는다.
             response.headers.set("Cache-Control", "private, no-store");
+            const touch = shouldCaptureLanding(req.method, (name) => req.headers.get(name))
+                ? nextTouch(decodeTouch(req.cookies.get(ATTRIBUTION_COOKIE)?.value), incoming)
+                : null;
+            if (touch) {
+                response.cookies.set(ATTRIBUTION_COOKIE, encodeTouch(touch), {
+                    ...ATTRIBUTION_COOKIE_OPTIONS,
+                    secure: process.env.NODE_ENV === "production",
+                });
+            }
         }
     }
     return response;

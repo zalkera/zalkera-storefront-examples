@@ -8,8 +8,10 @@ import type {LeadTracking, OrderAttribution} from "@zalkera/client";
  * 클라이언트 JS 는 없고, SEO 페이지에서 `searchParams` 를 읽지 않으니 정적 렌더도 그대로다.
  *
  * - **유입** = 캠페인·소스·매체·클릭 ID 중 하나라도 있는 것([hasAdTouch]) — `utm_term`·`utm_content` 만으로는 유입이 아니다.
- * - **마지막 광고 접점**: 새 유입이 덮고, 유입이 아닌 요청은 안 덮는다. 단 캠페인 없는 유입(예: 광고 아닌 공유 링크에도 붙는 `fbclid` 만)은
- *   캠페인이 든 쿠키를 덮지 않는다([nextTouch]) — 캠페인 표의 매출은 캠페인 이름으로만 센다. 백엔드 카트는 처음 실린 값만 남긴다.
+ * - **마지막 광고 접점**: 새 유입이 덮고, 유입이 아닌 요청은 안 덮는다. 단 `fbclid` 만 붙은 유입(광고 아닌 공유 링크에도 붙는다)은
+ *   캠페인이 든 쿠키를 덮지 않는다([nextTouch]). 백엔드 카트는 처음 실린 값만 남긴다.
+ * - 광고 URL(유입이 읽히는 URL)의 응답은 쿠키를 심든 안 심든 `Cache-Control: private, no-store` — 공유 캐시가 쿠키 있는 응답을 재생하거나,
+ *   쿠키 없는 응답을 저장해 뒤 방문자가 쿠키를 못 받는 일이 없게.
  * - **잡는 요청** = 방문자가 연 문서 요청뿐([shouldCaptureLanding]) — 프리페치·이미지 같은 하위 요청이 쿠키를 덮지 않게.
  * - `referrer` 는 **호스트만**(전체 URL 에는 검색어가 들어 있을 수 있다) · 자기 사이트면 안 싣는다 · `landingPath` 는 쿼리를 뗀 경로.
  * - 값마다 255자까지 · 제어문자가 든 값은 버린다(자르지 않는다 — 잘린 이름은 광고비와 맞지 않는 다른 캠페인이다). 서버도 같은 규칙이다.
@@ -83,13 +85,24 @@ export function shouldCaptureLanding(method: string, header: (name: string) => s
     return !/prefetch/i.test(header("sec-purpose") ?? header("purpose") ?? "");
 }
 
-/** 쿠키에 쓸 유입 — 쓰지 않으면 `null`. 캠페인 없는 새 유입은 캠페인이 든 기존 쿠키를 덮지 않는다. */
+/**
+ * 쿠키에 쓸 유입 — 쓰지 않으면 `null`. 새 유입은 덮되, **`fbclid` 만** 붙은 유입(광고 아닌 공유 링크에도 붙는다)은 캠페인이 든
+ * 기존 쿠키를 덮지 않는다. `gclid`·`nclid`·`utm_source` 는 광고 클릭이라 캠페인 이름이 없어도 덮는다 — 막으면 나중에 누른 다른 광고의
+ * 매출이 앞 캠페인에 잡힌다.
+ */
 export function nextTouch(
     existing: OrderAttribution | null,
     incoming: OrderAttribution | null,
 ): OrderAttribution | null {
     if (!incoming) return null;
-    if (existing?.utmCampaign && !incoming.utmCampaign) return null;
+    const fbclidOnly =
+        !!incoming.fbclid &&
+        !incoming.utmCampaign &&
+        !incoming.utmSource &&
+        !incoming.utmMedium &&
+        !incoming.gclid &&
+        !incoming.nclid;
+    if (existing?.utmCampaign && fbclidOnly) return null;
     return incoming;
 }
 

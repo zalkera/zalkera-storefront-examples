@@ -144,11 +144,18 @@ test("🔴 잡는 요청은 방문자가 연 문서뿐 — 프리페치·하위 
     assert.equal(shouldCaptureLanding("POST", h({"sec-fetch-dest": "document"})), false);
 });
 
-test("🔴 캠페인 없는 유입은 캠페인이 든 쿠키를 덮지 않는다 — 새 캠페인은 덮는다", () => {
+test("🔴 fbclid 만 붙은 유입은 캠페인 쿠키를 안 덮고 — 광고 클릭(gclid·nclid·utm_source)은 캠페인 이름이 없어도 덮는다", () => {
     const paid = {utmCampaign: "봄", utmSource: "naver"};
     assert.equal(nextTouch(paid, {fbclid: "f1"}), null, "공유 링크의 fbclid 가 광고 캠페인을 지운다");
+    assert.deepEqual(
+        nextTouch(paid, {gclid: "g1"}),
+        {gclid: "g1"},
+        "나중에 누른 구글 광고의 매출이 앞 네이버 캠페인에 잡힌다",
+    );
+    assert.deepEqual(nextTouch(paid, {nclid: "n1"}), {nclid: "n1"});
+    assert.deepEqual(nextTouch(paid, {utmSource: "google", utmMedium: "cpc"}), {utmSource: "google", utmMedium: "cpc"});
+    assert.deepEqual(nextTouch(paid, {fbclid: "f1", utmSource: "meta"}), {fbclid: "f1", utmSource: "meta"});
     assert.deepEqual(nextTouch(paid, {utmCampaign: "가을"}), {utmCampaign: "가을"});
-    assert.deepEqual(nextTouch(null, {gclid: "g1"}), {gclid: "g1"});
     assert.deepEqual(nextTouch({gclid: "g1"}, {fbclid: "f1"}), {fbclid: "f1"}, "캠페인 없는 쿠키는 덮는다");
     assert.equal(nextTouch(paid, null), null);
 });
@@ -178,10 +185,56 @@ test("🔴 middleware 가 유입을 잡고, 담기·예약·리드 BFF 가 넘�
         checked++;
         for (const name of names) if (!calls(path, name)) missing.push(`${rel} — ${name}() 를 안 부른다`);
     };
-    need("middleware.ts", ["shouldCaptureLanding", "readLandingTouch", "nextTouch"]);
+    need("middleware.ts", ["shouldCaptureLanding", "readLandingTouch", "nextTouch", "decodeTouch"]);
     need("app/api/cart/items/route.ts", ["getLandingAttribution"]);
     need("app/api/booking/route.ts", ["getLandingAttribution"]);
     need("app/api/lead/route.ts", ["getLandingAttribution", "hasAdTouch"]);
+
+    // 부르기만 하고 결과를 안 넘기는 형상 — 담기의 넷째 인자 · 예약 입력의 `attribution` 칸 · 광고 URL 응답의 no-store.
+    const find = (rel: string, pred: (n: TS.Node) => boolean): boolean => {
+        const path = join(src, rel);
+        if (!existsSync(path)) return true;
+        const sf = ts.createSourceFile(path, readFileSync(path, "utf8"), ts.ScriptTarget.Latest, true);
+        let hit = false;
+        const visit = (n: TS.Node): void => {
+            if (pred(n)) hit = true;
+            ts.forEachChild(n, visit);
+        };
+        visit(sf);
+        return hit;
+    };
+    const method = (n: TS.Node, name: string): n is TS.CallExpression =>
+        ts.isCallExpression(n) && ts.isPropertyAccessExpression(n.expression) && n.expression.name.text === name;
+    if (!find("app/api/cart/items/route.ts", (n) => method(n, "addToCart") && n.arguments.length === 4))
+        missing.push("app/api/cart/items/route.ts — addToCart 에 넷째 인자(유입)를 안 넘긴다");
+    if (
+        !find(
+            "app/api/booking/route.ts",
+            (n) =>
+                method(n, "createBooking") &&
+                n.arguments.some(
+                    (a) =>
+                        ts.isObjectLiteralExpression(a) &&
+                        a.properties.some(
+                            (p) => p.name !== undefined && ts.isIdentifier(p.name) && p.name.text === "attribution",
+                        ),
+                ),
+        )
+    )
+        missing.push("app/api/booking/route.ts — createBooking 입력에 attribution 이 없다");
+    if (
+        !find(
+            "middleware.ts",
+            (n) =>
+                method(n, "set") &&
+                n.arguments.length === 2 &&
+                ts.isStringLiteralLike(n.arguments[0]) &&
+                /^cache-control$/i.test(n.arguments[0].text) &&
+                ts.isStringLiteralLike(n.arguments[1]) &&
+                /no-store/.test(n.arguments[1].text),
+        )
+    )
+        missing.push("middleware.ts — 광고 URL 응답에 Cache-Control no-store 가 없다");
     assert.ok(checked > 0, "대상 파일을 하나도 못 찾았다 — 경로가 바뀌었으면 이 시험도 옮겨라");
     assert.deepEqual(missing, []);
 });
