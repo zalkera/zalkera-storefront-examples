@@ -2,6 +2,7 @@ import {NextResponse} from "next/server";
 import type {NextRequest} from "next/server";
 import {isPreview} from "@/lib/preview";
 import {isPreviewBlockedWrite} from "@/lib/previewGuard";
+import {ATTRIBUTION_COOKIE, ATTRIBUTION_COOKIE_OPTIONS, encodeTouch, readLandingTouch} from "@/lib/attribution";
 
 /**
  * 미리보기 모드 쓰기 차단의 **집행 지점**. 판정은 `src/lib/previewGuard.ts` 가 한다.
@@ -23,18 +24,35 @@ import {isPreviewBlockedWrite} from "@/lib/previewGuard";
  *   재현: `src/app/images/upload/route.ts` 를 만들고
  *         `npm run build && node scripts/lib/gate-probe.mjs; echo rc=$?` → rc=1
  *
+ * ## 광고 유입도 여기서 잡는다
+ *
+ * 들어온 GET 의 쿼리에 `utm_*`·클릭 ID 가 있으면 그 값을 httpOnly 쿠키에 둔다 — 담기·예약·리드 BFF 가 읽어 넘긴다
+ * (규칙은 `src/lib/attribution.ts`). 페이지 파일에서 읽으면 SEO 페이지가 요청마다 렌더된다.
+ *
  * ⚠ **이 파일은 배선이라 모든 팩에서 바이트가 같다.** 팩마다 갈리는 사실을 여기 적지 마라.
  */
 export function middleware(req: NextRequest) {
-    if (!isPreview()) return NextResponse.next();
-    if (!isPreviewBlockedWrite(req.method, req.nextUrl.pathname)) return NextResponse.next();
-    return NextResponse.json(
-        {
-            message: "미리보기 모드에서는 쓰기가 비활성화됩니다.",
-            code: "PREVIEW_READ_ONLY",
-        },
-        {status: 403},
-    );
+    if (isPreview() && isPreviewBlockedWrite(req.method, req.nextUrl.pathname)) {
+        return NextResponse.json(
+            {
+                message: "미리보기 모드에서는 쓰기가 비활성화됩니다.",
+                code: "PREVIEW_READ_ONLY",
+            },
+            {status: 403},
+        );
+    }
+    const response = NextResponse.next();
+    if (req.method === "GET") {
+        const ownHost = req.headers.get("x-forwarded-host") ?? req.headers.get("host");
+        const touch = readLandingTouch(req.nextUrl, req.headers.get("referer"), ownHost);
+        if (touch) {
+            response.cookies.set(ATTRIBUTION_COOKIE, encodeTouch(touch), {
+                ...ATTRIBUTION_COOKIE_OPTIONS,
+                secure: process.env.NODE_ENV === "production",
+            });
+        }
+    }
+    return response;
 }
 
 export const config = {

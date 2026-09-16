@@ -74,6 +74,9 @@ export const WIRING_FILES = [
     // ⚠ 미리보기 쓰기 차단의 **집행 지점**이다. 한 벌에서 빠지면 그 팩만 조용히 샌다 —
     //   `WIRING_MISSING` 이 부재도 위반으로 잡는 이유가 이것이다.
     "src/middleware.ts",
+    // 광고 유입 규칙 — 한 벌만 갈리면 그 팩 사이트의 캠페인 매출만 조용히 0 이 된다(memo217).
+    "src/lib/attribution.ts",
+    "src/lib/attribution.test.ts",
     "src/lib/previewGuard.ts",
     "src/app/robots.ts",
     "src/app/sitemap.ts",
