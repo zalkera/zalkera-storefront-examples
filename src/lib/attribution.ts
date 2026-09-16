@@ -72,14 +72,14 @@ export function hasAdTouch(t: Record<string, unknown> | null | undefined): boole
 
 /**
  * 이 요청에서 유입을 잡을까 — GET 이고, 방문자가 연 **문서** 요청일 때만.
- * `Sec-Fetch-Dest` 가 없으면(브라우저가 아닌 클라이언트) 문서로 본다. 프리페치(`Next-Router-Prefetch`·`Sec-Purpose: prefetch`)와
- * 이미지·스크립트 같은 하위 요청은 건너뛴다 — 다른 사이트의 `<img>` 나 화면에 스친 링크가 방문자의 유입을 덮지 않게.
+ * `Sec-Fetch-Dest` 가 없으면(브라우저가 아닌 클라이언트) 문서로 본다. 브라우저 프리페치(`Sec-Purpose: prefetch`)와 이미지·스크립트·
+ * RSC fetch(`empty`) 같은 하위 요청은 건너뛴다 — 다른 사이트의 `<img>` 나 화면에 스친 링크가 방문자의 유입을 덮지 않게.
+ * ⚠ `Next-Router-Prefetch`·`RSC` 로 가르지 마라 — Next 가 middleware 에 넘기기 전에 그 헤더들을 뗀다.
  */
 export function shouldCaptureLanding(method: string, header: (name: string) => string | null): boolean {
     if (method !== "GET") return false;
     const dest = header("sec-fetch-dest");
     if (dest !== null && dest !== "document") return false;
-    if (header("next-router-prefetch") !== null) return false;
     return !/prefetch/i.test(header("sec-purpose") ?? header("purpose") ?? "");
 }
 

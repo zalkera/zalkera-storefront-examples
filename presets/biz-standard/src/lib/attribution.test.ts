@@ -138,7 +138,8 @@ test("🔴 잡는 요청은 방문자가 연 문서뿐 — 프리페치·하위 
     assert.equal(shouldCaptureLanding("GET", h({})), true, "Sec-Fetch-Dest 없는 클라이언트는 문서로 본다");
     assert.equal(shouldCaptureLanding("GET", h({"sec-fetch-dest": "image"})), false, "다른 사이트의 <img>");
     assert.equal(shouldCaptureLanding("GET", h({"sec-fetch-dest": "empty"})), false, "RSC fetch");
-    assert.equal(shouldCaptureLanding("GET", h({"next-router-prefetch": "1"})), false);
+    // Next 의 라우터 프리페치는 RSC fetch 라 dest 가 empty 다(`Next-Router-Prefetch` 헤더는 middleware 앞에서 떼진다).
+    assert.equal(shouldCaptureLanding("GET", h({"sec-fetch-dest": "empty", "next-router-prefetch": "1"})), false);
     assert.equal(shouldCaptureLanding("GET", h({"sec-fetch-dest": "document", "sec-purpose": "prefetch"})), false);
     assert.equal(shouldCaptureLanding("POST", h({"sec-fetch-dest": "document"})), false);
 });
