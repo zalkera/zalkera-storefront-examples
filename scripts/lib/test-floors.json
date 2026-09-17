@@ -8,6 +8,7 @@
     "src/lib/routeParam.test.ts": 5,
     "src/lib/blogPaging.test.ts": 8,
     "src/lib/blogListRender.test.ts": 13,
+    "src/lib/policiesRender.test.ts": 2,
     "src/lib/content.test.ts": 3,
     "src/lib/reservedSegments.test.ts": 4,
     "src/lib/previewGuard.test.ts": 8,

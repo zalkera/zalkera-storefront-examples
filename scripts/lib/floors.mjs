@@ -39,6 +39,8 @@ export const REQUIRED_FLOORS = {
     "src/lib/routeParam.test.ts": 5,
     "src/lib/blogPaging.test.ts": 8,
     "src/lib/blogListRender.test.ts": 13,
+    // 구매 정책 페이지의 사업자 정보 — 콘솔 표시항목이 방문자 화면에 나오는가(memo220 ⑩).
+    "src/lib/policiesRender.test.ts": 2,
     "src/lib/content.test.ts": 3,
     "src/lib/blogGraph.test.ts": 6,
     "src/lib/jsonLdScript.test.ts": 5,
@@ -151,6 +153,8 @@ export const FLOOR_KEY_REGEX =
 const FLOOR_SUBJECT = Object.freeze({
     "src/lib/oauthState.test.ts": "src/lib/oauthState.ts",
     "src/lib/oauthPath.test.ts": "src/lib/oauth.ts",
+    // 스위트 전체가 구매 정책 페이지 하나를 그린다 — 페이지를 걷은 트리는 요구하지 않는다(memo220 ⑩).
+    "src/lib/policiesRender.test.ts": "src/app/policies/page.tsx",
 });
 
 /**
