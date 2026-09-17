@@ -2,6 +2,7 @@
 
 import {useEffect, useState, useTransition} from "react";
 import type {LeadTracking} from "@zalkera/client";
+import {leadTrackingFromQuery} from "@/lib/attribution";
 import {Button} from "@/components/ui/Button";
 
 /**
@@ -22,20 +23,10 @@ export function LeadForm({interest, quick}: {interest?: string; quick?: boolean}
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [pending, startTransition] = useTransition();
 
-    // 광고 유입 추적 — mount 시 쿼리스트링에서 8키를 캡처한다(하나라도 있으면 tracking 을 채운다).
+    // 광고 유입 추적 — mount 시 그 페이지의 쿼리스트링에서 잡는다(규칙은 `@/lib/attribution` 한 곳 · 하나라도 있으면 채운다).
     useEffect(() => {
-        const q = new URLSearchParams(window.location.search);
-        const t: LeadTracking = {
-            utmSource: q.get("utm_source"),
-            utmMedium: q.get("utm_medium"),
-            utmCampaign: q.get("utm_campaign"),
-            utmAdgroup: q.get("utm_adgroup"),
-            utmContent: q.get("utm_content"),
-            fbclid: q.get("fbclid"),
-            gclid: q.get("gclid"),
-            nclid: q.get("nclid"),
-        };
-        if (Object.values(t).some((v) => v != null)) setTracking(t);
+        const t = leadTrackingFromQuery(window.location.search);
+        if (t) setTracking(t);
     }, []);
 
     const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
