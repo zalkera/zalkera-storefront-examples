@@ -21,7 +21,7 @@ export async function POST(req: Request) {
     // 게스트 카트키를 확보(없으면 생성)해 명시적으로 세션을 구성한다 — 같은 요청에서 재조회에 의존하지 않는다.
     const cartSessionKey = await ensureCartSessionKey();
     const accessToken = await getAccessToken();
-    // 광고 유입 — 카트는 처음 실린 값만 남기고 체크아웃이 주문에 옮긴다(캠페인 매출).
+    // 광고 유입 — 담기마다 넘긴다. 카트는 마지막 광고 접점을 남기고 체크아웃이 주문에 옮긴다(캠페인 매출).
     const attribution = await getLandingAttribution();
     try {
         const cart = await zalkera.addToCart(

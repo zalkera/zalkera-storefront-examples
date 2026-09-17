@@ -79,9 +79,11 @@ export default async function PoliciesPage() {
                 <p>{config.companyName}</p>
                 {config.ceoName && <p>대표: {config.ceoName}</p>}
                 {config.bizRegNo && <p>사업자등록번호: {config.bizRegNo}</p>}
+                {config.mailOrderRegNo && <p>통신판매업 신고번호: {config.mailOrderRegNo}</p>}
                 {config.address && <p>{config.address}</p>}
                 {config.tel && <p>전화: {config.tel}</p>}
                 {config.email && <p>이메일: {config.email}</p>}
+                {config.privacyOfficer && <p>개인정보보호책임자: {config.privacyOfficer}</p>}
             </section>
         </main>
     );
