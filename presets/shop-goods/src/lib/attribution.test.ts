@@ -64,10 +64,14 @@ test("🔴 255자 초과·제어문자 값은 버린다(자르지 않는다) —
     assert.equal(touch?.utmCampaign, undefined);
     assert.equal(touch?.utmSource, "naver");
     assert.equal(readLandingTouch(at("/?utm_campaign=a%0Ab"), null, "h"), null);
-    assert.equal(readLandingTouch(at(`/?utm_campaign=${"가".repeat(255)}`), null, "h")?.utmCampaign, "가".repeat(255));
+    // 값 한 칸의 상한은 **255자**다 — 그 경계는 여기서 재고, 「쿠키에 실리는가」는 예산 시험이 따로 잰다
+    // (한글 255자는 인코딩하면 2,295자라 예산에서 떨어진다 · 두 층이 다르다).
+    assert.equal(readLandingTouch(at(`/?utm_campaign=${"x".repeat(255)}`), null, "h")?.utmCampaign, "x".repeat(255));
+    const ko = "가".repeat(100);
+    assert.equal(readLandingTouch(at(`/?utm_campaign=${encodeURIComponent(ko)}`), null, "h")?.utmCampaign, ko);
 });
 
-test("🔴 인코딩한 쿠키 값은 예산(3000자) 안이다 — 넘치면 캠페인·매체부터 남기고 뒤를 버린다", () => {
+test("🔴 인코딩한 쿠키 값은 예산(1024자) 안이다 — 넘치면 캠페인·매체부터 남기고 뒤를 버린다", () => {
     const k = "가".repeat(255);
     const q = [
         "utm_source",
@@ -85,9 +89,21 @@ test("🔴 인코딩한 쿠키 값은 예산(3000자) 안이다 — 넘치면 �
         .join("&");
     const touch = readLandingTouch(at(`/?${q}`), null, "h");
     assert.ok(touch);
-    assert.ok(encodeURIComponent(encodeTouch(touch)).length <= 3000, "브라우저가 말없이 버리는 크기다");
-    assert.equal(touch.utmCampaign, k, "캠페인이 먼저 남아야 한다 — 매출을 세는 칸이다");
-    assert.equal(touch.utmSource, undefined, "최악 값(한글 255자)은 둘째 긴 칸부터 못 들어간다 — 짧은 경로는 남는다");
+    // ⚠ 상한은 브라우저의 4KB 가 아니라 **모든 오리진 요청에 실리는 무게**다(토큰 쿠키와 같은 경로 · 심의 성능 축).
+    assert.ok(encodeURIComponent(encodeTouch(touch)).length <= 1024, "모든 요청에 실리기엔 무겁다");
+    // 한글 255자는 인코딩하면 2,295자라 **한 칸도 못 들어간다** — 그 값을 30일 동안 모든 요청에 지고 다니지 않는다.
+    assert.equal(touch.utmCampaign, undefined, "최악 값이 통째로 실렸다 — 예산이 안 먹는다");
+    assert.equal(touch.utmSource, undefined);
+
+    // 🔴 **현실 크기의 한글 캠페인은 세 칸이 다 남는다** — 예산을 낮춘 판단의 근거다(못 남으면 매출이 안 세진다).
+    const realistic = readLandingTouch(
+        at(`/?utm_source=naver&utm_medium=cpc&utm_campaign=${encodeURIComponent("봄맞이 네일 프로모션 2026")}`),
+        null,
+        "h",
+    );
+    assert.equal(realistic?.utmCampaign, "봄맞이 네일 프로모션 2026");
+    assert.equal(realistic?.utmSource, "naver");
+    assert.equal(realistic?.utmMedium, "cpc");
 
     // 양성 짝 — 보통 크기의 유입은 전부 들어간다.
     const usual = readLandingTouch(
@@ -361,6 +377,26 @@ test("🔴 middleware 가 유입을 잡고, 담기·예약·리드 BFF 가 넘�
         )
     )
         missing.push("app/api/booking/route.ts — createBooking 입력에 attribution 이 없다");
+    // 🔴 **결제의 방문자 IP 선언은 인자 자리에서 재야 한다.** SDK 검사기 `[I2]` 는 **파일 단위**라 같은 파일의
+    //    `startPayment` 가 이미 선언하면 `checkout` 의 누락을 못 본다(검사기 스스로 그렇게 적는다). 그 원장은
+    //    추가 전용·5년이라 나중에 못 고친다 — 그래서 호출 하나하나를 여기서 본다(심의 보안 축).
+    const declaresClientIp = (a: TS.Node): boolean =>
+        ts.isObjectLiteralExpression(a) &&
+        a.properties.some(
+            (p) =>
+                ts.isPropertyAssignment(p) &&
+                p.name !== undefined &&
+                ts.isIdentifier(p.name) &&
+                p.name.text === "context" &&
+                /clientIp/.test(p.initializer.getText()),
+        );
+    for (const [rel, name] of [
+        ["app/api/checkout/route.ts", "checkout"],
+        ["app/api/checkout/route.ts", "startPayment"],
+    ] as const) {
+        if (!find(rel, (n) => method(n, name) && n.arguments.some(declaresClientIp)))
+            missing.push(`${rel} — ${name}() 호출에 context.clientIp 선언이 없다`);
+    }
     if (
         !find(
             "middleware.ts",

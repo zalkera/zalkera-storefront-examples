@@ -15,9 +15,22 @@ import {Button} from "@/components/ui/Button";
  * **UTM 은 mount 후 `window.location.search` 로 캡처한다** — 이 폼을 얹는 랜딩은 force-static ISR 일
  * 수 있어 RSC 에서 `searchParams` 를 읽으면 정적 셸이 깨진다. `useSearchParams()` 도 같은 이유로 금지.
  */
+/**
+ * 개인정보 수집·이용 동의 문장과 판.
+ *
+ * 🔴 **화면에 보인 문장을 그대로 원장에 남긴다** — 판 코드만 남기면 나중에 「무엇에 동의했나」에 못 답한다.
+ * 문장을 고치면 **판도 같이 올려라**(옛 접수는 옛 문장으로 남는다).
+ * ⚠ 수집 항목을 늘리면 이 문장과 사이트 처리방침을 같이 고쳐야 한다.
+ */
+const PRIVACY_CONSENT_VERSION = "privacy-consent-v1.0";
+const PRIVACY_CONSENT_LABEL =
+    "상담 신청을 위해 이름·연락처·이메일·문의 내용을 수집·이용하는 데 동의합니다(필수). 목적 달성 후 파기합니다.";
+
 export function LeadForm({interest, quick}: {interest?: string; quick?: boolean}) {
     const [form, setForm] = useState({name: "", phone: "", email: "", message: ""});
     const [consentMarketing, setConsentMarketing] = useState(false);
+    // 🔴 **수집·이용 동의는 수신 동의와 다른 사실이다**(SDK 교본). 이름·연락처를 받는 폼이라 **필수**다.
+    const [consentPrivacy, setConsentPrivacy] = useState(false);
     const [tracking, setTracking] = useState<LeadTracking | undefined>(undefined);
     const [message, setMessage] = useState("");
     const [errors, setErrors] = useState<Record<string, string>>({});
@@ -48,6 +61,10 @@ export function LeadForm({interest, quick}: {interest?: string; quick?: boolean}
                     interest,
                     isQuick: quick,
                     consentMarketing,
+                    // 동의 둘을 **다른 칸**으로 보낸다. 판·문장을 같이 남겨야 「무엇에 동의했나」에 답할 수 있다.
+                    consentPrivacy,
+                    consentVersion: PRIVACY_CONSENT_VERSION,
+                    consentLabel: PRIVACY_CONSENT_LABEL,
                     tracking,
                 }),
             });
@@ -57,6 +74,7 @@ export function LeadForm({interest, quick}: {interest?: string; quick?: boolean}
                 // tracking 은 유지(같은 방문의 재제출도 같은 유입으로 귀속) — 입력만 초기화.
                 setForm({name: "", phone: "", email: "", message: ""});
                 setConsentMarketing(false);
+                setConsentPrivacy(false);
                 return;
             }
             // 레이트리밋 — 공개 폼이라 흔하다. 재시도 안내(§4.3 e.code 규약).
@@ -84,6 +102,19 @@ export function LeadForm({interest, quick}: {interest?: string; quick?: boolean}
             <input type="email" placeholder="이메일(선택)" value={form.email} onChange={set("email")} />
             {errors.email && <span className={ERR}>{errors.email}</span>}
             <textarea placeholder="문의 내용(선택)" value={form.message} onChange={set("message")} rows={4} />
+            {/* 🔴 **수집·이용 동의가 먼저다.** 무엇을 받는지 화면에 적고, 자세한 것은 처리방침으로 보낸다. */}
+            <label className="flex items-start gap-2 text-sm">
+                <input
+                    type="checkbox"
+                    className="mt-1 w-auto"
+                    checked={consentPrivacy}
+                    required
+                    onChange={(e) => setConsentPrivacy(e.target.checked)}
+                />
+                <span>
+                    {PRIVACY_CONSENT_LABEL} <a href="/policies">자세히</a>
+                </span>
+            </label>
             <label className="flex items-center gap-2 text-sm">
                 <input
                     type="checkbox"

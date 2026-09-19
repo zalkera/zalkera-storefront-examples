@@ -337,10 +337,14 @@ export const pageSlugs = () => Object.keys(pages);
 `content/nav.json` 은 템플릿 페이지의 `SiteHeader`·`SiteFooter` 가 읽으므로 `header`·`footer` 의
 `{label, href}` 목록을 채웁니다(`/policies`·`/contact` 링크 정도). 랜딩 시안은 이 파일을 안 읽습니다.
 
+> 🔴 **「개인정보처리방침」을 `/policies` 로 보내지 마십시오.** 그 면은 반품·교환·배송 같은 **구매 정책**이고,
+> 이 팩에는 처리방침 면이 **없습니다.** 그런데 이 팩은 광고 유입 쿠키(30일)를 심고 상담 신청에서 이름·연락처를
+> 받으므로 **고지 대상**입니다 — 사이트를 열기 전에 처리방침 면을 따로 만들고 거기로 링크하십시오.
+>
 > ⚠ **같은 주소를 가리키는 링크가 둘 이상이면 렌더 쪽 `key` 를 확인하십시오.**
-> 「이용약관」과 「개인정보처리방침」이 둘 다 `/policies` 로 가는 것은 **정상**인데,
-> `SiteHeader`·`SiteFooter` 가 `key={it.href}` 로 잡고 있으면 React 가 중복 키로 경고하고
-> 항목을 빠뜨릴 수 있습니다. 이 목록은 순서가 곧 화면이므로 **인덱스가 안정된 키**입니다.
+> 예컨대 「이용약관」과 다른 항목이 같은 주소를 가리킬 때, `SiteHeader`·`SiteFooter` 가 `key={it.href}` 로
+> 잡고 있으면 React 가 중복 키로 경고하고 항목을 빠뜨릴 수 있습니다. 이 목록은 순서가 곧 화면이므로
+> **인덱스가 안정된 키**입니다.
 
 **⑹ 여기서 `npx tsc --noEmit` 과 `npm test` 를 돌리십시오.** 둘 다 rc 0 이어야 합니다(`(landing)/page.tsx` 는
 아직 없어도 오류가 아닙니다). `npm test` 가 ⑶ 의 `RESERVED_SEGMENTS`·`disallow` 어긋남을 이름을 대고
