@@ -45,6 +45,8 @@ const OK = 'export const ok = async () => zalkera.getShipment("b", {context: {cl
 const CASES = [
     // ── 진짜 위반 — 잡아야 한다 ────────────────────────────────────────────────
     ["선언 자체가 없다", CLI + 'export default () => zalkera.getOrder("a");', true],
+    // 결제는 세션 안에 싣는다(client 0.40.0) — 목록에서 빠지면 이 줄이 통과로 뒤집힌다
+    ["결제에 선언 없음", CLI + 'export default () => zalkera.checkout(input, session);', true],
     ["첫 홉 손추출", CLI + 'export default () => zalkera.getOrder("a", {context: {clientIp: h.get("x-forwarded-for").split(",")[0]}});', true],
     ["첫 홉 손추출 → shorthand", CLI + 'const clientIp = h.get("x-forwarded-for").split(",")[0];\nexport default () => zalkera.getOrder("a", {context: {clientIp}});', true],
     ["출처불명 shorthand", CLI + 'export default () => zalkera.getOrder("a", {context: {clientIp}});', true],

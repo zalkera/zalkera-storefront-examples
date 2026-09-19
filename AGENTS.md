@@ -169,7 +169,7 @@ const order = await zalkera.checkout(input, {...session, context: {clientIp: vis
   — 선언이 있는 척하면서 값이 거짓이면 없느니만 못하다(로그·rate-limit 이 공격자가 고른 값을 믿는다).
 - 변수 경유도 정상이다: `const ip = visitorIp(await headers()); … context: {clientIp: ip}`.
 - 안 하면 무엇이 나빠지나 — **축마다 결과가 다르다.**
-  - **주문 인가**(`getOrder`·`getShipment`·`cancelOrder`·결제·완료): 백엔드가 **실패만** 센다.
+  - **주문 인가**(`getOrder`·`getShipment`·`cancelOrder`·`startPayment`·`confirmPayment`·`completeOrder`): 백엔드가 **실패만** 센다.
     그래서 이 사이트 게스트가 한 IP 로 뭉치면, 남의 오입력이 쌓인 뒤 내가 오타 한 번에 403 대신
     **429** 를 받는다(**IP 축**은 성공을 막지 않는다). 그리고 스캐너 탐지가 주문번호 축 하나로 줄어든다.
   - **문의·리드**(`submitInquiry`·`submitLead`): **모든 호출을 센다**(성공도). 한도가 **각각 다르다** —
