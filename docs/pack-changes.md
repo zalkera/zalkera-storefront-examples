@@ -30,7 +30,7 @@
 | 구매 정책 페이지 「사업자 정보」에 **통신판매업 신고번호**·**개인정보보호책임자** · 광고 유입 주석(카트는 마지막 광고 접점) | 콘솔 사이트 설정에 두 칸이 생겼는데 사이트가 그리지 않았습니다. 값이 있을 때만 줄을 그립니다(책임자는 성명만 — 연락처는 위의 전화·이메일). 서버가 카트 유입을 「마지막으로 담은 때의 광고 접점」으로 바꿔 주석을 맞췄습니다(동작 변경 없음) | `npm install @zalkera/client@^0.39.1` 먼저 · `src/app/policies/page.tsx` · `src/lib/policiesRender.test.ts` · `scripts/lib/test-floors.json`(`policiesRender` 한 줄) · `scripts/lib/floors.mjs`(`REQUIRED_FLOORS`·`FLOOR_SUBJECT` 한 줄씩 — 빼면 페이지를 걷을 때 「하한 미달」) · 주석만: `src/lib/attribution.ts`·`src/app/api/cart/items/route.ts` |
 | `@zalkera/client` 0.39.2 | `submitLead` 설명에서 「IP 기록」을 뺐습니다 — 백엔드가 리드·문의의 IP·User-Agent 를 저장하지 않습니다. 동작은 같습니다 | `npm install @zalkera/client@^0.39.2` |
 | `@zalkera/client` 0.40.0 · 결제에 **방문자 IP 선언** | 결제(`checkout`)가 방문자 IP 를 싣습니다 — 청약 동의·확인 증빙의 접속 IP 가 사이트 서버로 남지 않게. 검사기가 결제의 선언 누락을 경고합니다. 결제 요청에 동의 증빙(`consents`)·사전신청(`preorder`) 칸이 생겼습니다(팩은 아직 보내지 않습니다) | `npm install @zalkera/client@^0.40.0` **먼저**(0.39 의 세션에는 `context` 가 없습니다 — 타입 오류 · JS 면 헤더 없이 조용히 넘어갑니다) · `src/app/api/checkout/route.ts` · `AGENTS.md` 「방문자 IP 선언」 절 |
-| `@zalkera/client` 0.40.1 | 검사기가 결제의 IP 선언 누락을 알릴 때 **넣는 자리를 바르게** 안내합니다(세션 안 — 0.40.0 은 주문 조회 모양을 가르쳤습니다). 판정·경고 수는 같습니다 | `npm install @zalkera/client@^0.40.1` |
+| `@zalkera/client` 0.40.1 | 검사기가 결제의 IP 선언 누락을 알릴 때 **넣는 자리를 바르게** 안내합니다(세션 안 — 0.40.0 은 주문 조회 모양을 가르쳤습니다). 교본(`llms.txt`)의 결제 예시도 세션을 통째로 두는 모양(`{...session, context}`)으로 고쳤습니다 — 로그인 고객의 `accessToken` 이 빠지지 않게. 판정·경고 수는 같습니다 | `npm install @zalkera/client@^0.40.1` |
 
 옛 표대로 이미 파일을 지운 사이트는 지운 파일을 최신 zip 에서 되살리고, 옛 표가 함께 고치게 한
 `src/lib/reservedSegments.ts`·`src/app/robots.ts` 도 원래대로 되돌린 뒤 입구를 닫으십시오 — 지운 채로는 검사가
