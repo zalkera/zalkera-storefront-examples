@@ -34,7 +34,9 @@ export async function POST(req: Request) {
         // 카트 쿠키가 없으면(예: 쿠키 없이 들어온 로그인 고객) 키 없이 종전 동작.
         const order = await zalkera.checkout(
             input,
-            session,
+            // 방문자 IP 를 선언한다 — 안 넘기면 백엔드가 이 서버의 IP 를 받아, 청약 동의 증빙의 접속 IP 가
+            // 방문자가 아니라 **사이트 서버**로 남는다(추가 전용 원장이라 못 고친다).
+            {...session, context: {clientIp: visitorIp(req.headers)}},
             session.cartSessionKey ? `co-${session.cartSessionKey}` : undefined,
         );
         // ⛔ **무통장은 결제창을 안 연다.** `startPayment` 를 태우면 백엔드가 409 `NOT_PG_ORDER` 로
