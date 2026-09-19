@@ -149,7 +149,7 @@ export async function POST(req: Request) {
 ## 방문자 IP 선언 — 서버에서 주문·문의 API 를 부를 때 (지우지 마라)
 
 **서버 사이드(RSC·route handler)에서 부르면 백엔드가 보는 IP 는 방문자가 아니라 이 서버다.** 그래서
-`@zalkera/client` 의 IP 민감 호출 9종(`getOrder`·`getShipment`·`cancelOrder`·`startPayment`·`confirmPayment`·
+`@zalkera/client` 의 IP 민감 호출 10종(`checkout`·`getOrder`·`getShipment`·`cancelOrder`·`startPayment`·`confirmPayment`·
 `completeOrder`·`submitInquiry`·`submitLead`·`recordPostView`)에는 **원 방문자 IP 를 선언**해야 한다.
 
 ```ts
@@ -157,6 +157,12 @@ import {visitorIp} from "@zalkera/client";
 import {headers} from "next/headers";
 
 const access = {accessToken, phone, context: {clientIp: visitorIp(await headers())}};
+```
+
+**결제(`checkout`)는 넘기는 자리가 다르다** — 둘째 인자인 세션 안이다:
+
+```ts
+const order = await zalkera.checkout(input, {...session, context: {clientIp: visitorIp(req.headers)}}, key);
 ```
 
 - **값은 반드시 `visitorIp()` 로 뽑아라.** `x-forwarded-for` 첫 홉을 직접 쓰면 **방문자가 위조할 수 있다**
@@ -168,6 +174,8 @@ const access = {accessToken, phone, context: {clientIp: visitorIp(await headers(
     **429** 를 받는다(**IP 축**은 성공을 막지 않는다). 그리고 스캐너 탐지가 주문번호 축 하나로 줄어든다.
   - **문의·리드**(`submitInquiry`·`submitLead`): **모든 호출을 센다**(성공도). 한도가 **각각 다르다** —
     문의 60초 3건 · 리드 60초 30건. 뭉치면 **그 사이트의 4번째 문의 제출이 429** 다 — 이쪽이 훨씬 날카롭다.
+  - **결제**(`checkout`): 청약 동의·확인 증빙의 **접속 IP** 가 된다. 선언이 없으면 사이트 서버의 IP 가
+    적히고, 그 원장은 **추가만 되고 5년 남아** 나중에 못 고친다.
   - **게시글 조회수**(`recordPostView`): 레이트리밋이 아니라 **조회 dedup** 이다. 키가
     `sha256(IP|User-Agent)` 이고 **게시글별 · UTC 달력 하루** 단위다. 그 UA 는 **방문자 것이 아니다** —
     서버가 백엔드를 부르므로 브라우저 UA 는 안 넘어가고 Node fetch 기본값은 상수다. 그래서 뭉치면
@@ -185,7 +193,7 @@ const access = {accessToken, phone, context: {clientIp: visitorIp(await headers(
 
 > 이 규칙을 검사하는 도구는 **잘커라 레포 전용**이라 이 소스에는 들어 있지 않다(있었던 적이 있는데,
 > 정규식 판정이 **정상 코드를 실패시키는** 형태를 다 못 막아 걷었다 — 남의 빌드를 막는 쪽이 못 잡는
-> 쪽보다 비싸다). 그러니 이 절이 곧 규칙이다: **IP 민감 호출 9종에는 `visitorIp()` 로 뽑은 `clientIp` 를
+> 쪽보다 비싸다). 그러니 이 절이 곧 규칙이다: **IP 민감 호출 10종에는 `visitorIp()` 로 뽑은 `clientIp` 를
 > 넘긴다.** 값을 헬퍼로 빼도 되고 조건부로 채워도 된다 — **출처가 `visitorIp()` 이면 된다.**
 
 ## 안 쓰는 능력 — **파일을 지우지 말고 입구를 닫는다**

@@ -58,6 +58,9 @@ const IP_SENSITIVE = [
     "recordPostView",
     "submitInquiry",
     "submitLead",
+    // ShopSession 에 싣는 것 — 청약 동의 증빙의 접속 IP 가 된다(client 0.40.0)
+    // ⚠ 파일 단위 판정이라 같은 파일의 `startPayment` 가 이미 선언하면 이 호출의 누락은 못 잡는다.
+    "checkout",
     // OrderAccess 를 경유하는 것 — 게스트 인가 rate-limit 이 이 축에 선다
     "getOrder",
     "getShipment",
