@@ -195,12 +195,36 @@ function paymentPhoneIsOrderPhone(file: TS.SourceFile): boolean {
     });
 }
 
+/** 본문을 읽는 `Request` 메서드. */
+const BODY_READERS = new Set(["json", "text", "arrayBuffer", "formData", "blob"]);
+
+/** 식의 뿌리 이름 — `req.clone().text` 의 `req`. */
+function rootName(expr: TS.Expression): string | null {
+    let e: TS.Expression = expr;
+    for (;;) {
+        if (ts.isPropertyAccessExpression(e) || ts.isElementAccessExpression(e)) e = e.expression;
+        else if (ts.isCallExpression(e) || ts.isParenthesizedExpression(e) || ts.isNonNullExpression(e))
+            e = e.expression;
+        else if (ts.isAsExpression(e)) e = e.expression;
+        else break;
+    }
+    return ts.isIdentifier(e) ? e.text : null;
+}
+
 /**
  * **판정 ⑤** — 이 문의 본문 읽기가 **전부** 길이 상한과 함께인가: `readJsonBody` 호출마다 둘째 인자가 숫자이거나
- * 상수 이름이고(`undefined`·`Infinity` 는 상한이 아니다), 요청 본문을 `.json()`·`.text()` 로 직접 읽지 않는다.
+ * 상수 이름이고(`undefined`·`Infinity`·`NaN` 은 상한이 아니다), 요청(`req` 와 그것을 담은 이름)에서 이어지는 본문
+ * 읽기 메서드(`json`·`text`·`arrayBuffer`·`formData`·`blob`)를 직접 부르지 않는다.
  * 주문 본문 이름에 묶지 않는다 — 원문을 다른 이름으로 읽어 가공한 뒤 넘기는 문도 같은 비용을 치른다.
  */
 function everyBodyReadIsBounded(file: TS.SourceFile): boolean {
+    const requests = new Set(["req"]);
+    walk(file, (n) => {
+        if (ts.isVariableDeclaration(n) && ts.isIdentifier(n.name) && n.initializer) {
+            const root = rootName(n.initializer);
+            if (root && requests.has(root)) requests.add(n.name.text);
+        }
+    });
     let reads = 0;
     let ok = true;
     walk(file, (n) => {
@@ -212,11 +236,12 @@ function everyBodyReadIsBounded(file: TS.SourceFile): boolean {
             const bounded =
                 !!limit &&
                 (ts.isNumericLiteral(limit) ||
-                    (ts.isIdentifier(limit) && limit.text !== "undefined" && limit.text !== "Infinity"));
+                    (ts.isIdentifier(limit) && !["undefined", "Infinity", "NaN"].includes(limit.text)));
             if (!bounded) ok = false;
         }
-        if (ts.isPropertyAccessExpression(callee) && ["json", "text"].includes(callee.name.text)) {
-            if (ts.isIdentifier(callee.expression) && callee.expression.text === "req") ok = false;
+        if (ts.isPropertyAccessExpression(callee) && BODY_READERS.has(callee.name.text)) {
+            const root = rootName(callee.expression);
+            if (root && requests.has(root)) ok = false;
         }
     });
     return reads > 0 && ok;
@@ -355,6 +380,31 @@ test("위 판정들이 실제로 판정한다 — 같은 식을 가짜 소스에
             "직접 읽기가 통과",
         ],
         [everyBodyReadIsBounded, "const b = x;", false, "읽기가 없는데 통과(공허참)"],
+        [
+            everyBodyReadIsBounded,
+            "const b = await readJsonBody(req, MAX); const t = await req.clone().text();",
+            false,
+            "복제한 요청 읽기가 통과",
+        ],
+        [
+            everyBodyReadIsBounded,
+            "const b = await readJsonBody(req, MAX); const r2 = req; await r2.json();",
+            false,
+            "다른 이름에 담은 요청 읽기가 통과",
+        ],
+        [
+            everyBodyReadIsBounded,
+            "const b = await readJsonBody(req, MAX); await req.arrayBuffer();",
+            false,
+            "arrayBuffer 읽기가 통과",
+        ],
+        [everyBodyReadIsBounded, "const b = await readJsonBody(req, NaN);", false, "NaN 이 통과"],
+        [
+            everyBodyReadIsBounded,
+            "const b = await readJsonBody(req, MAX); const j = await fetch(u).then((r) => r.json());",
+            true,
+            "요청이 아닌 응답 읽기를 막았다",
+        ],
     ];
     for (const [predicate, text, expected, why] of cases) {
         assert.equal(predicate(sourceOf(text)), expected, `${why}: ${text}`);
