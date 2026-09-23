@@ -48,5 +48,7 @@
     "src/lib/markdownRender.test.ts": 8,
     "src/lib/blogGraph.test.ts": 6,
     "src/lib/jsonLdScript.test.ts": 5,
-    "src/lib/leadConsent.test.ts": 3
+    "src/lib/leadConsent.test.ts": 3,
+    "src/lib/idempotency.test.ts": 4,
+    "src/lib/checkoutRoutes.test.ts": 2
 }

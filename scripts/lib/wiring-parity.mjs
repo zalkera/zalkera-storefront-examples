@@ -52,6 +52,12 @@ export const WIRING_FILES = [
     "src/lib/crossOrigin.ts", // memo118 교차사이트 위조 **판정**
     "src/lib/http.ts", // 그 판정을 실제 403 으로 만드는 **전송층** + 시크릿 헤더
     "src/lib/session.ts", // 쿠키 httpOnly·secure, state 소각
+    // 주문 멱등키 — 갈리면 그 팩만 「내용을 고쳐 다시 낸 결제」가 30일 409 로 막히거나, 자릿수가 줄어
+    // **남의 주문을 재생받는다.** 돈이 오가는 길의 재시도 규칙이라 뜻(시험)까지 같이 잠근다.
+    "src/lib/idempotency.ts",
+    "src/lib/idempotency.test.ts",
+    // 그 함수를 결제 문이 **실제로 쓰는지** — 본체만 잠그면 라우트가 손으로 만든 키로 돌아가도 초록이다.
+    "src/lib/checkoutRoutes.test.ts",
     "src/lib/oauth.ts", // safeNextPath — 오픈 리다이렉트 판정
     "src/lib/redirect.ts", // 이동 주소에 호스트를 안 싣는다 — 서빙 컨테이너의 요청 주소(0.0.0.0)로 방문자를 보내지 않게
     "src/lib/safeUrl.ts", // 링크 소독(저장형 XSS)

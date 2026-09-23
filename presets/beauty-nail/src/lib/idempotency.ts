@@ -1,0 +1,49 @@
+import {createHash} from "node:crypto";
+
+/**
+ * **주문 멱등키** — 「이 카트 · 이 내용」 한 번의 시도를 가리킨다.
+ *
+ * 🔴 **카트 키만 쓰면 안 된다.** 카트 키 하나로는 「같은 카트로 내용을 고쳐 다시 낸 것」과 「같은
+ * 시도를 다시 보낸 것」을 못 가른다. 앞의 것은 정상 사건인데(결제 시작이 실패해 연락처를 고쳐
+ * 다시 내는 경우 등) 백엔드는 「같은 키 · 다른 본문」을 409 로 막고, 카트 쿠키가 30일짜리라 그
+ * 409 가 그만큼 이어진다 — 카트 키는 **성공 응답에서만** 돌기 때문이다(`rotateCartSessionKey`).
+ *
+ * 본문 지문을 키에 섞으면 그 사건이 **구성상 사라진다**:
+ * - 같은 내용 재시도 → 같은 키 → 백엔드가 원주문을 그대로 돌려준다(중복 주문 없음).
+ * - 내용을 고쳐 다시 냄 → 다른 키 → 409 로 안 막힌다.
+ * - 같은 내용 **동시** 제출 → 같은 키 → 한 건만 서고 나머지는 409(그때는 이미 접수된 것이니
+ *   화면이 「잠시 뒤 같은 내용으로」라고 말한다 · 여기서 키를 돌리면 그 재시도가 두 번째 주문이 된다).
+ *
+ * ⚠ **키 폭은 64자**다 — 백엔드 `shop_order.idempotency_key VARCHAR(64)`. `co-` + sha256 16진
+ * 전량(64)은 67자라 넘치므로 앞 48자만 쓴다(= 51자 · 192비트). 카트 키가 해시 입력에 들어가
+ * 손님끼리도 갈린다.
+ * ⚠ **자릿수를 줄이지 마라.** 짧게 자르면 서로 다른 시도가 같은 키가 되어 **남의 주문을 재생받는다**
+ * — 교착보다 나쁘다.
+ *
+ * ⚠ **칸 순서에 기대지 않는다.** 결제 문은 **브라우저가 보낸 JSON 을 그대로** 넘기고, `JSON.parse` 는
+ * 원문 키 순서를 보존한다. 뜻이 같아도 순서가 다르면 다른 키가 되어 재시도가 새 주문이 되므로,
+ * 접기 전에 **키를 정렬한다.**
+ *
+ * ⚠ **카트의 내용물은 이 키에 없다**(본문만 본다). 카트를 읽어 섞으면 안 된다 — 결제가 카트를
+ * 소비하므로 재시도 때 읽는 카트가 달라져 **재생이 깨진다.** 그래서 결제 시작이 실패한 뒤 같은
+ * 카트 키 아래 **다른 상품**을 담고 같은 구매자 정보로 내면 옛 주문이 재생된다 — 알고 둔 한계다.
+ */
+export function orderIdempotencyKey(cartSessionKey: string, body: unknown): string {
+    const digest = createHash("sha256")
+        .update(`${cartSessionKey}\n${stableJson(body)}`)
+        .digest("hex");
+    return `co-${digest.slice(0, 48)}`;
+}
+
+/** 칸을 이름순으로 세워 접는다 — 같은 뜻의 본문이 늘 같은 문자열이 되게(배열 순서는 뜻이라 안 건든다). */
+function stableJson(value: unknown): string {
+    return JSON.stringify(value, (_key, v: unknown) => {
+        if (v === null || typeof v !== "object" || Array.isArray(v)) return v;
+        const record = v as Record<string, unknown>;
+        return Object.fromEntries(
+            Object.keys(record)
+                .sort()
+                .map((k) => [k, record[k]]),
+        );
+    });
+}

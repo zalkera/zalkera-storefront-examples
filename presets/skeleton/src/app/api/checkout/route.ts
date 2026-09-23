@@ -1,8 +1,9 @@
-import {visitorIp} from "@zalkera/client";
+import {visitorIp, ZalkeraError} from "@zalkera/client";
 import {NextResponse} from "next/server";
 import {zalkera} from "@/lib/zalkera";
 import {assertJsonContentType, assertSameOrigin, errorResponse, invalidBody, readJsonBody} from "@/lib/http";
 import {getShopSession, rotateCartSessionKey} from "@/lib/session";
+import {orderIdempotencyKey} from "@/lib/idempotency";
 import {isPreview} from "@/lib/preview";
 import {setAuthHint} from "@/lib/authHint";
 
@@ -25,19 +26,20 @@ export async function POST(req: Request) {
     if (!input) return invalidBody();
     const session = await getShopSession();
     try {
-        // 멱등키 = 장바구니 세션 키(쿠키라 재시도 간 안정). 더블클릭·네트워크 재시도가 같은 키를 들고
-        // 가 원주문을 그대로 돌려받는다(새 주문·재차감 없음). **호출마다 새 키를 만들면 아무것도 못
+        // 멱등키 = 「장바구니 키 + 본문 지문」(`orderIdempotencyKey`). 더블클릭·네트워크 재시도는 같은
+        // 키로 원주문을 그대로 돌려받는다(새 주문·재차감 없음). **호출마다 새 키를 만들면 아무것도 못
         // 막는다** — 재시도가 서로 다른 키가 되기 때문.
         //
+        // 🔴 카트 키만 쓰면 **내용을 고쳐 다시 낸 것**이 「같은 키 · 다른 본문」 409 가 되고, 카트 키는
+        //    성공 응답에서만 돌므로 카트 쿠키 수명(30일)만큼 막힌다. 본문 지문을 섞어 그 사건을 없앤다.
         // "카트 1개 → 주문 1건"은 저절로 참인 게 아니라 **아래 회전(rotateCartSessionKey)이 참으로
-        // 만드는 명제**다 — 회전 없이 이 키를 쓰면 한 번 주문한 게스트가 30일간 재주문 불가다(§26).
-        // 카트 쿠키가 없으면(예: 쿠키 없이 들어온 로그인 고객) 키 없이 종전 동작.
+        // 만드는 명제**다(§26). 카트 쿠키가 없으면(예: 쿠키 없이 들어온 로그인 고객) 키 없이 종전 동작.
         const order = await zalkera.checkout(
             input,
             // 방문자 IP 를 선언한다 — 안 넘기면 백엔드가 이 서버의 IP 를 받아, 청약 동의 증빙의 접속 IP 가
             // 방문자가 아니라 **사이트 서버**로 남는다(추가 전용 원장이라 못 고친다).
             {...session, context: {clientIp: visitorIp(req.headers)}},
-            session.cartSessionKey ? `co-${session.cartSessionKey}` : undefined,
+            session.cartSessionKey ? orderIdempotencyKey(session.cartSessionKey, input) : undefined,
         );
         // ⛔ **무통장은 결제창을 안 연다.** `startPayment` 를 태우면 백엔드가 409 `NOT_PG_ORDER` 로
         //    막는다 — 그 주문은 운영자가 입금을 확인해 `PAID` 로 올린다. 화면은 주문 상세로 가서
@@ -77,6 +79,20 @@ export async function POST(req: Request) {
         if (session.accessToken) setAuthHint(response, true);
         return response;
     } catch (error) {
+        // 멱등키가 본문 지문을 담으므로 내용을 고쳐 다시 내는 것은 여기로 안 온다 — 대표적으로
+        // **같은 내용의 동시 제출**이고, 어느 쪽이든 이미 한 건이 접수된 뒤다.
+        // ⛔ **카트 키를 돌리지 않는다** — 돌리면 담아 둔 것이 옛 키 아래 남아 사라진 것처럼 보이고,
+        //    재시도는 두 번째 주문이 된다. 같은 내용으로 다시 내면 같은 키라 **원주문이 그대로 돌아온다.**
+        if (error instanceof ZalkeraError && error.code === "IDEMPOTENCY_CONFLICT") {
+            return NextResponse.json(
+                {
+                    message:
+                        "처리 중인 주문이 있습니다. 잠시 후 같은 내용으로 다시 눌러 주세요 — 이미 접수됐다면 그 주문을 그대로 이어 갑니다.",
+                    code: error.code,
+                },
+                {status: 409},
+            );
+        }
         const response = errorResponse(error);
         // stale 힌트 정리: 로그인 토큰으로 호출했는데 401 이면 세션이 죽은 것 → 힌트를 비운다.
         if (session.accessToken && response.status === 401) setAuthHint(response, false);
