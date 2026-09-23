@@ -153,7 +153,7 @@ const LINEAGE = [
     "content/index.ts",
     "scripts/lib/test-floors.json",
     "scripts/lib/gate-behavior.mjs",
-    // **가드 소스가 가장 강한 증거다**(보안 심의 🟠2). 위 넷은 지워도 사이트가 그대로 뜨는
+    // **가드 소스가 가장 강한 증거다**. 위 넷은 지워도 사이트가 그대로 뜨는
     // 개발 아티팩트라 스크럽이 쉬운데, 아래는 지우면 그 사이트의 위조 가드가 같이 사라진다 —
     // 즉 「우리 가드를 실은 채 표식만 지운 zip」이 `--byo` 로 빠져나가는 길을 좁힌다.
     // 원본 마크업 이관물이 우리 crossOrigin.ts 를 실을 이유는 없다.
@@ -185,7 +185,7 @@ const lineageEvidence = (root) => {
         const st = lstatSync(pkgPath);
         if (st.isFile() && st.size <= LINEAGE_PKG_MAX) {
             const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
-            // ⚠ `@zalkera/client` 는 **표식으로 쓰지 않는다**(기능 심의 🟠2). 공개 npm·MIT 라
+            // ⚠ `@zalkera/client` 는 **표식으로 쓰지 않는다**. 공개 npm·MIT 라
             //   우리 공개 API 를 쓰는 **정당한** BYO 이관물도 단다 — 표식으로 세우면 `--byo` 는
             //   rc 2, 빼면 하한표 부재로 rc 1 이 되어 이 플래그가 닫으려던 덫이 되살아난다.
             //   선언(`zalkera`)은 남긴다: 그것은 「우리 잣대를 대 달라」는 자기 선언이라 뜻이 다르다.
@@ -273,7 +273,7 @@ const SECRET_TEXTUAL =
  * ⛔ 이 목록에 없는 확장자를 조용히 건너뛰지 마라. 종전에는 `SECRET_TEXTUAL` 에 없으면 전부
  *    무기록으로 빠졌는데, 같은 함수의 다른 세 스킵 갈래(심링크·크기 초과·디코딩 실패)는 전부
  *    `unread` 에 적어 반려로 문다. **가장 큰 갈래만 그 장치를 안 탔다** — `.csv`·`.sql`·`.har`
- *    같은 것이 「시크릿 0」 아래에 숨었다(심의 실측).
+ *    같은 것이 「시크릿 0」 아래에 숨었다(실측).
  */
 const SECRET_BINARY = /\.(png|jpe?g|gif|webp|avif|ico|bmp|tiff?|pdf|zip|gz|tgz|bz2|xz|7z|rar|woff2?|ttf|otf|eot|mp[34]|mov|webm|wasm|node|so|dylib|dll|exe|class|jar)$/i;
 /** 확장자가 없는데 자격증명이 앉는 이름들. `.git/config` 이 이 그물 밖이라 통과한 전례가 있다. */
@@ -325,7 +325,7 @@ function decodeText(buf) {
     //    UTF-16LE 와 같다.** 아래 분기가 그것을 삼키면 4바이트 코드유닛을 2바이트로 잘라 읽어
     //    글자 사이마다 `U+0000` 이 끼고, 인접 문자를 보는 패턴이 전부 빗나간다. 그러면서
     //    문자열을 돌려주므로 「못 읽었다」로도 안 잡힌다 — **잘못 읽고 0건으로 통과**한다
-    //    (심의 실증: 실제 zip 이 빌드까지 완주하고 rc=0 으로 지났다).
+    //    (실증: 실제 zip 이 빌드까지 완주하고 rc=0 으로 지났다).
     //    UTF-32BE(`00 00 FE FF`)는 `00` 검사에 걸려 이미 안전하지만 나란히 적어 둔다.
     if (buf.length >= 4 && buf[0] === 0xff && buf[1] === 0xfe && buf[2] === 0x00 && buf[3] === 0x00) return null;
     if (buf.length >= 4 && buf[0] === 0x00 && buf[1] === 0x00 && buf[2] === 0xfe && buf[3] === 0xff) return null;
@@ -367,7 +367,7 @@ function scanSecrets(dir) {
                 hits.push(r);
             }
             // ⚠ **대소문자를 무시한다.** `/i` 가 없어 `server.PEM` 이 이름축을 통과했고,
-            //   `SECRET_TEXTUAL` 에도 `pem` 이 없어 내용축까지 함께 빠졌다(심의 실측).
+            //   `SECRET_TEXTUAL` 에도 `pem` 이 없어 내용축까지 함께 빠졌다(실측).
             if (/\.(pem|key|crt|cer|p12|pfx|jks|keystore)$/i.test(e.name)) hits.push(r);
             // 확장자 없는 자격증명 파일(`.git/config`·`.git/credentials`·`.netrc` 등)도 본다 —
             // 위 정크 반려가 1차 방어이고 이것이 2차다.

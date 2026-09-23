@@ -36,7 +36,7 @@ import type TS from "typescript";
  *
  * ①층 면제는 **파일 상단의 마커**(`// zalkera-allow-cross-origin: <사유>` · 첫 `export` 앞 · 사유는 같은 줄)가
  * 정한다 — 검사기 X1 과 같은 규칙이고 `AGENTS.md` 가 고객에게 허락한 길이다. **정본 레포**에서는 면제가 곧
- * 심의 대상이라 면제 집합이 [CROSS_ORIGIN_EXEMPT] 와 같아야 한다. 정본 판별은 CI 의 정본 전용 스텝과 같은
+ * 검토 대상이라 면제 집합이 [CROSS_ORIGIN_EXEMPT] 와 같아야 한다. 정본 판별은 CI 의 정본 전용 스텝과 같은
  * 교집합(`presets/` + `scripts/pack-preset.mjs`)이다.
  */
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -102,7 +102,7 @@ function calls(root: TS.Node, name: string): boolean {
 /**
  * export 된 HTTP 메서드와 **그 본문** — 선언형(`export async function POST`)과 화살표형
  * (`export const POST = async (req) => {}`) 둘 다. 화살표형을 빼면 그 형태로 갈아타는 순간 그물이 눈을 감는다
- * (memo118 §4 가 1회전에 잡은 네 우회의 첫째가 그 형태였고, 이 그물의 2회전 변이가 같은 구멍을 다시 열었다).
+ * (처음 잡힌 네 우회의 첫째가 그 형태였고, 이 그물의 한 변이가 같은 구멍을 다시 열었다).
  *
  * 본문을 함께 돌려주는 이유: 한 파일이 메서드를 둘 이상 export 하면 판정이 갈린다 —
  * `cart/items/[variantId]` 는 PATCH 만 본문이 필수이고 DELETE 는 본문이 없다. 파일 단위로 재면
@@ -379,7 +379,7 @@ test("🔴 본문 없는 변이 문에는 ③층이 없다 — 있으면 정상 
     );
 });
 
-/** **정본 레포의** ①층 면제 — 이 목록뿐이다. 늘리려면 이 줄을 고쳐야 하고, 그 자리가 곧 심의 대상이다. 고객 트리에서는 마커가 정한다. */
+/** **정본 레포의** ①층 면제 — 이 목록뿐이다. 늘리려면 이 줄을 고쳐야 하고, 그 자리가 곧 검토 대상이다. 고객 트리에서는 마커가 정한다. */
 const CROSS_ORIGIN_EXEMPT = ["revalidate/route.ts"];
 
 test("🔴 변이 문은 모두 ①층(assertSameOrigin)을 부른다 — 5벌 일관 제거를 잡는다", () => {
@@ -393,7 +393,7 @@ test("🔴 변이 문은 모두 ①층(assertSameOrigin)을 부른다 — 5벌 �
     );
 });
 
-test("🔴 ①층 면제 마커는 사유를 같은 줄에 갖는다 — 정본에서는 면제 집합이 심의 목록과 같다", () => {
+test("🔴 ①층 면제 마커는 사유를 같은 줄에 갖는다 — 정본에서는 면제 집합이 검토 목록과 같다", () => {
     const exempt = new Set<string>();
     const unrecognized: string[] = [];
     for (const [label, dir] of PACK_SRCS) {
@@ -415,7 +415,7 @@ test("🔴 ①층 면제 마커는 사유를 같은 줄에 갖는다 — 정본�
         assert.deepEqual(
             [...exempt].sort(),
             [...CROSS_ORIGIN_EXEMPT].sort(),
-            "정본 레포의 면제 집합이 심의 목록과 달라졌다 — 면제를 늘리려면 CROSS_ORIGIN_EXEMPT 를 고쳐 심의를 받는다",
+            "정본 레포의 면제 집합이 검토 목록과 달라졌다 — 면제를 늘리려면 CROSS_ORIGIN_EXEMPT 를 고쳐 검토를 받는다",
         );
     }
 });
