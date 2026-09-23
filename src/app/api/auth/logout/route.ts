@@ -23,7 +23,7 @@ export async function POST(req: Request) {
     //    로그아웃은 "내 흔적을 지운다"는 기대가 걸린 자리라 거기서 카트만 남으면 기대와 어긋난다.
     //
     //    ⚠ 삭제가 아니라 **회전**이다 — 쿠키를 지우면 다음 담기에서 새 키가 나기까지 빈 구간이 생기고,
-    //    `co-{cartSessionKey}` 멱등 불변식이 키 부재를 전제로 하지 않는다(위 헬퍼 머리말).
+    //    카트 키에서 나오는 멱등키(`orderIdempotencyKey`)가 키 부재를 전제로 하지 않는다(위 헬퍼 머리말).
     //
     //    회원 카트는 이 경로로 노출되지 않는다 — 백엔드가 로그인 중 만든 카트에 `sessionKey` 를 안
     //    심고(`ShopCartService.resolveOrCreate`: `sessionKey = if (customerId == null) sessionKey else null`),

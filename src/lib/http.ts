@@ -28,10 +28,24 @@ export function errorResponse(error: unknown): NextResponse {
  * 위조를 막는 것은 [assertSameOrigin](①층)과 [assertJsonContentType](③층)이고, 이 함수는
  * **형식 가드**다. 이 함수에 Content-Type 검사를 더하지 마라 — 그 판정은 ③층이 진다.
  */
-export async function readJsonBody(req: Request): Promise<any | null> {
-    const body = await req.json().catch(() => null);
+export async function readJsonBody(req: Request, maxChars?: number): Promise<any | null> {
+    const body = maxChars === undefined ? await req.json().catch(() => null) : await readBounded(req, maxChars);
     if (body === null || typeof body !== "object" || Array.isArray(body)) return null;
     return body;
+}
+
+/**
+ * 길이 상한을 넘는 본문은 파싱하지 않는다. 본문을 한 번 더 훑는 라우트(결제 문의 멱등키)에서 쓴다 —
+ * 상한이 없으면 Next 기본 상한(10MB)까지 들어와, 키를 만드는 데만 요청 하나가 이벤트 루프를 0.5초 넘게 쥔다.
+ */
+async function readBounded(req: Request, maxChars: number): Promise<unknown> {
+    const text = await req.text().catch(() => null);
+    if (text === null || text.length > maxChars) return null;
+    try {
+        return JSON.parse(text);
+    } catch {
+        return null;
+    }
 }
 
 /** readJsonBody 가 null 일 때의 표준 400. INVALID_BODY 는 신규 코드 — 기존 분기와 충돌 없음. */

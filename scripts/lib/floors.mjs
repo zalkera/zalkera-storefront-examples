@@ -58,6 +58,9 @@ export const REQUIRED_FLOORS = {
     "src/lib/datetime.test.ts": 8,
     "src/lib/astGuards.test.ts": 16,
     "src/lib/bankTransferPolicy.test.ts": 14,
+    // 결제 문의 멱등키 — 카트 키만 쓰면 내용을 고쳐 다시 낸 결제가 카트 쿠키 수명만큼 409 로 막힌다.
+    "src/lib/idempotency.test.ts": 4,
+    "src/lib/checkoutRoutes.test.ts": 2,
     "scripts/lib/floors.test.mjs": 41,
     "scripts/lib/gateProbe.test.mjs": 14,
     "scripts/lib/junkEntries.test.mjs": 8,
@@ -158,6 +161,9 @@ const FLOOR_SUBJECT = Object.freeze({
     // 스위트 전체가 구매 정책 페이지 하나를 그린다 — 페이지를 걷은 트리는 요구하지 않는다(memo220 ⑩).
     "src/lib/policiesRender.test.ts": "src/app/policies/page.tsx",
     "src/lib/leadConsent.test.ts": "src/components/LeadForm.tsx",
+    // 결제를 걷은 트리(상담·소개 사이트)는 주문 문이 없다.
+    "src/lib/idempotency.test.ts": "src/lib/idempotency.ts",
+    "src/lib/checkoutRoutes.test.ts": "src/app/api/checkout/route.ts",
 });
 
 /**

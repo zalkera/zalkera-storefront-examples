@@ -89,7 +89,7 @@ test("🔴 인코딩한 쿠키 값은 예산(1024자) 안이다 — 넘치면 �
         .join("&");
     const touch = readLandingTouch(at(`/?${q}`), null, "h");
     assert.ok(touch);
-    // ⚠ 상한은 브라우저의 4KB 가 아니라 **모든 오리진 요청에 실리는 무게**다(토큰 쿠키와 같은 경로 · 심의 성능 축).
+    // ⚠ 상한은 브라우저의 4KB 가 아니라 **모든 오리진 요청에 실리는 무게**다(토큰 쿠키와 같은 경로).
     assert.ok(encodeURIComponent(encodeTouch(touch)).length <= 1024, "모든 요청에 실리기엔 무겁다");
     // 한글 255자는 인코딩하면 2,295자라 **한 칸도 못 들어간다** — 그 값을 30일 동안 모든 요청에 지고 다니지 않는다.
     assert.equal(touch.utmCampaign, undefined, "최악 값이 통째로 실렸다 — 예산이 안 먹는다");
@@ -379,7 +379,7 @@ test("🔴 middleware 가 유입을 잡고, 담기·예약·리드 BFF 가 넘�
         missing.push("app/api/booking/route.ts — createBooking 입력에 attribution 이 없다");
     // 🔴 **결제의 방문자 IP 선언은 인자 자리에서 재야 한다.** SDK 검사기 `[I2]` 는 **파일 단위**라 같은 파일의
     //    `startPayment` 가 이미 선언하면 `checkout` 의 누락을 못 본다(검사기 스스로 그렇게 적는다). 그 원장은
-    //    추가 전용·5년이라 나중에 못 고친다 — 그래서 호출 하나하나를 여기서 본다(심의 보안 축).
+    //    추가 전용·5년이라 나중에 못 고친다 — 그래서 호출 하나하나를 여기서 본다.
     const declaresClientIp = (a: TS.Node): boolean =>
         ts.isObjectLiteralExpression(a) &&
         a.properties.some(
