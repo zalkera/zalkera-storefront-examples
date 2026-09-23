@@ -63,7 +63,8 @@ function checkoutCalls(file: TS.SourceFile): TS.CallExpression[] {
 function declarationCount(file: TS.SourceFile, name: string): number {
     let count = 0;
     walk(file, (n) => {
-        if ((ts.isVariableDeclaration(n) || ts.isParameter(n)) && ts.isIdentifier(n.name) && n.name.text === name) {
+        const declares = ts.isVariableDeclaration(n) || ts.isParameter(n) || ts.isBindingElement(n);
+        if (declares && ts.isIdentifier(n.name) && n.name.text === name) {
             count += 1;
         }
     });
@@ -194,31 +195,47 @@ function paymentPhoneIsOrderPhone(file: TS.SourceFile): boolean {
     });
 }
 
-/** **판정 ⑤** — 주문 본문을 `readJsonBody` 로 읽는다면 **길이 상한을 넘겨** 읽는가. */
-function orderBodyIsBounded(file: TS.SourceFile): boolean {
-    const names = new Set(checkoutCalls(file).map((c) => orderBodyName(c, file)));
-    if (names.size === 0 || names.has(null)) return false;
+/**
+ * **판정 ⑤** — 이 문의 본문 읽기가 **전부** 길이 상한과 함께인가: `readJsonBody` 호출마다 둘째 인자가 숫자이거나
+ * 상수 이름이고(`undefined`·`Infinity` 는 상한이 아니다), 요청 본문을 `.json()`·`.text()` 로 직접 읽지 않는다.
+ * 주문 본문 이름에 묶지 않는다 — 원문을 다른 이름으로 읽어 가공한 뒤 넘기는 문도 같은 비용을 치른다.
+ */
+function everyBodyReadIsBounded(file: TS.SourceFile): boolean {
+    let reads = 0;
     let ok = true;
     walk(file, (n) => {
-        if (!ts.isVariableDeclaration(n) || !ts.isIdentifier(n.name) || !names.has(n.name.text)) return;
-        const init = n.initializer && ts.isAwaitExpression(n.initializer) ? n.initializer.expression : n.initializer;
-        if (!init || !ts.isCallExpression(init) || !ts.isIdentifier(init.expression)) return;
-        if (init.expression.text === "readJsonBody" && init.arguments.length < 2) ok = false;
+        if (!ts.isCallExpression(n)) return;
+        const callee = n.expression;
+        if (ts.isIdentifier(callee) && callee.text === "readJsonBody") {
+            reads += 1;
+            const limit = n.arguments[1];
+            const bounded =
+                !!limit &&
+                (ts.isNumericLiteral(limit) ||
+                    (ts.isIdentifier(limit) && limit.text !== "undefined" && limit.text !== "Infinity"));
+            if (!bounded) ok = false;
+        }
+        if (ts.isPropertyAccessExpression(callee) && ["json", "text"].includes(callee.name.text)) {
+            if (ts.isIdentifier(callee.expression) && callee.expression.text === "req") ok = false;
+        }
     });
-    return ok;
+    return reads > 0 && ok;
 }
 
 test("주문 문들이 그 키를 쓰고, 충돌 갈래에서 카트를 안 돌린다", () => {
     for (const name of ROUTES) {
         const {file, rel} = routeSource(name);
-        assert.ok(everyCheckoutUsesKeyBuilder(file), `${rel}: 멱등키를 손으로 만든다 — 내용이 바뀌면 409 로 막힌다`);
+        for (const c of checkoutCalls(file)) {
+            assert.ok(orderBodyName(c, file), `${rel}: 주문 본문이 식별자가 아니거나 같은 이름이 두 번 선언됐다`);
+        }
+        assert.ok(everyCheckoutUsesKeyBuilder(file), `${rel}: 멱등키를 그 함수·그 주문 본문으로 만들지 않는다`);
         assert.ok(conflictBranchAnswers(file), `${rel}: 충돌 갈래가 카트 키를 돌린다 — 재시도가 두 번째 주문이 된다`);
         assert.ok(everyCheckoutDeclaresIp(file), `${rel}: checkout 에 context.clientIp 가 없다`);
         assert.ok(
             paymentPhoneIsOrderPhone(file),
             `${rel}: 결제 시작 번호가 주문 번호와 다른 값이다 — 같은 번호가 두 표기로 나간다`,
         );
-        assert.ok(orderBodyIsBounded(file), `${rel}: 주문 본문을 길이 상한 없이 읽는다`);
+        assert.ok(everyBodyReadIsBounded(file), `${rel}: 요청 본문을 길이 상한 없이 읽는다`);
     }
 });
 
@@ -315,12 +332,29 @@ test("위 판정들이 실제로 판정한다 — 같은 식을 가짜 소스에
         ],
         [paymentPhoneIsOrderPhone, "const b = x; z.checkout(b, s, k);", false, "결제 시작이 없는데 통과(공허참)"],
         [
-            orderBodyIsBounded,
-            "const b = await readJsonBody(req, MAX); z.checkout(b, s, k);",
-            true,
-            "정당한 형상을 막았다",
+            paymentPhoneIsOrderPhone,
+            "const b = raw; try { const {b} = y; z.checkout(b, s, k); } catch {} z.startPayment(n, {phone: b.buyerPhone});",
+            false,
+            "구조분해로 겹친 이름이 통과",
         ],
-        [orderBodyIsBounded, "const b = await readJsonBody(req); z.checkout(b, s, k);", false, "상한 없이 읽어도 통과"],
+        [everyBodyReadIsBounded, "const b = await readJsonBody(req, MAX);", true, "정당한 형상을 막았다"],
+        [everyBodyReadIsBounded, "const b = await readJsonBody(req, 65536);", true, "숫자 상한을 막았다"],
+        [everyBodyReadIsBounded, "const b = await readJsonBody(req);", false, "상한 없이 읽어도 통과"],
+        [everyBodyReadIsBounded, "const b = await readJsonBody(req, undefined);", false, "undefined 가 통과"],
+        [everyBodyReadIsBounded, "const b = await readJsonBody(req, Infinity);", false, "Infinity 가 통과"],
+        [
+            everyBodyReadIsBounded,
+            "const raw = (await readJsonBody(req)) ?? null; const b = raw;",
+            false,
+            "감싼 호출이 통과",
+        ],
+        [
+            everyBodyReadIsBounded,
+            "const b = await readJsonBody(req, MAX); const c = await req.json();",
+            false,
+            "직접 읽기가 통과",
+        ],
+        [everyBodyReadIsBounded, "const b = x;", false, "읽기가 없는데 통과(공허참)"],
     ];
     for (const [predicate, text, expected, why] of cases) {
         assert.equal(predicate(sourceOf(text)), expected, `${why}: ${text}`);
