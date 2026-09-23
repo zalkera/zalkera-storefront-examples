@@ -1,6 +1,7 @@
 import {NextResponse} from "next/server";
 import {ZalkeraError} from "@zalkera/client";
 import {isJsonContentType, isSameOriginRequest} from "@/lib/crossOrigin";
+import {parseJsonWithin} from "@/lib/bodyLimit";
 
 /**
  * ZalkeraError → JSON 응답. 네트워크 오류(status 0)는 502 로.
@@ -34,18 +35,10 @@ export async function readJsonBody(req: Request, maxChars?: number): Promise<any
     return body;
 }
 
-/**
- * 길이 상한을 넘는 본문은 파싱하지 않는다. 본문을 한 번 더 훑는 라우트(결제 문의 멱등키)에서 쓴다 —
- * 상한이 없으면 Next 기본 상한(10MB)까지 들어와, 키를 만드는 데만 요청 하나가 이벤트 루프를 0.5초 넘게 쥔다.
- */
+/** 상한 판정은 [parseJsonWithin] 이 진다(`@/lib/bodyLimit`). */
 async function readBounded(req: Request, maxChars: number): Promise<unknown> {
     const text = await req.text().catch(() => null);
-    if (text === null || text.length > maxChars) return null;
-    try {
-        return JSON.parse(text);
-    } catch {
-        return null;
-    }
+    return text === null ? null : parseJsonWithin(text, maxChars);
 }
 
 /** readJsonBody 가 null 일 때의 표준 400. INVALID_BODY 는 신규 코드 — 기존 분기와 충돌 없음. */

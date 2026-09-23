@@ -61,6 +61,7 @@ export const REQUIRED_FLOORS = {
     // 결제 문의 멱등키 — 카트 키만 쓰면 내용을 고쳐 다시 낸 결제가 카트 쿠키 수명만큼 409 로 막힌다.
     "src/lib/idempotency.test.ts": 4,
     "src/lib/checkoutRoutes.test.ts": 2,
+    "src/lib/bodyLimit.test.ts": 2,
     "scripts/lib/floors.test.mjs": 41,
     "scripts/lib/gateProbe.test.mjs": 14,
     "scripts/lib/junkEntries.test.mjs": 8,

@@ -58,6 +58,9 @@ export const WIRING_FILES = [
     "src/lib/idempotency.test.ts",
     // 그 함수를 결제 문이 **실제로 쓰는지** — 본체만 잠그면 라우트가 손으로 만든 키로 돌아가도 초록이다.
     "src/lib/checkoutRoutes.test.ts",
+    // 결제 본문 길이 상한 — 멱등키가 본문을 한 번 더 훑으므로 상한이 없으면 큰 본문 하나가 이벤트 루프를 쥔다.
+    "src/lib/bodyLimit.ts",
+    "src/lib/bodyLimit.test.ts",
     "src/lib/oauth.ts", // safeNextPath — 오픈 리다이렉트 판정
     "src/lib/redirect.ts", // 이동 주소에 호스트를 안 싣는다 — 서빙 컨테이너의 요청 주소(0.0.0.0)로 방문자를 보내지 않게
     "src/lib/safeUrl.ts", // 링크 소독(저장형 XSS)

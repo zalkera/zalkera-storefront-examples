@@ -50,5 +50,6 @@
     "src/lib/jsonLdScript.test.ts": 5,
     "src/lib/leadConsent.test.ts": 3,
     "src/lib/idempotency.test.ts": 4,
-    "src/lib/checkoutRoutes.test.ts": 2
+    "src/lib/checkoutRoutes.test.ts": 2,
+    "src/lib/bodyLimit.test.ts": 2
 }
