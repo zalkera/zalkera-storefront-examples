@@ -200,7 +200,7 @@ const order = await zalkera.checkout(input, {...session, context: {clientIp: vis
 > 규칙은 그대로다: **IP 민감 호출에는 `visitorIp()` 로 뽑은 `clientIp` 를 넘긴다.** 값을 헬퍼로 빼도 되고
 > 조건부로 채워도 된다 — **출처가 `visitorIp()` 이면 된다.**
 >
-> ⚠ **검사기가 보는 것은 열세 개이고(`@zalkera/client` 0.47.0), 교본이 더 요구하면 교본을 따른다.** 본인확인
+> ⚠ **검사기가 보는 것은 열세 개이고(`@zalkera/client` 0.47.1), 교본이 더 요구하면 교본을 따른다.** 본인확인
 > 시작(`startIdentityVerification`)과 문자 인증 두 문(`startSmsVerification`·`confirmSmsVerification` — 확인은 **셋째
 > 인자**)도 그 안에 든다 — 안 넘기면 인증 레이트리밋이 사이트 서버 IP 한 칸으로 뭉쳐 **그 사이트 방문자 전원이**
 > 한 상한을 나눠 쓴다.

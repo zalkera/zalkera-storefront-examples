@@ -52,7 +52,7 @@ test("키가 백엔드 칸에 들어가고, 짧게 잘리지 않는다", () => {
     assert.ok(key.startsWith("co-"), key);
     // 상한 — `shop_order.idempotency_key VARCHAR(64)`. 넘으면 저장이 잘린다.
     assert.ok(key.length <= 64, `멱등키가 칸 폭을 넘었다(${key.length}자)`);
-    // 🔴 하한 — 짧게 자르면 **서로 다른 시도가 같은 키**가 되어 남의 주문을 재생받는다(교착보다 나쁘다).
+    // 🔴 하한 — 짧게 자르면 **서로 다른 시도가 같은 키**가 되어 뒤 손님이 자기 잘못 없이 409 를 받는다.
     //    상한만 재면 `slice(0, 4)` 변이가 살아남는다.
     assert.ok(key.length >= 35, `지문이 너무 짧다(${key.length}자) — 충돌이 실제로 난다`);
 });
