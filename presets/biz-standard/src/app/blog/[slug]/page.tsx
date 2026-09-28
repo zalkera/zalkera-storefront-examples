@@ -9,7 +9,6 @@ import {Markdown} from "@/components/Markdown";
 import {RelatedPosts} from "@/components/RelatedPosts";
 import {TableOfContents} from "@/components/TableOfContents";
 import {ViewBeacon} from "./ViewBeacon";
-import type {PostWithByline} from "@/lib/postFields";
 import {routeParam} from "@/lib/routeParam";
 import {pageMetadata, withSiteName} from "@/lib/metadata";
 import {formatDate} from "@/lib/datetime";
@@ -94,7 +93,7 @@ export default async function BlogPostPage({params}: {params: Promise<{slug: str
     const {slug: rawParam} = await params;
     const slug = routeParam(rawParam);
 
-    let post: PostWithByline;
+    let post: PostDetail;
     try {
         post = await loadPost(slug);
     } catch (error) {

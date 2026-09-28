@@ -1,5 +1,4 @@
-import type {SiteConfig} from "@zalkera/client";
-import type {PostWithByline} from "./postFields.ts";
+import type {PostDetail, SiteConfig} from "@zalkera/client";
 
 /**
  * 글 그래프 빌더 — **컴포넌트가 아니라 데이터라서 여기 있다.**
@@ -26,7 +25,7 @@ export function schemaTypeOf(businessType: SiteConfig["businessType"]): string {
  *  - `image` 는 `coverAssetId` 가 있을 때만 `/media/{id}` 안정 URL 로(presigned 금지 — W4).
  *  - `datePublished`·`description` 도 값이 있을 때만.
  */
-export function blogPostingJsonLd(post: PostWithByline, siteBase: string, config?: SiteConfig | null) {
+export function blogPostingJsonLd(post: PostDetail, siteBase: string, config?: SiteConfig | null) {
     const url = `${siteBase}/blog/${post.slug}`;
     // 상호가 있으면 그것이 **발행자**다 — 그 사이트의 글은 실제로 그 조직이 낸 것이라 참이다.
     const organization = config?.companyName
