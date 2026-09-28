@@ -16,24 +16,23 @@ const MODIFIED = new Date(Date.UTC(2026, 8, 8)).toISOString();
  * 글에 저자가 있으면 사람, 없으면 상호(그 사이트의 글은 실제로 그 조직이 낸 것이라 참이다),
  * 둘 다 없으면 **칸 자체를 뺀다**. 없는 사람 이름을 만들면 그 그래프가 거짓이 된다.
  */
-const post = (over: Partial<PostDetail> = {}): PostDetail =>
-    ({
-        id: 1,
-        slug: "guide",
-        title: "안내",
-        summary: null,
-        content: null,
-        categoryId: null,
-        coverAssetId: null,
-        publishedAt: PUBLISHED,
-        viewCount: 0,
-        modified: null,
-        seo: null,
-        // 서버는 두 칸을 늘 싣는다(작성자 없으면 null · 태그 없으면 빈 배열) — 실제 응답 모양 그대로 둔다.
-        author: null,
-        tags: [],
-        ...over,
-    }) as PostDetail;
+const post = (over: Partial<PostDetail> = {}): PostDetail => ({
+    id: 1,
+    slug: "guide",
+    title: "안내",
+    summary: null,
+    content: null,
+    categoryId: null,
+    coverAssetId: null,
+    publishedAt: PUBLISHED,
+    viewCount: 0,
+    modified: null,
+    seo: null,
+    // 서버는 두 칸을 늘 싣는다(작성자 없으면 null · 태그 없으면 빈 배열) — 실제 응답 모양 그대로 둔다.
+    author: null,
+    tags: [],
+    ...over,
+});
 
 const config = (over: Partial<SiteConfig> = {}): SiteConfig =>
     ({companyName: "잘커라 상점", businessType: null, ...over}) as SiteConfig;
