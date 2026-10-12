@@ -48,8 +48,13 @@ export default function PaymentCompletePage() {
         }).catch(() => null);
         if (!res) return {ok: false, status: 0, message: "결제 확인 중 연결이 끊겼습니다."};
         if (res.ok) return {ok: true};
-        const body = (await res.json().catch(() => ({}))) as {code?: string; message?: string};
-        return {ok: false, status: res.status, code: body.code, message: body.message};
+        const body = (await res.json().catch(() => ({}))) as {code?: unknown; message?: unknown};
+        return {
+            ok: false,
+            status: res.status,
+            code: typeof body.code === "string" ? body.code : undefined,
+            message: typeof body.message === "string" ? body.message : undefined,
+        };
     };
 
     const check = async (no: string) => {

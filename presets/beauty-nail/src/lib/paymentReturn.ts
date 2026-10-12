@@ -6,7 +6,7 @@
  * `UPSTREAM_UNAVAILABLE`) **승인이 났을 수 있다** — 그때 「결제 실패」나 막다른 오류를 보이면 손님이 다시 결제해 두 번
  * 결제된다. 그래서 그 갈래는 간격을 늘려 다시 묻고, 그래도 모르면 「확인 중」과 다시 확인 단추를 둔다.
  */
-export type ConfirmResult = {ok: true} | {ok: false; status: number; code?: string; message?: string};
+export type ConfirmResult = {ok: true} | {ok: false; status: number; code?: string | null; message?: string};
 export type ConfirmVerdict = "confirmed" | "unknown" | "failed" | "needPhone" | "error";
 
 /** 「확인 중」을 몇 번 더 물을지와 그 간격 — 결제사가 승인을 마무리하는 몇 초를 기다린다. */
@@ -17,13 +17,13 @@ const GATEWAY = new Set([502, 503, 504]);
 
 export function confirmVerdict(result: ConfirmResult): ConfirmVerdict {
     if (result.ok) return "confirmed";
-    if (result.code === "PAYMENT_CONFIRM_UNSETTLED") return "unknown";
-    if (result.code === "PAYMENT_CONFIRM_FAILED") return "failed";
-    if (result.code === "ORDER_ACCESS_DENIED") return "needPhone";
+    // ⚠ 「코드 없음」은 두 꼴로 온다 — 칸이 없거나 `null`(BFF 가 SDK 의 시간 초과 오류를 그대로 실으면 `code: null`).
+    const code = result.code ?? undefined;
+    if (code === "PAYMENT_CONFIRM_UNSETTLED") return "unknown";
+    if (code === "PAYMENT_CONFIRM_FAILED") return "failed";
+    if (code === "ORDER_ACCESS_DENIED") return "needPhone";
     if (result.status === 0) return "unknown";
-    if (GATEWAY.has(result.status) && (result.code === undefined || result.code === "UPSTREAM_UNAVAILABLE")) {
-        return "unknown";
-    }
+    if (GATEWAY.has(result.status) && (code === undefined || code === "UPSTREAM_UNAVAILABLE")) return "unknown";
     return "error";
 }
 
@@ -31,6 +31,6 @@ export function confirmVerdict(result: ConfirmResult): ConfirmVerdict {
  * 「다시 결제」(같은 주문으로 결제창 다시 열기)가 실패했을 때 — 단추를 남길지(`retry`), 주문이 닫혀 더 못 여는지
  * (`closed` — 409 `NOT_PAYABLE`: 만료·취소·이미 결제).
  */
-export function restartVerdict(code: string | undefined): "retry" | "closed" {
+export function restartVerdict(code: string | null | undefined): "retry" | "closed" {
     return code === "NOT_PAYABLE" ? "closed" : "retry";
 }

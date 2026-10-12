@@ -13,6 +13,8 @@ test("결과를 모르는 응답은 「확인 중」 갈래다 — 결제사 처
         no(409, "PAYMENT_CONFIRM_UNSETTLED"),
         no(0),
         no(502),
+        // BFF 가 SDK 의 시간 초과 오류를 그대로 실으면 `code: null` 이다 — 칸이 없는 것과 같다.
+        {ok: false as const, status: 502, code: null},
         no(504),
         no(503),
         no(502, "UPSTREAM_UNAVAILABLE"),
