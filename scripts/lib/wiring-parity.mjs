@@ -60,6 +60,11 @@ export const WIRING_FILES = [
     "src/lib/checkoutAttempt.ts",
     // 결제창으로 보내는 자리 — 떠나기 전에 연락처를 남기지 않으면 그 팩만 게스트 확정이 「접근 거부」로 실패한다.
     "src/lib/paymentStart.ts",
+    // 복귀 화면의 갈래 — 한 벌만 「결과 모름」을 실패로 보이면 그 팩만 손님이 두 번 결제한다. 뜻(시험)까지 잠근다.
+    "src/lib/paymentReturn.ts",
+    "src/lib/paymentReturn.test.ts",
+    // 라이브 BFF 의 공유 사본 — 한 벌만 빠지면 그 팩의 방송 화면이 시청자 수만큼 백엔드를 두드린다.
+    "src/lib/liveSnapshotCache.ts",
     // 그 함수를 결제 문이 **실제로 쓰는지** — 본체만 잠그면 라우트가 손으로 만든 키로 돌아가도 초록이다.
     "src/lib/checkoutRoutes.test.ts",
     // 결제 본문 길이 상한 — 멱등키가 본문을 한 번 더 훑으므로 상한이 없으면 큰 본문 하나가 이벤트 루프를 쥔다.

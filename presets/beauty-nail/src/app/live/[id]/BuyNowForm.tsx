@@ -4,7 +4,8 @@ import {useRef, useState, useTransition} from "react";
 import type {LiveEventProduct} from "@zalkera/client";
 import {Button} from "@/components/ui/Button";
 import {BuyerFields, EMPTY_BUYER, buyerCheckout, type BuyerForm} from "@/components/BuyerFields";
-import {CHECKOUT_ATTEMPT_HEADER, newCheckoutAttempt} from "@/lib/checkoutAttempt";
+import {CHECKOUT_ATTEMPT_HEADER, attemptSurvives, newCheckoutAttempt} from "@/lib/checkoutAttempt";
+import {liveSnapshotStale} from "@/lib/liveEvent";
 import {goToPayment} from "@/lib/paymentStart";
 
 /**
@@ -15,16 +16,23 @@ import {goToPayment} from "@/lib/paymentStart";
  *
  * **시도 id** 를 제출마다 헤더로 보낸다(`@/lib/checkoutAttempt`). 같은 폼의 재시도는 같은 값이라 문이 같은
  * 멱등키를 만들어 원주문을 돌려받고, 결제창으로 떠나면 새 값을 만든다 — 뒤로 와서 같은 내용으로 한 번 더 사면 새
- * 주문이다. 방송 편성 상품은 무통장이 안 되므로(서버가 409) 결제수단 선택지를 두지 않는다.
+ * 주문이다. 결제 시작이 409 `NOT_PAYABLE`(그 주문이 만료·취소돼 더 결제할 수 없다)로 오면 시도 id 를 버린다 — 다음
+ * 누름이 새 주문이다. 그 밖의 실패(연결 끊김·시간 초과 등)는 시도 id 를 그대로 둬 같은 주문으로 이어 간다.
+ *
+ * 결제가 방송·수량 사유(409 `LIVE_CAP_EXCEEDED`·`NOT_LIVE`·`OUT_OF_STOCK`·404 `LIVE_PRODUCT_NOT_FOUND`)로 거절되면
+ * `onStale` 로 방송 스냅샷을 다시 읽게 한다 — 판매는 리비전을 안 올리므로 화면의 남은 수량은 그렇게 따라온다.
+ * 다 팔렸으면 카드가 이 폼을 닫고 소진을 보인다. 방송 편성 상품은 무통장이 안 되므로 결제수단 선택지를 두지 않는다.
  */
 export function BuyNowForm({
     liveId,
     product,
     maxQuantity,
+    onStale,
 }: {
     liveId: number;
     product: LiveEventProduct;
     maxQuantity: number;
+    onStale: () => void;
 }) {
     const [open, setOpen] = useState(false);
     const [variantId, setVariantId] = useState(product.variants[0]?.variantId);
@@ -63,6 +71,13 @@ export function BuyNowForm({
             }).catch(() => null);
             const data = res ? await res.json().catch(() => ({})) : {};
             if (!res || !res.ok) {
+                const code = typeof data.code === "string" ? data.code : undefined;
+                if (liveSnapshotStale(code)) onStale();
+                if (!attemptSurvives(code)) {
+                    attempt.current = null;
+                    setError("주문이 만료돼 결제할 수 없습니다. 다시 누르면 새 주문으로 진행합니다.");
+                    return;
+                }
                 setError(data.message ?? "주문하지 못했습니다. 잠시 후 다시 눌러 주세요.");
                 return;
             }

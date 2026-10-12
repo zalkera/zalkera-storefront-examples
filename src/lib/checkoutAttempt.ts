@@ -29,3 +29,13 @@ export function newCheckoutAttempt(): string {
     crypto.getRandomValues(bytes);
     return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 }
+
+/**
+ * 결제 시작이 이 코드로 실패한 뒤에도 **같은 시도 id 를 쓰는가**. 409 `NOT_PAYABLE` 은 그 주문이 더는 결제할 수 없다는
+ * 뜻이다(미결제로 두다 만료·취소) — 같은 시도 id 로 다시 내면 같은 키로 그 닫힌 주문이 재생될 뿐이라, 시도 id 를 버리고
+ * 다음 누름이 새 주문이 되게 한다. 그 밖의 실패(연결 끊김·시간 초과·재고 등)는 같은 시도로 다시 내야 이미 선 주문이
+ * 이어진다(새 주문이 서면 앞 주문이 재고·한정 수량을 쥔 채 남는다).
+ */
+export function attemptSurvives(code: string | undefined): boolean {
+    return code !== "NOT_PAYABLE";
+}

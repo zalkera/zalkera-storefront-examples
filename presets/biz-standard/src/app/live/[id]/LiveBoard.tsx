@@ -1,16 +1,13 @@
 "use client";
 
-import {useEffect, useRef, useState} from "react";
+import {useCallback, useEffect, useRef, useState} from "react";
 import type {LiveEvent, LiveEventProduct} from "@zalkera/client";
 import {Card} from "@/components/ui/Card";
 import {buttonClasses} from "@/components/ui/Button";
 import {formatDateTime} from "@/lib/datetime";
-import {liveBuyable, liveQuantityMax, sortLiveProducts} from "@/lib/liveEvent";
+import {LIVE_SNAPSHOT_TTL_MS, liveBuyable, livePollDelayMs, liveQuantityMax, sortLiveProducts} from "@/lib/liveEvent";
 import {externalHref} from "@/lib/safeUrl";
 import {BuyNowForm} from "./BuyNowForm";
-
-/** 리비전을 묻는 간격. 방송 상태가 바뀐 뒤 이 화면이 따라오는 데 걸리는 시간의 상한이다. */
-const POLL_MS = 15_000;
 
 /**
  * 시작 시각 서식 — 24시간 숫자로만 쓴다. 이 화면은 서버에서 한 번 그리고 브라우저가 이어받는데, 「오후」 같은 낱말은
@@ -34,40 +31,59 @@ const STATUS_LABEL: Record<LiveEvent["status"], string> = {
 /**
  * 방송 한 회차 — 제목·영상 링크·편성 상품과 상품마다 「바로 구매」.
  *
- * 열려 있는 동안 리비전을 묻고(`/api/live/{id}/revision`), 바뀌면 스냅샷을 다시 받는다(`/api/live/{id}`) — 방송이
- * 예정 → 방송 중으로 바뀌면 새로고침 없이 구매 칸이 열린다. 탭이 가려져 있으면 묻지 않는다.
+ * 열려 있는 동안 **스냅샷을 다시 읽는다**(`/api/live/{id}` · 15초 ± 20% · 처음 붙을 때 한 번 · 탭이 다시 보이면 바로 ·
+ * 가려져 있으면 쉰다). 리비전만 묻지 않는 이유: 리비전은 운영자가 바꾼 것(편성·특가·상태)만 따라오고 **판매로 줄어드는
+ * 남은 수량·소진은 안 따라온다** — 리비전만 보면 다 팔린 뒤에도 구매 칸이 열려 있다가 결제에서 409 를 만난다. 스냅샷에
+ * 리비전이 들어 있으므로 따로 묻는 왕복은 더하는 것이 없다. 백엔드 부하는 BFF 의 회차별 몇 초 공유 사본이 묶는다.
+ *
+ * 결제가 방송·수량 사유로 거절되면 폼이 [refresh] 를 부른다 — 바로 한 번, BFF 사본이 바뀔 즈음 한 번 더 읽는다.
  */
 export function LiveBoard({initial}: {initial: LiveEvent}) {
     const [live, setLive] = useState(initial);
-    const revision = useRef(initial.revision);
+    const inFlight = useRef(false);
+    const stopped = useRef(false);
+
+    const read = useCallback(async () => {
+        if (inFlight.current) return;
+        inFlight.current = true;
+        try {
+            const res = await fetch(`/api/live/${initial.id}`, {cache: "no-store"});
+            if (!res.ok || stopped.current) return;
+            setLive((await res.json()) as LiveEvent);
+        } catch {
+            // 한 번 못 읽으면 다음 차례에 다시 읽는다 — 화면은 들고 있는 값을 그대로 보인다.
+        } finally {
+            inFlight.current = false;
+        }
+    }, [initial.id]);
+
+    /** 결제 거절 뒤 — 지금 한 번, BFF 사본이 바뀔 즈음 한 번 더(지금 읽은 값이 그 사본일 수 있다). */
+    const refresh = useCallback(() => {
+        void read();
+        setTimeout(() => void read(), LIVE_SNAPSHOT_TTL_MS + 500);
+    }, [read]);
 
     useEffect(() => {
-        let stopped = false;
-        const poll = async () => {
-            if (document.visibilityState !== "visible") return;
-            try {
-                const r = await fetch(`/api/live/${initial.id}/revision`, {cache: "no-store"});
-                if (!r.ok) return;
-                const {revision: next} = (await r.json()) as {revision?: number};
-                if (typeof next !== "number" || next === revision.current) return;
-                const s = await fetch(`/api/live/${initial.id}`, {cache: "no-store"});
-                if (!s.ok) return;
-                const snapshot = (await s.json()) as LiveEvent;
-                if (stopped) return;
-                revision.current = snapshot.revision;
-                setLive(snapshot);
-            } catch {
-                // 한 번 못 물으면 다음 차례에 다시 묻는다 — 화면은 들고 있는 값을 그대로 보인다.
-            }
+        stopped.current = false;
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const schedule = () => {
+            timer = setTimeout(async () => {
+                if (document.visibilityState === "visible") await read();
+                if (!stopped.current) schedule();
+            }, livePollDelayMs());
         };
-        const timer = setInterval(poll, POLL_MS);
-        document.addEventListener("visibilitychange", poll);
+        const onVisible = () => {
+            if (document.visibilityState === "visible") void read();
+        };
+        void read(); // 구운 쪽은 몇 초 낡았을 수 있다 — 붙자마자 한 번 읽는다.
+        schedule();
+        document.addEventListener("visibilitychange", onVisible);
         return () => {
-            stopped = true;
-            clearInterval(timer);
-            document.removeEventListener("visibilitychange", poll);
+            stopped.current = true;
+            clearTimeout(timer);
+            document.removeEventListener("visibilitychange", onVisible);
         };
-    }, [initial.id]);
+    }, [read]);
 
     const buyable = liveBuyable(live);
     const watch = externalHref(live.status === "ENDED" ? live.vodUrl : live.streamUrl);
@@ -111,7 +127,7 @@ export function LiveBoard({initial}: {initial: LiveEvent}) {
                 <ul className="grid gap-4 p-0">
                     {products.map((product) => (
                         <li key={product.productId} className="list-none">
-                            <LiveProductCard liveId={live.id} product={product} buyable={buyable} />
+                            <LiveProductCard liveId={live.id} product={product} buyable={buyable} onStale={refresh} />
                         </li>
                     ))}
                 </ul>
@@ -120,7 +136,17 @@ export function LiveBoard({initial}: {initial: LiveEvent}) {
     );
 }
 
-function LiveProductCard({liveId, product, buyable}: {liveId: number; product: LiveEventProduct; buyable: boolean}) {
+function LiveProductCard({
+    liveId,
+    product,
+    buyable,
+    onStale,
+}: {
+    liveId: number;
+    product: LiveEventProduct;
+    buyable: boolean;
+    onStale: () => void;
+}) {
     const prices = product.variants.map((v) => v.effectivePrice);
     const bases = product.variants.map((v) => v.basePrice);
     const from = Math.min(...prices);
@@ -152,7 +178,7 @@ function LiveProductCard({liveId, product, buyable}: {liveId: number; product: L
                     product.remaining != null && <p className="text-sm text-muted">남은 수량 {product.remaining}개</p>
                 )}
             </div>
-            {buyable && max > 0 && <BuyNowForm liveId={liveId} product={product} maxQuantity={max} />}
+            {buyable && max > 0 && <BuyNowForm liveId={liveId} product={product} maxQuantity={max} onStale={onStale} />}
         </Card>
     );
 }

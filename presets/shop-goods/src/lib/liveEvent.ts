@@ -28,3 +28,33 @@ export function liveQuantityMax(product: Pick<LiveEventProduct, "remaining" | "s
         ? BUY_NOW_MAX_QUANTITY
         : Math.max(0, Math.min(BUY_NOW_MAX_QUANTITY, product.remaining));
 }
+
+/**
+ * 스냅샷을 다시 읽어야 하는 결제 거절 — 화면이 들고 있는 방송·수량이 낡았다는 뜻이다. **판매는 리비전을 안 올리므로**
+ * 남은 수량·소진은 이렇게 다시 읽어야 따라온다.
+ */
+const STALE_CODES: ReadonlySet<string> = new Set([
+    "LIVE_CAP_EXCEEDED",
+    "NOT_LIVE",
+    "OUT_OF_STOCK",
+    "LIVE_PRODUCT_NOT_FOUND",
+]);
+export function liveSnapshotStale(code: string | undefined): boolean {
+    return code !== undefined && STALE_CODES.has(code);
+}
+
+/**
+ * BFF(`/api/live/[id]`)가 회차마다 스냅샷을 들고 있는 시간. 이 안의 요청은 백엔드를 다시 안 부른다 — 시청자가 몇
+ * 명이든 백엔드 부하가 «서버 하나당 이 시간에 한 번»으로 묶인다. 화면이 거절 뒤 다시 읽을 때도 이만큼 뒤에 한 번 더
+ * 읽는다(바로 읽은 값이 이 캐시의 것일 수 있어서다).
+ */
+export const LIVE_SNAPSHOT_TTL_MS = 5_000;
+
+/**
+ * 열린 화면이 스냅샷을 다시 읽는 간격 — 15초 ± 20%. 흩뿌리는 이유: QR 로 한꺼번에 들어온 손님들의 요청이 같은
+ * 박자로 몰리지 않게.
+ */
+export function livePollDelayMs(random: () => number = Math.random): number {
+    const base = 15_000;
+    return Math.round(base * (0.8 + 0.4 * random()));
+}

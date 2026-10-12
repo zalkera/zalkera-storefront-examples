@@ -4,22 +4,18 @@ import {useEffect, useRef, useState} from "react";
 import {forgetPendingPayment, recallPendingPayment} from "@zalkera/client";
 import {Button} from "@/components/ui/Button";
 import {goToPayment, type PaymentStart} from "@/lib/paymentStart";
-
-/** 「확인 중」을 몇 번 더 물을지와 그 간격 — 결제사가 승인을 마무리하는 몇 초를 기다린다. */
-const RETRY_DELAYS_MS = [1500, 3000, 6000];
+import {CONFIRM_RETRY_DELAYS_MS, confirmVerdict, restartVerdict, type ConfirmResult} from "@/lib/paymentReturn";
 
 type Phase =
     | {kind: "checking"}
-    /** 409 `PAYMENT_CONFIRM_UNSETTLED` 가 몇 번 물어도 안 닫혔다 — 결제통보가 닫는다. */
+    /** 결과를 모른 채 몇 번 물어도 안 닫혔다(확인 중·연결 끊김·시간 초과) — 결제통보가 닫는다. */
     | {kind: "unsettled"}
-    /** 400 `PAYMENT_CONFIRM_FAILED` — 결제되지 않았다. 같은 주문으로 다시 결제할 수 있다. */
-    | {kind: "failed"}
+    /** 400 `PAYMENT_CONFIRM_FAILED` — 결제되지 않았다. 같은 주문으로 다시 결제할 수 있다(`notice` 는 다시 열기 실패 안내). */
+    | {kind: "failed"; notice?: string}
     /** 게스트인데 이 탭에 연락처가 없다(다른 기기·다른 탭에서 돌아왔다) — 손님에게 묻는다. */
     | {kind: "needPhone"; wrong: boolean}
     | {kind: "error"; message: string}
     | {kind: "missing"};
-
-type Confirmed = {ok: true} | {ok: false; status: number; code?: string; message?: string};
 
 /**
  * **결제창에서 돌아오는 화면** — 위젯형(토스 성공 URL)과 리다이렉트형(결제사 결제창의 복귀 주소)이 같이 쓴다.
@@ -30,9 +26,10 @@ type Confirmed = {ok: true} | {ok: false; status: number; code?: string; message
  * 게스트의 확정은 **연락처**가 있어야 선다. 결제창으로 떠나기 전에 이 탭에 남긴 값을 주문번호로 꺼낸다
  * (`recallPendingPayment` — 위젯형·리다이렉트형 공통). 없으면 로그인 토큰으로 확인하고, 그것도 아니면 손님에게 묻는다.
  *
- * 갈래: 확인 중이면 간격을 늘려 몇 번 다시 묻고 그래도 안 닫히면 「다시 확인」을 둔다 · 결제 안 됨이면 「다시
- * 결제」(같은 주문으로 결제창을 다시 연다 — 새 주문을 만들지 않는다). 새로고침해도 안전하다(이미 승인된 주문은
- * 서버가 조용히 통과시킨다).
+ * 갈래(판정은 `@/lib/paymentReturn`): **결과를 모르면**(확인 중 409 · 연결 끊김·시간 초과 · 코드 없는 502/503/504)
+ * 간격을 늘려 몇 번 다시 묻고 그래도 모르면 「다시 확인」을 둔다 — 승인이 났을 수 있으니 실패로 보이지 않는다 ·
+ * 결제 안 됨이면 「다시 결제」(같은 주문으로 결제창을 다시 연다 — 새 주문을 만들지 않는다). 새로고침해도 안전하다
+ * (이미 승인된 주문은 서버가 조용히 통과시킨다).
  */
 export default function PaymentCompletePage() {
     const [orderNo, setOrderNo] = useState<string | null>(null);
@@ -43,7 +40,7 @@ export default function PaymentCompletePage() {
     const phone = useRef<string | undefined>(undefined);
     const started = useRef(false);
 
-    const confirmOnce = async (no: string): Promise<Confirmed> => {
+    const confirmOnce = async (no: string): Promise<ConfirmResult> => {
         const res = await fetch("/api/payment/confirm", {
             method: "POST",
             headers: {"Content-Type": "application/json"},
@@ -59,7 +56,8 @@ export default function PaymentCompletePage() {
         setPhase({kind: "checking"});
         for (let attempt = 0; ; attempt += 1) {
             const result = await confirmOnce(no);
-            if (result.ok) {
+            const verdict = confirmVerdict(result);
+            if (verdict === "confirmed") {
                 forgetPendingPayment(no);
                 // 주문 상태는 주문 페이지가 서버에서 다시 읽는다 — 이 화면이 정본이 아니다. 게스트는 조회에도 연락처가
                 // 필요하다(우리 사이트 안의 이동이라 결제사엔 안 샌다).
@@ -67,8 +65,8 @@ export default function PaymentCompletePage() {
                 window.location.href = phone.current ? `${to}?phone=${encodeURIComponent(phone.current)}` : to;
                 return;
             }
-            if (result.code === "PAYMENT_CONFIRM_UNSETTLED") {
-                const delay = RETRY_DELAYS_MS[attempt];
+            if (verdict === "unknown") {
+                const delay = CONFIRM_RETRY_DELAYS_MS[attempt];
                 if (delay === undefined) {
                     setPhase({kind: "unsettled"});
                     return;
@@ -76,15 +74,15 @@ export default function PaymentCompletePage() {
                 await new Promise((resolve) => setTimeout(resolve, delay));
                 continue;
             }
-            if (result.code === "PAYMENT_CONFIRM_FAILED") {
+            if (verdict === "failed") {
                 setPhase({kind: "failed"});
                 return;
             }
-            if (result.code === "ORDER_ACCESS_DENIED") {
+            if (verdict === "needPhone") {
                 setPhase({kind: "needPhone", wrong: phone.current !== undefined});
                 return;
             }
-            setPhase({kind: "error", message: result.message ?? "결제 확인에 실패했습니다."});
+            setPhase({kind: "error", message: (!result.ok && result.message) || "결제 확인에 실패했습니다."});
             return;
         }
     };
@@ -116,15 +114,22 @@ export default function PaymentCompletePage() {
             headers: {"Content-Type": "application/json"},
             body: JSON.stringify({orderNo, ...(phone.current ? {phone: phone.current} : {})}),
         }).catch(() => null);
-        const data = res ? ((await res.json().catch(() => ({}))) as PaymentStart & {message?: string}) : null;
+        const data = res
+            ? ((await res.json().catch(() => ({}))) as PaymentStart & {message?: string; code?: string})
+            : null;
         if (!res || !res.ok || !data) {
             setBusy(false);
-            setPhase({kind: "error", message: data?.message ?? "결제창을 다시 열지 못했습니다."});
+            // 닫힌 주문(만료·취소·이미 결제)만 단추를 거둔다 — 연결 끊김·시간 초과는 다시 누르면 같은 주문으로 열린다.
+            if (restartVerdict(data?.code) === "closed") {
+                setPhase({kind: "error", message: data?.message ?? "이 주문은 더 결제할 수 없습니다."});
+            } else {
+                setPhase({kind: "failed", notice: "결제창을 다시 열지 못했습니다. 다시 눌러 주세요."});
+            }
             return;
         }
         if (!goToPayment(data, phone.current ?? "")) {
             setBusy(false);
-            setPhase({kind: "error", message: "결제창을 다시 열지 못했습니다."});
+            setPhase({kind: "failed", notice: "결제창을 다시 열지 못했습니다. 다시 눌러 주세요."});
         }
     };
 
@@ -176,6 +181,7 @@ export default function PaymentCompletePage() {
                             주문 보기
                         </a>
                     </div>
+                    {phase.notice && <p className="text-sm text-danger">{phase.notice}</p>}
                 </div>
             )}
 

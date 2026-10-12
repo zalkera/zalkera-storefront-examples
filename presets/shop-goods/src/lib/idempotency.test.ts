@@ -1,7 +1,7 @@
 import {strict as assert} from "node:assert";
 import {test} from "node:test";
 import {buyNowIdempotencyKey, orderIdempotencyKey} from "./idempotency.ts";
-import {CHECKOUT_ATTEMPT_HEADER, checkoutAttempt, newCheckoutAttempt} from "./checkoutAttempt.ts";
+import {CHECKOUT_ATTEMPT_HEADER, attemptSurvives, checkoutAttempt, newCheckoutAttempt} from "./checkoutAttempt.ts";
 
 /**
  * **멱등키의 행위**. 결제 문의 재시도 규칙이 전부 이 한 함수에 산다 — 그래서 값을 직접 잰다.
@@ -109,4 +109,19 @@ test("시도 id — 모양이 맞을 때만 받고, 새 값은 그 모양이다"
     const fresh = newCheckoutAttempt();
     assert.equal(checkoutAttempt(headers(fresh)), fresh, "새로 만든 시도 id 를 문이 안 받는다");
     assert.notEqual(newCheckoutAttempt(), fresh, "시도 id 가 매번 같다");
+});
+
+test("시도 id — 닫힌 주문(NOT_PAYABLE)에서만 버리고, 다른 실패에서는 같은 시도로 다시 낸다", () => {
+    // 그 주문은 만료·취소돼 더 결제할 수 없다 — 같은 시도면 같은 키로 닫힌 주문이 재생될 뿐이다.
+    assert.equal(attemptSurvives("NOT_PAYABLE"), false);
+    // 양성 짝 — 연결 끊김·시간 초과(코드 없음)·재고·동시 제출에서 버리면 이미 선 주문을 두고 새 주문이 선다.
+    for (const code of [
+        undefined,
+        "UPSTREAM_UNAVAILABLE",
+        "OUT_OF_STOCK",
+        "LIVE_CAP_EXCEEDED",
+        "IDEMPOTENCY_CONFLICT",
+    ]) {
+        assert.equal(attemptSurvives(code), true, String(code));
+    }
 });
