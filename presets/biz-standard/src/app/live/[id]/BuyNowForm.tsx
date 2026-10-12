@@ -39,7 +39,7 @@ export function BuyNowForm({
 
     if (!open) {
         return (
-            <Button onClick={() => setOpen(true)} disabled={variant === undefined}>
+            <Button className="sm:justify-self-start" onClick={() => setOpen(true)} disabled={variant === undefined}>
                 바로 구매
             </Button>
         );
@@ -82,7 +82,7 @@ export function BuyNowForm({
     };
 
     return (
-        <form onSubmit={submit} className="grid gap-3" aria-label={`${product.productName} 바로 구매`}>
+        <form onSubmit={submit} className="grid max-w-md gap-3" aria-label={`${product.productName} 바로 구매`}>
             {product.variants.length > 1 && (
                 <select aria-label="옵션" value={variantId} onChange={(e) => setVariantId(Number(e.target.value))}>
                     {product.variants.map((v) => (

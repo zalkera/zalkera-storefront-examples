@@ -12,6 +12,19 @@ import {BuyNowForm} from "./BuyNowForm";
 /** 리비전을 묻는 간격. 방송 상태가 바뀐 뒤 이 화면이 따라오는 데 걸리는 시간의 상한이다. */
 const POLL_MS = 15_000;
 
+/**
+ * 시작 시각 서식 — 24시간 숫자로만 쓴다. 이 화면은 서버에서 한 번 그리고 브라우저가 이어받는데, 「오후」 같은 낱말은
+ * 실행기의 로캘 자료에 따라 「PM」 으로 나와 두 결과가 갈린다(하이드레이션 불일치). 숫자만 쓰면 둘이 같다.
+ */
+const START_FORMAT: Intl.DateTimeFormatOptions = {
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+};
+
 const STATUS_LABEL: Record<LiveEvent["status"], string> = {
     SCHEDULED: "방송 예정",
     LIVE: "방송 중",
@@ -76,7 +89,7 @@ export function LiveBoard({initial}: {initial: LiveEvent}) {
                 </p>
                 <h1>{live.title}</h1>
                 {live.startsAt && live.status === "SCHEDULED" && (
-                    <p className="text-sm text-muted">시작 {formatDateTime(live.startsAt)}</p>
+                    <p className="text-sm text-muted">시작 {formatDateTime(live.startsAt, START_FORMAT)}</p>
                 )}
                 {watch && (
                     <p>
@@ -118,7 +131,10 @@ function LiveProductCard({liveId, product, buyable}: {liveId: number; product: L
         <Card className="grid gap-3">
             <div className="grid gap-1">
                 <h2>
-                    {product.pinned && <span className="mr-2 text-xs font-semibold text-primary">지금 소개 중</span>}
+                    {/* 「소개 중」은 방송 중에만 참이다 — 끝난 방송에서 고정 표식이 남아도 지금 소개하는 것은 없다 */}
+                    {product.pinned && buyable && (
+                        <span className="mr-2 text-xs font-semibold text-primary">지금 소개 중</span>
+                    )}
                     {product.productName}
                 </h2>
                 <p className="text-sm">
