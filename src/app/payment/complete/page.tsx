@@ -1,68 +1,217 @@
 "use client";
 
-import {useEffect, useState} from "react";
+import {useEffect, useRef, useState} from "react";
+import {forgetPendingPayment, recallPendingPayment} from "@zalkera/client";
+import {Button} from "@/components/ui/Button";
+import {goToPayment, type PaymentStart} from "@/lib/paymentStart";
+
+/** 「확인 중」을 몇 번 더 물을지와 그 간격 — 결제사가 승인을 마무리하는 몇 초를 기다린다. */
+const RETRY_DELAYS_MS = [1500, 3000, 6000];
+
+type Phase =
+    | {kind: "checking"}
+    /** 409 `PAYMENT_CONFIRM_UNSETTLED` 가 몇 번 물어도 안 닫혔다 — 결제통보가 닫는다. */
+    | {kind: "unsettled"}
+    /** 400 `PAYMENT_CONFIRM_FAILED` — 결제되지 않았다. 같은 주문으로 다시 결제할 수 있다. */
+    | {kind: "failed"}
+    /** 게스트인데 이 탭에 연락처가 없다(다른 기기·다른 탭에서 돌아왔다) — 손님에게 묻는다. */
+    | {kind: "needPhone"; wrong: boolean}
+    | {kind: "error"; message: string}
+    | {kind: "missing"};
+
+type Confirmed = {ok: true} | {ok: false; status: number; code?: string; message?: string};
 
 /**
- * 위젯형 벤더의 **성공 콜백 착지 페이지**.
+ * **결제창에서 돌아오는 화면** — 위젯형(토스 성공 URL)과 리다이렉트형(결제사 결제창의 복귀 주소)이 같이 쓴다.
  *
- * 결제창이 붙여준 파라미터(토스: `paymentKey`·`orderId`·`amount`)를 `/api/payment/confirm` 으로
- * 넘겨 승인을 확정한다. **이 화면이 "결제 성공"을 판단하지 않는다** — 확정은 백엔드가 PG 에
- * 직접 물어서 한다. 여기서 하는 건 그 호출을 트리거하고 주문 페이지로 보내는 것뿐이다.
+ * 돌아온 쿼리(`orderNo` 와 결제사가 붙인 값)를 `/api/payment/confirm` 으로 넘겨 확정을 묻는다. **이 화면이 「결제
+ * 성공」을 판단하지 않는다** — 서버가 결제사에 직접 묻는다(리다이렉트형의 복귀 쿼리는 화면용이다).
  *
- * 새로고침해도 안전하다 — 이미 승인된 주문이면 백엔드가 조용히 통과시킨다(멱등).
+ * 게스트의 확정은 **연락처**가 있어야 선다. 결제창으로 떠나기 전에 이 탭에 남긴 값을 주문번호로 꺼낸다
+ * (`recallPendingPayment` — 위젯형·리다이렉트형 공통). 없으면 로그인 토큰으로 확인하고, 그것도 아니면 손님에게 묻는다.
+ *
+ * 갈래: 확인 중이면 간격을 늘려 몇 번 다시 묻고 그래도 안 닫히면 「다시 확인」을 둔다 · 결제 안 됨이면 「다시
+ * 결제」(같은 주문으로 결제창을 다시 연다 — 새 주문을 만들지 않는다). 새로고침해도 안전하다(이미 승인된 주문은
+ * 서버가 조용히 통과시킨다).
  */
 export default function PaymentCompletePage() {
-    const [message, setMessage] = useState("결제를 확인하고 있습니다…");
+    const [orderNo, setOrderNo] = useState<string | null>(null);
+    const [phase, setPhase] = useState<Phase>({kind: "checking"});
+    const [phoneInput, setPhoneInput] = useState("");
+    const [busy, setBusy] = useState(false);
+    const params = useRef<Record<string, string>>({});
+    const phone = useRef<string | undefined>(undefined);
+    const started = useRef(false);
 
-    useEffect(() => {
-        const q = new URLSearchParams(window.location.search);
-        const orderNo = q.get("orderNo");
-        if (!orderNo) {
-            setMessage("주문 정보를 찾을 수 없습니다.");
-            return;
-        }
-        // 벤더 콜백 파라미터를 통째로 넘긴다 — 무엇이 오는지는 벤더가 정한다.
-        const params: Record<string, string> = {};
-        q.forEach((v, k) => {
-            if (k !== "orderNo") params[k] = v;
-        });
-
-        // **연락처를 상시 동반한다**. 승인 확정은 **게스트-충분 크리덴셜로
-        // 완결돼야 한다** — 로그인 토큰은 15분이라 결제창에서 카드입력·3DS 로 지체하면 만료되는데,
-        // 그때 토큰만 믿으면 결제창을 통과하고도 승인이 안 된다(실측 사고). 연락처는 주문 소유권의
-        // 정본 크리덴셜이고(게스트 결제가 그 증거) 로그인 주문에도 통한다.
-        // URL 이 아니라 디스크립터에서 읽는다 — 벤더에 PII 를 흘리지 않기 위해(widget 페이지 참조).
-        let phone: string | undefined;
-        try {
-            const raw = sessionStorage.getItem("zalkera_payment_widget");
-            if (raw) phone = (JSON.parse(raw) as {phone?: string}).phone;
-        } catch {
-            // 디스크립터가 깨졌어도 승인은 시도한다 — 로그인 토큰이 살아 있으면 그걸로 통과한다.
-        }
-
-        fetch("/api/payment/confirm", {
+    const confirmOnce = async (no: string): Promise<Confirmed> => {
+        const res = await fetch("/api/payment/confirm", {
             method: "POST",
             headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({orderNo, ...params, ...(phone ? {phone} : {})}),
-        })
-            .then(async (res) => {
-                if (!res.ok) {
-                    const body = await res.json().catch(() => ({}));
-                    setMessage(body.message ?? "결제 확인에 실패했습니다.");
+            body: JSON.stringify({orderNo: no, ...params.current, ...(phone.current ? {phone: phone.current} : {})}),
+        }).catch(() => null);
+        if (!res) return {ok: false, status: 0, message: "결제 확인 중 연결이 끊겼습니다."};
+        if (res.ok) return {ok: true};
+        const body = (await res.json().catch(() => ({}))) as {code?: string; message?: string};
+        return {ok: false, status: res.status, code: body.code, message: body.message};
+    };
+
+    const check = async (no: string) => {
+        setPhase({kind: "checking"});
+        for (let attempt = 0; ; attempt += 1) {
+            const result = await confirmOnce(no);
+            if (result.ok) {
+                forgetPendingPayment(no);
+                // 주문 상태는 주문 페이지가 서버에서 다시 읽는다 — 이 화면이 정본이 아니다. 게스트는 조회에도 연락처가
+                // 필요하다(우리 사이트 안의 이동이라 결제사엔 안 샌다).
+                const to = `/orders/${encodeURIComponent(no)}`;
+                window.location.href = phone.current ? `${to}?phone=${encodeURIComponent(phone.current)}` : to;
+                return;
+            }
+            if (result.code === "PAYMENT_CONFIRM_UNSETTLED") {
+                const delay = RETRY_DELAYS_MS[attempt];
+                if (delay === undefined) {
+                    setPhase({kind: "unsettled"});
                     return;
                 }
-                // 주문 상태는 주문 페이지가 백엔드에서 다시 읽는다 — 이 화면이 정본이 아니다.
-                // 게스트는 주문 조회에도 연락처가 필요하다(우리 사이트 안의 이동이라 벤더엔 안 샌다).
-                const to = `/orders/${encodeURIComponent(orderNo)}`;
-                window.location.href = phone ? `${to}?phone=${encodeURIComponent(phone)}` : to;
-            })
-            .catch(() => setMessage("결제 확인 중 오류가 발생했습니다."));
-    }, []);
+                await new Promise((resolve) => setTimeout(resolve, delay));
+                continue;
+            }
+            if (result.code === "PAYMENT_CONFIRM_FAILED") {
+                setPhase({kind: "failed"});
+                return;
+            }
+            if (result.code === "ORDER_ACCESS_DENIED") {
+                setPhase({kind: "needPhone", wrong: phone.current !== undefined});
+                return;
+            }
+            setPhase({kind: "error", message: result.message ?? "결제 확인에 실패했습니다."});
+            return;
+        }
+    };
+
+    useEffect(() => {
+        // StrictMode 의 두 번째 마운트가 확정을 한 번 더 부르지 않게(서버는 멱등이지만 인가 실패는 센다).
+        if (started.current) return;
+        started.current = true;
+        const q = new URLSearchParams(window.location.search);
+        const no = q.get("orderNo");
+        if (!no) {
+            setPhase({kind: "missing"});
+            return;
+        }
+        // 결제사가 붙인 값을 통째로 넘긴다 — 무엇이 오는지는 결제사가 정하고, 쓸지는 서버가 정한다.
+        q.forEach((v, k) => {
+            if (k !== "orderNo" && k !== "phone") params.current[k] = v;
+        });
+        phone.current = recallPendingPayment(no);
+        setOrderNo(no);
+        void check(no);
+    }, []); // 처음 한 번만 묻는다 — 다시 묻는 것은 단추가 한다
+
+    const payAgain = async () => {
+        if (!orderNo) return;
+        setBusy(true);
+        const res = await fetch("/api/payment/session", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({orderNo, ...(phone.current ? {phone: phone.current} : {})}),
+        }).catch(() => null);
+        const data = res ? ((await res.json().catch(() => ({}))) as PaymentStart & {message?: string}) : null;
+        if (!res || !res.ok || !data) {
+            setBusy(false);
+            setPhase({kind: "error", message: data?.message ?? "결제창을 다시 열지 못했습니다."});
+            return;
+        }
+        if (!goToPayment(data, phone.current ?? "")) {
+            setBusy(false);
+            setPhase({kind: "error", message: "결제창을 다시 열지 못했습니다."});
+        }
+    };
+
+    const submitPhone = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!orderNo || phoneInput.trim() === "") return;
+        phone.current = phoneInput.trim();
+        void check(orderNo);
+    };
+
+    const orderHref = orderNo
+        ? `/orders/${encodeURIComponent(orderNo)}${phone.current ? `?phone=${encodeURIComponent(phone.current)}` : ""}`
+        : "/";
 
     return (
-        <main className="py-8">
+        <main className="grid max-w-md gap-4 py-8">
             <h1>결제 확인</h1>
-            <p className="text-muted">{message}</p>
+            {orderNo && <p className="text-sm text-muted">주문번호 {orderNo}</p>}
+
+            {phase.kind === "checking" && (
+                <p className="text-muted" role="status">
+                    결제를 확인하고 있습니다…
+                </p>
+            )}
+
+            {phase.kind === "unsettled" && (
+                <div className="grid gap-3" role="status">
+                    <p>
+                        결제 결과를 아직 확인하지 못했습니다. 결제사에서 처리 중일 수 있습니다 — 잠시 뒤 다시 확인해
+                        주세요. 결제가 끝났다면 곧 주문에 반영됩니다.
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                        <Button onClick={() => orderNo && void check(orderNo)}>다시 확인</Button>
+                        <a className="self-center text-sm" href={orderHref}>
+                            주문 보기
+                        </a>
+                    </div>
+                </div>
+            )}
+
+            {phase.kind === "failed" && (
+                <div className="grid gap-3" role="alert">
+                    <p>결제가 완료되지 않았습니다. 같은 주문으로 다시 결제할 수 있습니다.</p>
+                    <div className="flex flex-wrap gap-2">
+                        <Button onClick={payAgain} disabled={busy}>
+                            {busy ? "여는 중…" : "다시 결제"}
+                        </Button>
+                        <a className="self-center text-sm" href={orderHref}>
+                            주문 보기
+                        </a>
+                    </div>
+                </div>
+            )}
+
+            {phase.kind === "needPhone" && (
+                <form className="grid gap-3" onSubmit={submitPhone}>
+                    <p>
+                        {phase.wrong
+                            ? "연락처가 주문과 다릅니다. 주문할 때 적은 연락처를 다시 넣어 주세요."
+                            : "주문할 때 적은 연락처를 넣어 주세요 — 결제를 확인합니다."}
+                    </p>
+                    <input
+                        required
+                        aria-label="연락처"
+                        placeholder="연락처"
+                        type="tel"
+                        inputMode="tel"
+                        autoComplete="tel"
+                        value={phoneInput}
+                        onChange={(e) => setPhoneInput(e.target.value)}
+                    />
+                    <Button type="submit">확인</Button>
+                </form>
+            )}
+
+            {phase.kind === "error" && (
+                <div className="grid gap-2" role="alert">
+                    <p className="text-danger">{phase.message}</p>
+                    {orderNo && (
+                        <a className="text-sm" href={orderHref}>
+                            주문 보기
+                        </a>
+                    )}
+                </div>
+            )}
+
+            {phase.kind === "missing" && <p className="text-danger">주문 정보를 찾을 수 없습니다.</p>}
         </main>
     );
 }

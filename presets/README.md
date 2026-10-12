@@ -46,13 +46,14 @@ cp -r src presets/<new-code>/src     # 새 팩은 여기서 시작합니다
 
 | code | 콘솔 노출명 | 성격 | 구성 | 소스 파일 | 원본과 다른 곳 |
 |---|---|---|---|---|---|
-| `skeleton` | 출발 골격 | **골격** — "명세대로 짜면 이 배선이 나온다" | home(4섹션) · 진열 없음 | 118 | `src/components/SiteHeader.tsx` |
-| `shop-goods` | 재화 판매형 | **커머스** — 물건을 진열하고 장바구니·결제로 보낸다 | home(6섹션 + 진열 레일) · shipping | 118 | `src/app/page.tsx`(레일) |
-| `beauty-nail` | 네일샵형 | **예약** — 시술을 보여주고 예약으로 보낸다 | home(8섹션 + 진열 레일) · about · visit | 118 | `src/app/page.tsx`(레일) |
-| `biz-standard` | 기업 소개형 | **기업소개** — 회사·서비스를 설명하고 상담으로 보낸다 | home(8섹션) · about · consult | 118 | `src/components/SiteHeader.tsx`(장바구니·로그인 없음) |
+| `skeleton` | 출발 골격 | **골격** — "명세대로 짜면 이 배선이 나온다" | home(4섹션) · 진열 없음 | 174 | `src/app/page.tsx` · `src/components/SiteHeader.tsx` |
+| `shop-goods` | 재화 판매형 | **커머스** — 물건을 진열하고 장바구니·결제로 보낸다 | home(6섹션 + 진열 레일) · shipping | 174 | `src/app/page.tsx`(레일) |
+| `beauty-nail` | 네일샵형 | **예약** — 시술을 보여주고 예약으로 보낸다 | home(8섹션 + 진열 레일) · about · visit | 174 | `src/app/page.tsx`(레일) |
+| `biz-standard` | 기업 소개형 | **기업소개** — 회사·서비스를 설명하고 상담으로 보낸다 | home(8섹션) · about · consult | 174 | `src/app/page.tsx` · `src/components/SiteHeader.tsx`(장바구니·로그인 없음) |
 
 > 재현: `git ls-files -- presets/<code>/src | wc -l` · 다른 곳은 팩과 루트의 같은 좌표를 `cmp` 로 비교.
-> 네 팩 모두 **정확히 한 파일**만 다르다 — 그것이 「팩의 얼굴」이고 나머지 117 은 바이트 동일이다.
+> 팩마다 위 칸의 파일만 다르다 — 그것이 「팩의 얼굴」이고 나머지는 바이트 동일이다(루트에만 있는 정본 전용 시험
+> `src/lib/logoutCart.test.ts` 는 팩에 없다). 재현: `diff -rq src presets/<code>/src`.
 
 **팩은 고객 DB 에 아무것도 만들지 않습니다.** 색은 소스의 `@theme`, 얼굴은 `content/`, 업무 데이터는 콘솔·MCP 입니다.
 팩의 차이는 데이터가 아니라 **얼굴 저작 · 전환 동선 · 소스 · 보장 주장** 넷으로 표현됩니다.

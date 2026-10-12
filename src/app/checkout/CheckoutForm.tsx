@@ -3,6 +3,8 @@
 import {useState, useTransition} from "react";
 import type {PaymentMethod} from "@zalkera/client";
 import {Button} from "@/components/ui/Button";
+import {BuyerFields, EMPTY_BUYER, buyerCheckout, type BuyerForm} from "@/components/BuyerFields";
+import {goToPayment} from "@/lib/paymentStart";
 
 /**
  * 결제 폼. 구매자 연락처는 게스트 주문 조회 크리덴셜이라 필수.
@@ -13,7 +15,8 @@ import {Button} from "@/components/ui/Button";
  *  - **리다이렉트형**(PayOneQ 등): `paymentUrl` 로 보내면 끝.
  *
  * 어느 쪽이든 **결제 확정은 백엔드**가 한다 — 이 화면의 성공/실패 표시는 UX 일 뿐 주문 완료 근거가
- * 아니다. 상태는 항상 `/orders/{orderNo}` 로 확인한다.
+ * 아니다. 상태는 항상 `/orders/{orderNo}` 로 확인한다. 결제창으로 보내는 일은 `goToPayment` 가 한다 — 떠나기 전에
+ * 구매자 연락처를 이 탭에 남겨, 돌아온 화면(`/payment/complete`)이 게스트의 확정에 싣는다.
  *
  * ── 무통장입금 ────────────────────────────────────────────────────────
  * **결제창을 안 연다.** 주문만 만들고 `/orders/{orderNo}` 로 보내면, 그 쪽이 계좌와 입금 마감
@@ -24,13 +27,10 @@ import {Button} from "@/components/ui/Button";
  * 제출한 뒤에야 409 `BANK_TRANSFER_NOT_CONFIGURED` 를 본다.
  */
 export function CheckoutForm({bankTransferAvailable}: {bankTransferAvailable: boolean}) {
-    const [form, setForm] = useState({buyerName: "", buyerPhone: "", buyerEmail: "", address1: ""});
+    const [buyer, setBuyer] = useState<BuyerForm>(EMPTY_BUYER);
     const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("PG");
     const [error, setError] = useState("");
     const [pending, startTransition] = useTransition();
-
-    const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
-        setForm((f) => ({...f, [k]: e.target.value}));
 
     const submit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -40,12 +40,7 @@ export function CheckoutForm({bankTransferAvailable}: {bankTransferAvailable: bo
                 method: "POST",
                 headers: {"Content-Type": "application/json"},
                 body: JSON.stringify({
-                    buyerName: form.buyerName,
-                    buyerPhone: form.buyerPhone,
-                    buyerEmail: form.buyerEmail || undefined,
-                    shipTo: form.address1
-                        ? {name: form.buyerName, phone: form.buyerPhone, address1: form.address1}
-                        : undefined,
+                    ...buyerCheckout(buyer),
                     // 계좌를 안 채운 테넌트에서는 선택지 자체가 없으므로 늘 "PG" 다.
                     paymentMethod: bankTransferAvailable ? paymentMethod : undefined,
                 }),
@@ -60,32 +55,15 @@ export function CheckoutForm({bankTransferAvailable}: {bankTransferAvailable: bo
                 window.location.href = `/orders/${data.orderNo}`;
                 return;
             }
-            if (data.widget) {
-                // 위젯형 — 디스크립터를 넘겨 결제창 페이지로. URL 이 아니라 sessionStorage 로 넘긴다
-                // (새로고침·공유로 새지 않게). 어차피 금액은 서버가 저장값으로 PG 에 묻는다.
-                sessionStorage.setItem(
-                    "zalkera_payment_widget",
-                    JSON.stringify({...data.widget, orderNo: data.orderNo, phone: form.buyerPhone}),
-                );
-                window.location.href = "/payment/widget";
-                return;
-            }
-            // 리다이렉트형 — 결제창으로 이동. 실제 결제 확정은 백엔드 웹훅이 한다.
-            window.location.href = data.paymentUrl;
+            // 위젯형은 디스크립터를 이 탭에 두고 결제창 페이지로, 리다이렉트형은 결제창으로. 어차피 금액은 서버가
+            // 저장값으로 PG 에 묻는다 — 이 화면이 보내는 값으로 결제 금액이 정해지지 않는다.
+            if (!goToPayment(data, buyer.buyerPhone)) setError("결제창을 열지 못했습니다. 잠시 후 다시 눌러 주세요.");
         });
     };
 
     return (
         <form onSubmit={submit} className="grid gap-3 max-w-sm">
-            <input required placeholder="이름" value={form.buyerName} onChange={set("buyerName")} />
-            <input
-                required
-                placeholder="연락처 (주문 조회에 사용)"
-                value={form.buyerPhone}
-                onChange={set("buyerPhone")}
-            />
-            <input placeholder="이메일 (선택)" value={form.buyerEmail} onChange={set("buyerEmail")} />
-            <input placeholder="배송지 주소 (재화면)" value={form.address1} onChange={set("address1")} />
+            <BuyerFields value={buyer} onChange={setBuyer} />
 
             {bankTransferAvailable && (
                 <fieldset className="grid gap-1 border-0 p-0">
