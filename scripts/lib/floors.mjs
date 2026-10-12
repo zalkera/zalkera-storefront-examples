@@ -59,8 +59,12 @@ export const REQUIRED_FLOORS = {
     "src/lib/astGuards.test.ts": 16,
     "src/lib/bankTransferPolicy.test.ts": 14,
     // 결제 문의 멱등키 — 카트 키만 쓰면 내용을 고쳐 다시 낸 결제가 카트 쿠키 수명만큼 409 로 막힌다.
-    "src/lib/idempotency.test.ts": 4,
-    "src/lib/checkoutRoutes.test.ts": 2,
+    "src/lib/idempotency.test.ts": 8,
+    "src/lib/checkoutRoutes.test.ts": 3,
+    // 라이브 방송 쪽 — 구매 칸을 여는 조건·수량 상한·다시 읽기·BFF 공유 사본이 비면 다 팔린 뒤에도 구매 칸이 열린다.
+    "src/lib/liveEvent.test.ts": 10,
+    // 결제창 복귀 — 「결과 모름」을 실패로 보이면 손님이 다시 결제해 두 번 결제된다.
+    "src/lib/paymentReturn.test.ts": 5,
     "src/lib/bodyLimit.test.ts": 2,
     "scripts/lib/floors.test.mjs": 41,
     "scripts/lib/gateProbe.test.mjs": 14,
@@ -88,7 +92,7 @@ export const REPO_ONLY_FLOORS = {
     "scripts/lib/rendererCoverage.test.mjs": 2,
     "scripts/lib/packManifest.test.mjs": 8,
     "scripts/lib/validateSeverity.test.mjs": 3,
-    "scripts/lib/visitor-ip-parity.test.mjs": 33,
+    "scripts/lib/visitor-ip-parity.test.mjs": 34,
     "scripts/lib/wiringParity.test.mjs": 11,
     "scripts/lib/seoWiring.test.mjs": 2,
     "scripts/lib/verifyZipSignal.test.mjs": 1,
@@ -165,6 +169,9 @@ const FLOOR_SUBJECT = Object.freeze({
     // 결제를 걷은 트리(상담·소개 사이트)는 주문 문이 없다.
     "src/lib/idempotency.test.ts": "src/lib/idempotency.ts",
     "src/lib/checkoutRoutes.test.ts": "src/app/api/checkout/route.ts",
+    // 라이브 방송 쪽을 걷은 트리는 그 판정이 없다.
+    "src/lib/liveEvent.test.ts": "src/lib/liveEvent.ts",
+    "src/lib/paymentReturn.test.ts": "src/lib/paymentReturn.ts",
 });
 
 /**

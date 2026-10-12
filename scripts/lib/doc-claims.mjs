@@ -101,7 +101,6 @@ const BASELINE = {
     "scripts/verify-zip.mjs": 14,
     "src/app/layout.tsx": 1,
     "src/app/media/[id]/route.ts": 1,
-    "src/app/payment/complete/page.tsx": 1,
     "src/lib/crossOrigin.ts": 1,
     "src/lib/http.ts": 1,
     "src/lib/metadata.ts": 1,

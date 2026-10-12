@@ -1,6 +1,7 @@
 import {strict as assert} from "node:assert";
 import {test} from "node:test";
-import {orderIdempotencyKey} from "./idempotency.ts";
+import {buyNowIdempotencyKey, orderIdempotencyKey} from "./idempotency.ts";
+import {CHECKOUT_ATTEMPT_HEADER, attemptSurvives, checkoutAttempt, newCheckoutAttempt} from "./checkoutAttempt.ts";
 
 /**
  * **멱등키의 행위**. 결제 문의 재시도 규칙이 전부 이 한 함수에 산다 — 그래서 값을 직접 잰다.
@@ -55,4 +56,72 @@ test("키가 백엔드 칸에 들어가고, 짧게 잘리지 않는다", () => {
     // 🔴 하한 — 짧게 자르면 **서로 다른 시도가 같은 키**가 되어 뒤 손님이 자기 잘못 없이 409 를 받는다.
     //    상한만 재면 `slice(0, 4)` 변이가 살아남는다.
     assert.ok(key.length >= 35, `지문이 너무 짧다(${key.length}자) — 충돌이 실제로 난다`);
+});
+
+/**
+ * **바로 구매 멱등키**(`/api/checkout/direct`) — 「이 시도 · 이 내용」. 바로 구매는 카트를 소비하지 않아 카트 키가 안 돈다.
+ * 시도 id 가 그 자리를 맡는다.
+ */
+const DIRECT = {items: [{variantId: 31, quantity: 1}], sourceLiveEventId: 12, checkout: BODY};
+const ATTEMPT = "0123456789abcdef0123456789abcdef";
+
+test("바로 구매 — 같은 시도·같은 내용은 같은 키, 내용·시도가 바뀌면 다른 키", () => {
+    assert.equal(buyNowIdempotencyKey(ATTEMPT, DIRECT), buyNowIdempotencyKey(ATTEMPT, {...DIRECT}));
+    // 칸 순서는 안 본다 — 브라우저가 보낸 JSON 을 그대로 넘긴다.
+    assert.equal(
+        buyNowIdempotencyKey(ATTEMPT, {checkout: BODY, sourceLiveEventId: 12, items: DIRECT.items}),
+        buyNowIdempotencyKey(ATTEMPT, DIRECT),
+    );
+    assert.notEqual(
+        buyNowIdempotencyKey(ATTEMPT, {...DIRECT, items: [{variantId: 31, quantity: 2}]}),
+        buyNowIdempotencyKey(ATTEMPT, DIRECT),
+        "수량을 고쳤는데 같은 키다 — 옛 주문이 재생된다",
+    );
+    // 🔴 다음 구매(새 시도 id)는 다른 키다 — 같은 손님이 같은 내용으로 한 번 더 살 때 결제된 옛 주문이 돌아오지 않는다.
+    assert.notEqual(
+        buyNowIdempotencyKey("fedcba9876543210fedcba9876543210", DIRECT),
+        buyNowIdempotencyKey(ATTEMPT, DIRECT),
+    );
+});
+
+test("바로 구매 키는 장바구니 결제 키와 섞이지 않고 칸 폭 안에 든다", () => {
+    const key = buyNowIdempotencyKey(ATTEMPT, DIRECT);
+    assert.ok(key.startsWith("bn-"), key);
+    assert.ok(key.length <= 64 && key.length >= 35, `키 폭이 어긋났다(${key.length}자)`);
+    // 같은 재료라도 장바구니 결제의 키와 다르다(접두) — 두 문의 키가 한 칸에 들어가도 서로를 재생하지 않는다.
+    assert.notEqual(key, orderIdempotencyKey(ATTEMPT, DIRECT));
+});
+
+test("시도 id — 모양이 맞을 때만 받고, 새 값은 그 모양이다", () => {
+    const headers = (value: string | null) => ({get: (n: string) => (n === CHECKOUT_ATTEMPT_HEADER ? value : null)});
+    assert.equal(checkoutAttempt(headers(ATTEMPT)), ATTEMPT);
+    assert.equal(checkoutAttempt(headers(` ${ATTEMPT} `)), ATTEMPT);
+    for (const bad of [
+        null,
+        "",
+        "short",
+        "a".repeat(65),
+        `${ATTEMPT.slice(0, 20)} x`,
+        "가나다라마바사아자차카타파하가나다",
+    ]) {
+        assert.equal(checkoutAttempt(headers(bad)), undefined, String(bad));
+    }
+    const fresh = newCheckoutAttempt();
+    assert.equal(checkoutAttempt(headers(fresh)), fresh, "새로 만든 시도 id 를 문이 안 받는다");
+    assert.notEqual(newCheckoutAttempt(), fresh, "시도 id 가 매번 같다");
+});
+
+test("시도 id — 닫힌 주문(NOT_PAYABLE)에서만 버리고, 다른 실패에서는 같은 시도로 다시 낸다", () => {
+    // 그 주문은 만료·취소돼 더 결제할 수 없다 — 같은 시도면 같은 키로 닫힌 주문이 재생될 뿐이다.
+    assert.equal(attemptSurvives("NOT_PAYABLE"), false);
+    // 양성 짝 — 연결 끊김·시간 초과(코드 없음)·재고·동시 제출에서 버리면 이미 선 주문을 두고 새 주문이 선다.
+    for (const code of [
+        undefined,
+        "UPSTREAM_UNAVAILABLE",
+        "OUT_OF_STOCK",
+        "LIVE_CAP_EXCEEDED",
+        "IDEMPOTENCY_CONFLICT",
+    ]) {
+        assert.equal(attemptSurvives(code), true, String(code));
+    }
 });

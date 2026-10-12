@@ -29,6 +29,7 @@
 | 섹션의 마크업·레이아웃·클래스 | `src/components/sections/` 의 해당 `*Section.tsx` | 문구가 아니라 **모양**을 바꿀 때만 |
 | 헤더·푸터의 마크업 | `src/components/SiteHeader.tsx` · `src/components/SiteFooter.tsx` | |
 | 계약 밖 새 화면(자유 영역) | `src/app/<경로>/page.tsx` | 계약 어휘는 보장의 **바닥이지 천장이 아니다** |
+| 라이브 방송 쪽(방송 QR 이 여는 `/live/{id}`)의 모양·바로 구매 폼 | `src/app/live/[id]/` (`LiveBoard.tsx`·`BuyNowForm.tsx`) | 방송·상품·특가 값은 DB(`getLiveEvent`)다. 결제창에서 돌아오는 화면은 `src/app/payment/complete/page.tsx` |
 
 **소스에 없는 것 — 여기서 찾지 마라.** 아래는 DB 에 살고 콘솔·`@zalkera/client` 가 다룬다. 소스는 그것을 **가리킬 뿐**이다.
 
@@ -66,6 +67,9 @@
 - **단일 CSS**: `src/app/globals.css`(`@import "tailwindcss"` + `@theme` 토큰) **하나만** 둔다. root layout(`src/app/layout.tsx`)이 이 파일을 import 한다. 다른 `.css` 파일을 만들지 마라.
 - 세션·쓰기·개인화 UI 는 클라이언트 컴포넌트(아일랜드)로 내리고, 공개 SEO 페이지(홈·목록·상세·콘텐츠)는 ISR/static 으로 유지한다(요청마다 동적 SSR 금지).
 - `"use client"` 파일에서 `@zalkera/client` 나 서버 클라이언트 싱글턴을 **값으로** import 하지 마라(타입만 `import type` 으로). baseUrl·토큰 노출을 막는 경계다.
+  예외는 결제창 복귀 보관 셋(`rememberPendingPayment`·`recallPendingPayment`·`forgetPendingPayment`)이다 — 브라우저의
+  sessionStorage 만 만지는 함수라 클라이언트에서 쓴다(`src/lib/paymentStart.ts`·`src/app/payment/complete/page.tsx`).
+  `[E1]` 도 이 셋**만** 묶는 문장은 비킨다(`@zalkera/client` 0.48.0 부터). 같은 문장에 다른 값 이름을 섞으면 그대로 `[E1]` 이다.
 
 ## BFF 라우트 — 교차사이트 위조 가드 (지우지 마라)
 
@@ -152,7 +156,7 @@ export async function POST(req: Request) {
 ## 방문자 IP 선언 — 서버에서 주문·문의 API 를 부를 때 (지우지 마라)
 
 **서버 사이드(RSC·route handler)에서 부르면 백엔드가 보는 IP 는 방문자가 아니라 이 서버다.** 그래서
-`@zalkera/client` 의 IP 민감 호출 10종(`checkout`·`getOrder`·`getShipment`·`cancelOrder`·`startPayment`·`confirmPayment`·
+`@zalkera/client` 의 IP 민감 호출 11종(`checkout`·`buyNow`·`getOrder`·`getShipment`·`cancelOrder`·`startPayment`·`confirmPayment`·
 `completeOrder`·`submitInquiry`·`submitLead`·`recordPostView`)에는 **원 방문자 IP 를 선언**해야 한다.
 
 ```ts
@@ -162,7 +166,7 @@ import {headers} from "next/headers";
 const access = {accessToken, phone, context: {clientIp: visitorIp(await headers())}};
 ```
 
-**결제(`checkout`)는 넘기는 자리가 다르다** — 둘째 인자인 세션 안이다:
+**결제(`checkout`·`buyNow`)는 넘기는 자리가 다르다** — 둘째 인자인 세션 안이다:
 
 ```ts
 const order = await zalkera.checkout(input, {...session, context: {clientIp: visitorIp(req.headers)}}, key);
@@ -177,7 +181,7 @@ const order = await zalkera.checkout(input, {...session, context: {clientIp: vis
     **429** 를 받는다(**IP 축**은 성공을 막지 않는다). 그리고 스캐너 탐지가 주문번호 축 하나로 줄어든다.
   - **문의·리드**(`submitInquiry`·`submitLead`): **모든 호출을 센다**(성공도). 한도가 **각각 다르다** —
     문의 60초 3건 · 리드 60초 30건. 뭉치면 **그 사이트의 4번째 문의 제출이 429** 다 — 이쪽이 훨씬 날카롭다.
-  - **결제**(`checkout`): 청약 동의·확인 증빙의 **접속 IP** 가 된다. 선언이 없으면 사이트 서버의 IP 가
+  - **결제**(`checkout`·`buyNow`): 청약 동의·확인 증빙의 **접속 IP** 가 된다. 선언이 없으면 사이트 서버의 IP 가
     적히고, 그 원장은 **추가만 되고 5년 남아** 나중에 못 고친다.
   - **게시글 조회수**(`recordPostView`): 레이트리밋이 아니라 **조회 dedup** 이다. 키가
     `sha256(IP|User-Agent)` 이고 **게시글별 · UTC 달력 하루** 단위다. 그 UA 는 **방문자 것이 아니다** —
@@ -200,7 +204,7 @@ const order = await zalkera.checkout(input, {...session, context: {clientIp: vis
 > 규칙은 그대로다: **IP 민감 호출에는 `visitorIp()` 로 뽑은 `clientIp` 를 넘긴다.** 값을 헬퍼로 빼도 되고
 > 조건부로 채워도 된다 — **출처가 `visitorIp()` 이면 된다.**
 >
-> ⚠ **검사기가 보는 것은 열세 개이고(`@zalkera/client` 0.47.1), 교본이 더 요구하면 교본을 따른다.** 본인확인
+> ⚠ **검사기가 보는 것은 열네 개이고(`@zalkera/client` 0.48.0 — 바로 구매 `buyNow` 가 들었다), 교본이 더 요구하면 교본을 따른다.** 본인확인
 > 시작(`startIdentityVerification`)과 문자 인증 두 문(`startSmsVerification`·`confirmSmsVerification` — 확인은 **셋째
 > 인자**)도 그 안에 든다 — 안 넘기면 인증 레이트리밋이 사이트 서버 IP 한 칸으로 뭉쳐 **그 사이트 방문자 전원이**
 > 한 상한을 나눠 쓴다.

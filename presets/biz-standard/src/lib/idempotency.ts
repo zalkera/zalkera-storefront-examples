@@ -41,6 +41,27 @@ export function orderIdempotencyKey(cartSessionKey: string, body: unknown): stri
     return `co-${digest.slice(0, 48)}`;
 }
 
+/**
+ * **바로 구매 멱등키** — 「이 시도 · 이 내용」 한 번을 가리킨다(`/api/checkout/direct`).
+ *
+ * 🔴 **카트 키로 만들지 마라**([orderIdempotencyKey] 를 쓰지 마라). 바로 구매는 카트를 소비하지 않아 카트 키가
+ * 돌지 않는다 — 같은 손님이 같은 내용으로 한 번 더 사면 같은 키가 되어 **이미 결제된 옛 주문이 재생된다**(새 주문이
+ * 안 서고, 결제 시작이 「결제할 수 없는 주문」으로 막힌다).
+ *
+ * 시도 id(`@/lib/checkoutAttempt`)는 폼이 만들고 같은 폼의 재시도에는 같은 값을, 결제창으로 떠난 뒤에는 새 값을 보낸다:
+ * - 같은 시도의 재시도(더블클릭·응답 유실) → 같은 키 → 원주문이 돌아온다. 결제 시작이 실패했으면 같은 주문으로 다시 연다.
+ * - 내용을 고쳐 다시 냄 → 다른 키 → 새 주문(앞 주문은 미결제로 남았다가 만료된다).
+ * - 다음 구매(새 시도 id) → 다른 키 → 새 주문.
+ *
+ * 칸 정렬·키 폭(접두 + 48자 = 51자 ≤ 64)은 [orderIdempotencyKey] 와 같다. 접두가 달라 두 문의 키가 섞이지 않는다.
+ */
+export function buyNowIdempotencyKey(attemptId: string, body: unknown): string {
+    const digest = createHash("sha256")
+        .update(`${attemptId}\n${stableJson(body)}`)
+        .digest("hex");
+    return `bn-${digest.slice(0, 48)}`;
+}
+
 /** 칸을 이름순으로 세워 접는다 — 같은 뜻의 본문이 늘 같은 문자열이 되게(배열 순서는 뜻이라 안 건든다). */
 function stableJson(value: unknown): string {
     return JSON.stringify(value, (_key, v: unknown) => {

@@ -23,8 +23,24 @@ const ts: typeof TS = createRequire(import.meta.url)("typescript");
  * 규칙은 함수(`orderIdempotencyKey`)가 지고 **행위로 잰다.** 구문 트리 쪽은 「라우트가 그 함수에 **주문
  * 본문을** 넣는가 · 충돌 갈래가 회전을 안 부르는가 · 결제 시작 번호 · 본문 상한」만 본다. 판정식은 마지막
  * 시험이 가짜 소스에 직접 돌려 잰다.
+ *
+ * **바로 구매 문**(`checkout/direct` · `buyNow`)도 같은 그물을 지나되 둘이 다르다: 키는 카트 키가 아니라 시도 id 로
+ * 만들고(`buyNowIdempotencyKey` — 카트를 소비하지 않아 카트 키가 안 돈다), 결제 시작 번호는 본문의 `checkout` 칸
+ * 안에 있으며, **카트 쿠키를 돌리지 않는다**(돌리면 담아 둔 카트가 사라진 것처럼 보인다).
  */
-const ROUTES = ["checkout"] as const;
+type OrderRoute = {
+    name: string;
+    /** 주문을 세우는 SDK 메서드. */
+    method: string;
+    /** 멱등키를 만드는 함수. */
+    keyBuilder: string;
+    /** 결제 시작 번호가 본문의 어느 칸 아래에 있나 — `null` 이면 본문 바로 아래. */
+    phoneUnder: string | null;
+};
+const ROUTES: readonly OrderRoute[] = [
+    {name: "checkout", method: "checkout", keyBuilder: "orderIdempotencyKey", phoneUnder: null},
+    {name: "checkout/direct", method: "buyNow", keyBuilder: "buyNowIdempotencyKey", phoneUnder: "checkout"},
+];
 
 function sourceOf(text: string, name = "fake.ts"): TS.SourceFile {
     return ts.createSourceFile(name, text, ts.ScriptTarget.Latest, true);
@@ -49,12 +65,12 @@ function find(node: TS.Node, pick: (n: TS.Node) => boolean): boolean {
     return hit;
 }
 
-function checkoutCalls(file: TS.SourceFile): TS.CallExpression[] {
+function checkoutCalls(file: TS.SourceFile, method = "checkout"): TS.CallExpression[] {
     const calls: TS.CallExpression[] = [];
     walk(file, (n) => {
         if (!ts.isCallExpression(n)) return;
         const callee = n.expression;
-        if (ts.isPropertyAccessExpression(callee) && callee.name.text === "checkout") calls.push(n);
+        if (ts.isPropertyAccessExpression(callee) && callee.name.text === method) calls.push(n);
     });
     return calls;
 }
@@ -86,8 +102,12 @@ function orderBodyName(call: TS.CallExpression, file: TS.SourceFile): string | n
  * 함수를 부르는지만 보면 `orderIdempotencyKey(key, {})` 가 통과한다 — 지문이 늘 같아져 카트 키만 쓴 것과
  * 같은 409 가 돌아온다.
  */
-function everyCheckoutUsesKeyBuilder(file: TS.SourceFile): boolean {
-    const calls = checkoutCalls(file);
+function everyCheckoutUsesKeyBuilder(
+    file: TS.SourceFile,
+    method = "checkout",
+    keyBuilder = "orderIdempotencyKey",
+): boolean {
+    const calls = checkoutCalls(file, method);
     if (calls.length === 0) return false;
     return calls.every((c) => {
         const body = orderBodyName(c, file);
@@ -95,7 +115,7 @@ function everyCheckoutUsesKeyBuilder(file: TS.SourceFile): boolean {
         const builds = (n: TS.Node): boolean =>
             find(n, (k) => {
                 if (!ts.isCallExpression(k) || !ts.isIdentifier(k.expression)) return false;
-                if (k.expression.text !== "orderIdempotencyKey") return false;
+                if (k.expression.text !== keyBuilder) return false;
                 const hashed = k.arguments[1];
                 return !!hashed && ts.isIdentifier(hashed) && hashed.text === body;
             });
@@ -133,7 +153,7 @@ function conflictBranchAnswers(file: TS.SourceFile): boolean {
 }
 
 /** **판정 ③** — `checkout` 호출 전부가 방문자 IP 를 선언하는가(인라인이든 변수든). */
-function everyCheckoutDeclaresIp(file: TS.SourceFile): boolean {
+function everyCheckoutDeclaresIp(file: TS.SourceFile, method = "checkout"): boolean {
     const declaresIp = (node: TS.Node): boolean =>
         find(node, (c) => {
             if (!ts.isPropertyAssignment(c) || !ts.isIdentifier(c.name) || c.name.text !== "context") return false;
@@ -157,7 +177,7 @@ function everyCheckoutDeclaresIp(file: TS.SourceFile): boolean {
                 declaresIp(c.initializer),
         );
     };
-    const calls = checkoutCalls(file);
+    const calls = checkoutCalls(file, method);
     if (calls.length === 0) return false;
     return calls.every((c) => {
         const session = c.arguments[1];
@@ -165,9 +185,12 @@ function everyCheckoutDeclaresIp(file: TS.SourceFile): boolean {
     });
 }
 
-/** **판정 ④** — `startPayment` 호출 전부가 번호로 **주문 본문의** `buyerPhone` 을 넘기는가. */
-function paymentPhoneIsOrderPhone(file: TS.SourceFile): boolean {
-    const calls = checkoutCalls(file);
+/**
+ * **판정 ④** — `startPayment` 호출 전부가 번호로 **주문 본문의** `buyerPhone` 을 넘기는가.
+ * 바로 구매는 그 칸이 본문의 `checkout` 아래다(`phoneUnder`) — `body.checkout.buyerPhone`.
+ */
+function paymentPhoneIsOrderPhone(file: TS.SourceFile, method = "checkout", phoneUnder: string | null = null): boolean {
+    const calls = checkoutCalls(file, method);
     const names = calls.map((c) => orderBodyName(c, file));
     if (calls.length === 0 || names.some((n) => n === null)) return false;
     const starts: TS.CallExpression[] = [];
@@ -186,13 +209,22 @@ function paymentPhoneIsOrderPhone(file: TS.SourceFile): boolean {
         );
         if (!phone) return false;
         const init = phone.initializer;
-        return (
-            ts.isPropertyAccessExpression(init) &&
-            init.name.text === "buyerPhone" &&
-            ts.isIdentifier(init.expression) &&
-            names.includes(init.expression.text)
-        );
+        if (!ts.isPropertyAccessExpression(init) || init.name.text !== "buyerPhone") return false;
+        let owner: TS.Expression = init.expression;
+        if (phoneUnder !== null) {
+            if (!ts.isPropertyAccessExpression(owner) || owner.name.text !== phoneUnder) return false;
+            owner = owner.expression;
+        }
+        return ts.isIdentifier(owner) && names.includes(owner.text);
     });
+}
+
+/** **판정 ⑥(바로 구매)** — 카트 쿠키를 돌리지 않는다. 바로 구매는 카트를 소비하지 않으므로 돌리면 담아 둔 카트를 잃는다. */
+function neverRotatesCart(file: TS.SourceFile): boolean {
+    return !find(
+        file,
+        (c) => ts.isCallExpression(c) && ts.isIdentifier(c.expression) && c.expression.text === "rotateCartSessionKey",
+    );
 }
 
 /** 본문을 읽는 `Request` 메서드. */
@@ -248,20 +280,32 @@ function everyBodyReadIsBounded(file: TS.SourceFile): boolean {
 }
 
 test("주문 문들이 그 키를 쓰고, 충돌 갈래에서 카트를 안 돌린다", () => {
-    for (const name of ROUTES) {
+    for (const {name, method, keyBuilder, phoneUnder} of ROUTES) {
         const {file, rel} = routeSource(name);
-        for (const c of checkoutCalls(file)) {
+        assert.ok(checkoutCalls(file, method).length > 0, `${rel}: ${method} 호출을 못 찾았다 — 그물이 공허하다`);
+        for (const c of checkoutCalls(file, method)) {
             assert.ok(orderBodyName(c, file), `${rel}: 주문 본문이 식별자가 아니거나 같은 이름이 두 번 선언됐다`);
         }
-        assert.ok(everyCheckoutUsesKeyBuilder(file), `${rel}: 멱등키를 그 함수·그 주문 본문으로 만들지 않는다`);
-        assert.ok(conflictBranchAnswers(file), `${rel}: 충돌 갈래가 카트 키를 돌린다 — 재시도가 두 번째 주문이 된다`);
-        assert.ok(everyCheckoutDeclaresIp(file), `${rel}: checkout 에 context.clientIp 가 없다`);
         assert.ok(
-            paymentPhoneIsOrderPhone(file),
+            everyCheckoutUsesKeyBuilder(file, method, keyBuilder),
+            `${rel}: 멱등키를 ${keyBuilder}·그 주문 본문으로 만들지 않는다`,
+        );
+        assert.ok(conflictBranchAnswers(file), `${rel}: 충돌 갈래가 카트 키를 돌린다 — 재시도가 두 번째 주문이 된다`);
+        assert.ok(everyCheckoutDeclaresIp(file, method), `${rel}: ${method} 에 context.clientIp 가 없다`);
+        assert.ok(
+            paymentPhoneIsOrderPhone(file, method, phoneUnder),
             `${rel}: 결제 시작 번호가 주문 번호와 다른 값이다 — 같은 번호가 두 표기로 나간다`,
         );
         assert.ok(everyBodyReadIsBounded(file), `${rel}: 요청 본문을 길이 상한 없이 읽는다`);
     }
+});
+
+test("바로 구매 문은 카트 키로 키를 만들지 않고 카트 쿠키를 돌리지 않는다", () => {
+    const {file, rel} = routeSource("checkout/direct");
+    // 🔴 카트 키로 만든 키는 같은 손님의 같은 내용 다음 구매에서 결제된 옛 주문을 재생한다.
+    assert.ok(!everyCheckoutUsesKeyBuilder(file, "buyNow", "orderIdempotencyKey"), `${rel}: 카트 결제 키를 쓴다`);
+    assert.ok(neverRotatesCart(file), `${rel}: 카트 쿠키를 돌린다 — 담아 둔 카트가 사라진 것처럼 보인다`);
+    assert.ok(!checkoutCalls(file, "checkout").length, `${rel}: 카트 결제를 부른다`);
 });
 
 test("위 판정들이 실제로 판정한다 — 같은 식을 가짜 소스에 돌려 잰다", () => {
@@ -405,6 +449,40 @@ test("위 판정들이 실제로 판정한다 — 같은 식을 가짜 소스에
             true,
             "요청이 아닌 응답 읽기를 막았다",
         ],
+        // 바로 구매 — 같은 판정식에 메서드·키 함수·번호 자리만 바꿔 건다.
+        [
+            (f) => everyCheckoutUsesKeyBuilder(f, "buyNow", "buyNowIdempotencyKey"),
+            "const b = x; z.buyNow(b, s, a ? buyNowIdempotencyKey(a, b) : undefined);",
+            true,
+            "정당한 바로 구매 형상을 막았다",
+        ],
+        [
+            (f) => everyCheckoutUsesKeyBuilder(f, "buyNow", "buyNowIdempotencyKey"),
+            "const b = x; z.buyNow(b, s, orderIdempotencyKey(s.cartSessionKey, b));",
+            false,
+            "카트 키로 만든 바로 구매 키가 통과",
+        ],
+        [
+            (f) => paymentPhoneIsOrderPhone(f, "buyNow", "checkout"),
+            "const b = x; z.buyNow(b, s, k); z.startPayment(n, {phone: b.checkout.buyerPhone});",
+            true,
+            "본문 checkout 칸의 번호를 막았다",
+        ],
+        [
+            (f) => paymentPhoneIsOrderPhone(f, "buyNow", "checkout"),
+            "const b = x; z.buyNow(b, s, k); z.startPayment(n, {phone: b.buyerPhone});",
+            false,
+            "checkout 칸 밖의 번호가 통과",
+        ],
+        [
+            (f) => paymentPhoneIsOrderPhone(f, "buyNow", "checkout"),
+            "const b = x; z.buyNow(b, s, k); z.startPayment(n, {phone: raw.checkout.buyerPhone});",
+            false,
+            "원문 번호가 통과",
+        ],
+        [(f) => everyCheckoutDeclaresIp(f, "buyNow"), "z.buyNow(b, s, k);", false, "선언 없는 바로 구매가 통과"],
+        [neverRotatesCart, "z.buyNow(b, s, k); rotateCartSessionKey(r);", false, "카트를 돌리는데 통과"],
+        [neverRotatesCart, "z.buyNow(b, s, k); return r;", true, "돌리지 않는데 막았다"],
     ];
     for (const [predicate, text, expected, why] of cases) {
         assert.equal(predicate(sourceOf(text)), expected, `${why}: ${text}`);
